@@ -455,7 +455,7 @@ static PyObject *bip_sum(term_t t) {
       }
 #if PY_MAJOR_VERSION < 3
       if (PyInt_CheckExact(item)) {
-        764PyFPE_START_PROTECT("add", Py_DECREF(item); Py_DECREF(iter);
+        PyFPE_START_PROTECT("add", Py_DECREF(item); Py_DECREF(iter);
                                return 0)f_result += (double)PyInt_AS_LONG(item);
         PyFPE_END_PROTECT(f_result) Py_DECREF(item);
         continue;
@@ -918,9 +918,9 @@ PyObject *term_to_nametuple(const char *s, arity_t arity, PyObject *tuple) {
        PyObject *ip = term_to_python(trhs, true, o);
        if (PySequence_Check(v)) {
 #if PY_MAJOR_VERSION < 3
-	 if (PyLong_Check(ip) {
+	 if (PyLong_Check(ip)) {
 	     min = PyLong_AsLong(ip);
-	   } else if (PyInt_Check(ip) {
+	   } else if (PyInt_Check(ip)) {
 	       min = PyInt_asInt(ip);
 	     }
 #else
