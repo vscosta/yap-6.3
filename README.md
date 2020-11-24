@@ -2,7 +2,7 @@
   <img src="./docs/icons/yap_128x128x32.png" alt="The YAP Logo"/>
 </p>
 
-NOTE: this version of YAP is still experimental, documentation may be out of date.
+NOTE: development in YAP migrated to the yap repo (v7). This repo is here for compatibility.
 
 ## Introduction
 
