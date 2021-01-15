@@ -42,8 +42,8 @@ static void CleanCode(PredEntry *USES_REGS);
 
 static void GrowAtomTable(void) {
   CACHE_REGS
-  UInt size = LOCAL_ExportAtomHashTableSize;
-  export_atom_hash_entry_t *p, *newt, *oldt = LOCAL_ExportAtomHashChain;
+  UInt size = REMOTE_ExportAtomHashTableSize(worker_id);
+  export_atom_hash_entry_t *p, *newt, *oldt = REMOTE_ExportAtomHashChain(worker_id);
   UInt new_size = size + (size > 1024 ? size : 1024);
   UInt i;
 
@@ -71,31 +71,31 @@ static void GrowAtomTable(void) {
     }
     newp->val = a;
   }
-  LOCAL_ExportAtomHashChain = newt;
-  LOCAL_ExportAtomHashTableSize = new_size;
+  REMOTE_ExportAtomHashChain(worker_id) = newt;
+  REMOTE_ExportAtomHashTableSize(worker_id) = new_size;
   free(oldt);
 }
 
 static void LookupAtom(Atom at) {
   CACHE_REGS
   const unsigned char *p = RepAtom(at)->UStrOfAE;
-  CELL hash = HashFunction(p) % LOCAL_ExportAtomHashTableSize;
+  CELL hash = HashFunction(p) % REMOTE_ExportAtomHashTableSize(worker_id);
   export_atom_hash_entry_t *a;
 
-  a = LOCAL_ExportAtomHashChain + hash;
+  a = REMOTE_ExportAtomHashChain(worker_id) + hash;
   while (a->val) {
     if (a->val == at) {
       return;
     }
     a++;
-    if (a == LOCAL_ExportAtomHashChain + LOCAL_ExportAtomHashTableSize)
-      a = LOCAL_ExportAtomHashChain;
+    if (a == REMOTE_ExportAtomHashChain(worker_id) + REMOTE_ExportAtomHashTableSize(worker_id))
+      a = REMOTE_ExportAtomHashChain(worker_id);
   }
   a->val = at;
-  LOCAL_ExportAtomHashTableNum++;
-  if (LOCAL_ExportAtomHashTableNum > LOCAL_ExportAtomHashTableSize / 2) {
+  REMOTE_ExportAtomHashTableNum(worker_id)++;
+  if (REMOTE_ExportAtomHashTableNum(worker_id) > REMOTE_ExportAtomHashTableSize(worker_id) / 2) {
     GrowAtomTable();
-    if (!LOCAL_ExportAtomHashChain) {
+    if (!REMOTE_ExportAtomHashChain(worker_id)) {
       return;
     }
   }
@@ -103,8 +103,8 @@ static void LookupAtom(Atom at) {
 
 static void GrowFunctorTable(void) {
   CACHE_REGS
-  UInt size = LOCAL_ExportFunctorHashTableSize;
-  export_functor_hash_entry_t *p, *newt, *oldt = LOCAL_ExportFunctorHashChain;
+  UInt size = REMOTE_ExportFunctorHashTableSize(worker_id);
+  export_functor_hash_entry_t *p, *newt, *oldt = REMOTE_ExportFunctorHashChain(worker_id);
   UInt new_size = size + (size > 1024 ? size : 1024);
   UInt i;
 
@@ -132,36 +132,36 @@ static void GrowFunctorTable(void) {
     newp->arity = p->arity;
     newp->name = p->name;
   }
-  LOCAL_ExportFunctorHashChain = newt;
-  LOCAL_ExportFunctorHashTableSize = new_size;
+  REMOTE_ExportFunctorHashChain(worker_id) = newt;
+  REMOTE_ExportFunctorHashTableSize(worker_id) = new_size;
   free(oldt);
 }
 
 static void LookupFunctor(Functor fun) {
   CACHE_REGS
   CELL hash =
-      ((CELL)(fun)) / (2 * sizeof(CELL)) % LOCAL_ExportFunctorHashTableSize;
+      ((CELL)(fun)) / (2 * sizeof(CELL)) % REMOTE_ExportFunctorHashTableSize(worker_id);
   export_functor_hash_entry_t *f;
   Atom name = NameOfFunctor(fun);
   UInt arity = ArityOfFunctor(fun);
 
-  f = LOCAL_ExportFunctorHashChain + hash;
+  f = REMOTE_ExportFunctorHashChain(worker_id) + hash;
   while (f->val) {
     if (f->val == fun) {
       return;
     }
     f++;
-    if (f == LOCAL_ExportFunctorHashChain + LOCAL_ExportFunctorHashTableSize)
-      f = LOCAL_ExportFunctorHashChain;
+    if (f == REMOTE_ExportFunctorHashChain(worker_id) + REMOTE_ExportFunctorHashTableSize(worker_id))
+      f = REMOTE_ExportFunctorHashChain(worker_id);
   }
   LookupAtom(name);
   f->val = fun;
   f->name = name;
   f->arity = arity;
-  LOCAL_ExportFunctorHashTableNum++;
-  if (LOCAL_ExportFunctorHashTableNum > LOCAL_ExportFunctorHashTableSize / 2) {
+  REMOTE_ExportFunctorHashTableNum(worker_id)++;
+  if (REMOTE_ExportFunctorHashTableNum(worker_id) > REMOTE_ExportFunctorHashTableSize(worker_id) / 2) {
     GrowFunctorTable();
-    if (!LOCAL_ExportFunctorHashChain) {
+    if (!REMOTE_ExportFunctorHashChain(worker_id)) {
       return;
     }
   }
@@ -169,9 +169,9 @@ static void LookupFunctor(Functor fun) {
 
 static void GrowPredTable(void) {
   CACHE_REGS
-  UInt size = LOCAL_ExportPredEntryHashTableSize;
+  UInt size = REMOTE_ExportPredEntryHashTableSize(worker_id);
   export_pred_entry_hash_entry_t *p, *newt,
-      *oldt = LOCAL_ExportPredEntryHashChain;
+      *oldt = REMOTE_ExportPredEntryHashChain(worker_id);
   UInt new_size = size + (size > 1024 ? size : 1024);
   UInt i;
 
@@ -200,27 +200,27 @@ static void GrowPredTable(void) {
     newp->u_af.f = p->u_af.f;
     newp->module = p->module;
   }
-  LOCAL_ExportPredEntryHashChain = newt;
-  LOCAL_ExportPredEntryHashTableSize = new_size;
+  REMOTE_ExportPredEntryHashChain(worker_id) = newt;
+  REMOTE_ExportPredEntryHashTableSize(worker_id) = new_size;
   free(oldt);
 }
 
 static void LookupPredEntry(PredEntry *pe) {
   CACHE_REGS
   CELL hash =
-      (((CELL)(pe)) / (2 * sizeof(CELL))) % LOCAL_ExportPredEntryHashTableSize;
+      (((CELL)(pe)) / (2 * sizeof(CELL))) % REMOTE_ExportPredEntryHashTableSize(worker_id);
   export_pred_entry_hash_entry_t *p;
   UInt arity = pe->ArityOfPE;
 
-  p = LOCAL_ExportPredEntryHashChain + hash;
+  p = REMOTE_ExportPredEntryHashChain(worker_id) + hash;
   while (p->val) {
     if (p->val == pe) {
       return;
     }
     p++;
     if (p ==
-        LOCAL_ExportPredEntryHashChain + LOCAL_ExportPredEntryHashTableSize)
-      p = LOCAL_ExportPredEntryHashChain;
+        REMOTE_ExportPredEntryHashChain(worker_id) + REMOTE_ExportPredEntryHashTableSize(worker_id))
+      p = REMOTE_ExportPredEntryHashChain(worker_id);
   }
   p->arity = arity;
   p->val = pe;
@@ -251,11 +251,11 @@ static void LookupPredEntry(PredEntry *pe) {
     p->module = AtomProlog;
   }
   LookupAtom(p->module);
-  LOCAL_ExportPredEntryHashTableNum++;
-  if (LOCAL_ExportPredEntryHashTableNum >
-      LOCAL_ExportPredEntryHashTableSize / 2) {
+  REMOTE_ExportPredEntryHashTableNum(worker_id)++;
+  if (REMOTE_ExportPredEntryHashTableNum(worker_id) >
+      REMOTE_ExportPredEntryHashTableSize(worker_id) / 2) {
     GrowPredTable();
-    if (!LOCAL_ExportPredEntryHashChain) {
+    if (!REMOTE_ExportPredEntryHashChain(worker_id)) {
       return;
     }
   }
@@ -263,8 +263,8 @@ static void LookupPredEntry(PredEntry *pe) {
 
 static void GrowDBRefTable(void) {
   CACHE_REGS
-  UInt size = LOCAL_ExportDBRefHashTableSize;
-  export_dbref_hash_entry_t *p, *newt, *oldt = LOCAL_ExportDBRefHashChain;
+  UInt size = REMOTE_ExportDBRefHashTableSize(worker_id);
+  export_dbref_hash_entry_t *p, *newt, *oldt = REMOTE_ExportDBRefHashChain(worker_id);
   UInt new_size = size + (size > 1024 ? size : 1024);
   UInt i;
 
@@ -292,34 +292,34 @@ static void GrowDBRefTable(void) {
     newp->sz = p->sz;
     newp->refs = p->refs;
   }
-  LOCAL_ExportDBRefHashChain = newt;
-  LOCAL_ExportDBRefHashTableSize = new_size;
+  REMOTE_ExportDBRefHashChain(worker_id) = newt;
+  REMOTE_ExportDBRefHashTableSize(worker_id) = new_size;
   free(oldt);
 }
 
 static void LookupDBRef(DBRef ref) {
   CACHE_REGS
   CELL hash =
-      ((CELL)(ref)) / (2 * sizeof(CELL)) % LOCAL_ExportDBRefHashTableSize;
+      ((CELL)(ref)) / (2 * sizeof(CELL)) % REMOTE_ExportDBRefHashTableSize(worker_id);
   export_dbref_hash_entry_t *a;
 
-  a = LOCAL_ExportDBRefHashChain + hash;
+  a = REMOTE_ExportDBRefHashChain(worker_id) + hash;
   while (a->val) {
     if (a->val == ref) {
       a->refs++;
       return;
     }
     a++;
-    if (a == LOCAL_ExportDBRefHashChain + LOCAL_ExportDBRefHashTableSize)
-      a = LOCAL_ExportDBRefHashChain;
+    if (a == REMOTE_ExportDBRefHashChain(worker_id) + REMOTE_ExportDBRefHashTableSize(worker_id))
+      a = REMOTE_ExportDBRefHashChain(worker_id);
   }
   a->val = ref;
   a->sz = ((LogUpdClause *)ref)->ClSize;
   a->refs = 1;
-  LOCAL_ExportDBRefHashTableNum++;
-  if (LOCAL_ExportDBRefHashTableNum > LOCAL_ExportDBRefHashTableSize / 2) {
+  REMOTE_ExportDBRefHashTableNum(worker_id)++;
+  if (REMOTE_ExportDBRefHashTableNum(worker_id) > REMOTE_ExportDBRefHashTableSize(worker_id) / 2) {
     GrowDBRefTable();
-    if (!LOCAL_ExportDBRefHashChain) {
+    if (!REMOTE_ExportDBRefHashChain(worker_id)) {
       return;
     }
   }
@@ -327,39 +327,39 @@ static void LookupDBRef(DBRef ref) {
 
 static void InitHash(void) {
   CACHE_REGS
-  LOCAL_ExportFunctorHashTableNum = 0;
-  LOCAL_ExportFunctorHashTableSize = EXPORT_FUNCTOR_TABLE_SIZE;
-  LOCAL_ExportFunctorHashChain = (export_functor_hash_entry_t *)calloc(
-      LOCAL_ExportFunctorHashTableSize, sizeof(export_functor_hash_entry_t));
-  LOCAL_ExportAtomHashTableNum = 0;
-  LOCAL_ExportAtomHashTableSize = EXPORT_ATOM_TABLE_SIZE;
-  LOCAL_ExportAtomHashChain = (export_atom_hash_entry_t *)calloc(
-      LOCAL_ExportAtomHashTableSize, sizeof(export_atom_hash_entry_t));
-  LOCAL_ExportPredEntryHashTableNum = 0;
-  LOCAL_ExportPredEntryHashTableSize = EXPORT_PRED_ENTRY_TABLE_SIZE;
-  LOCAL_ExportPredEntryHashChain = (export_pred_entry_hash_entry_t *)calloc(
-      LOCAL_ExportPredEntryHashTableSize,
+  REMOTE_ExportFunctorHashTableNum(worker_id) = 0;
+  REMOTE_ExportFunctorHashTableSize(worker_id) = EXPORT_FUNCTOR_TABLE_SIZE;
+  REMOTE_ExportFunctorHashChain(worker_id) = (export_functor_hash_entry_t *)calloc(
+      REMOTE_ExportFunctorHashTableSize(worker_id), sizeof(export_functor_hash_entry_t));
+  REMOTE_ExportAtomHashTableNum(worker_id) = 0;
+  REMOTE_ExportAtomHashTableSize(worker_id) = EXPORT_ATOM_TABLE_SIZE;
+  REMOTE_ExportAtomHashChain(worker_id) = (export_atom_hash_entry_t *)calloc(
+      REMOTE_ExportAtomHashTableSize(worker_id), sizeof(export_atom_hash_entry_t));
+  REMOTE_ExportPredEntryHashTableNum(worker_id) = 0;
+  REMOTE_ExportPredEntryHashTableSize(worker_id) = EXPORT_PRED_ENTRY_TABLE_SIZE;
+  REMOTE_ExportPredEntryHashChain(worker_id) = (export_pred_entry_hash_entry_t *)calloc(
+      REMOTE_ExportPredEntryHashTableSize(worker_id),
       sizeof(export_pred_entry_hash_entry_t));
-  LOCAL_ExportDBRefHashTableNum = 0;
-  LOCAL_ExportDBRefHashTableSize = EXPORT_DBREF_TABLE_SIZE;
-  LOCAL_ExportDBRefHashChain = (export_dbref_hash_entry_t *)calloc(
+  REMOTE_ExportDBRefHashTableNum(worker_id) = 0;
+  REMOTE_ExportDBRefHashTableSize(worker_id) = EXPORT_DBREF_TABLE_SIZE;
+  REMOTE_ExportDBRefHashChain(worker_id) = (export_dbref_hash_entry_t *)calloc(
       EXPORT_DBREF_TABLE_SIZE, sizeof(export_dbref_hash_entry_t));
 }
 
 static void CloseHash(void) {
   CACHE_REGS
-  LOCAL_ExportFunctorHashTableNum = 0;
-  LOCAL_ExportFunctorHashTableSize = 0L;
-  free(LOCAL_ExportFunctorHashChain);
-  LOCAL_ExportAtomHashTableNum = 0;
-  LOCAL_ExportAtomHashTableSize = 0L;
-  free(LOCAL_ExportAtomHashChain);
-  LOCAL_ExportPredEntryHashTableNum = 0;
-  LOCAL_ExportPredEntryHashTableSize = 0L;
-  free(LOCAL_ExportPredEntryHashChain);
-  LOCAL_ExportDBRefHashTableNum = 0;
-  LOCAL_ExportDBRefHashTableSize = 0L;
-  free(LOCAL_ExportDBRefHashChain);
+  REMOTE_ExportFunctorHashTableNum(worker_id) = 0;
+  REMOTE_ExportFunctorHashTableSize(worker_id) = 0L;
+  free(REMOTE_ExportFunctorHashChain(worker_id));
+  REMOTE_ExportAtomHashTableNum(worker_id) = 0;
+  REMOTE_ExportAtomHashTableSize(worker_id) = 0L;
+  free(REMOTE_ExportAtomHashChain(worker_id));
+  REMOTE_ExportPredEntryHashTableNum(worker_id) = 0;
+  REMOTE_ExportPredEntryHashTableSize(worker_id) = 0L;
+  free(REMOTE_ExportPredEntryHashChain(worker_id));
+  REMOTE_ExportDBRefHashTableNum(worker_id) = 0;
+  REMOTE_ExportDBRefHashTableSize(worker_id) = 0L;
+  free(REMOTE_ExportDBRefHashChain(worker_id));
 }
 
 static inline Atom AtomAdjust(Atom a) {
@@ -541,9 +541,9 @@ static int SaveHash(FILE *stream) {
     save_UInt(stream, (UInt)Yap_opcode(i));
   }
   CHECK(save_tag(stream, QLY_START_ATOMS));
-  CHECK(save_UInt(stream, LOCAL_ExportAtomHashTableNum));
-  for (i = 0; i < LOCAL_ExportAtomHashTableSize; i++) {
-    export_atom_hash_entry_t *a = LOCAL_ExportAtomHashChain + i;
+  CHECK(save_UInt(stream, REMOTE_ExportAtomHashTableNum(worker_id)));
+  for (i = 0; i < REMOTE_ExportAtomHashTableSize(worker_id); i++) {
+    export_atom_hash_entry_t *a = REMOTE_ExportAtomHashChain(worker_id) + i;
     if (a->val) {
       Atom at = a->val;
       CHECK(save_UInt(stream, (UInt)at));
@@ -554,9 +554,9 @@ static int SaveHash(FILE *stream) {
     }
   }
   save_tag(stream, QLY_START_FUNCTORS);
-  save_UInt(stream, LOCAL_ExportFunctorHashTableNum);
-  for (i = 0; i < LOCAL_ExportFunctorHashTableSize; i++) {
-    export_functor_hash_entry_t *f = LOCAL_ExportFunctorHashChain + i;
+  save_UInt(stream, REMOTE_ExportFunctorHashTableNum(worker_id));
+  for (i = 0; i < REMOTE_ExportFunctorHashTableSize(worker_id); i++) {
+    export_functor_hash_entry_t *f = REMOTE_ExportFunctorHashChain(worker_id) + i;
     if (!(f->val))
       continue;
     CHECK(save_UInt(stream, (UInt)(f->val)));
@@ -564,9 +564,9 @@ static int SaveHash(FILE *stream) {
     CHECK(save_UInt(stream, (CELL)(f->name)));
   }
   save_tag(stream, QLY_START_PRED_ENTRIES);
-  save_UInt(stream, LOCAL_ExportPredEntryHashTableNum);
-  for (i = 0; i < LOCAL_ExportPredEntryHashTableSize; i++) {
-    export_pred_entry_hash_entry_t *p = LOCAL_ExportPredEntryHashChain + i;
+  save_UInt(stream, REMOTE_ExportPredEntryHashTableNum(worker_id));
+  for (i = 0; i < REMOTE_ExportPredEntryHashTableSize(worker_id); i++) {
+    export_pred_entry_hash_entry_t *p = REMOTE_ExportPredEntryHashChain(worker_id) + i;
     if (!(p->val))
       continue;
     CHECK(save_UInt(stream, (UInt)(p->val)));
@@ -575,9 +575,9 @@ static int SaveHash(FILE *stream) {
     CHECK(save_UInt(stream, (UInt)p->u_af.f));
   }
   save_tag(stream, QLY_START_DBREFS);
-  save_UInt(stream, LOCAL_ExportDBRefHashTableNum);
-  for (i = 0; i < LOCAL_ExportDBRefHashTableSize; i++) {
-    export_dbref_hash_entry_t *p = LOCAL_ExportDBRefHashChain + i;
+  save_UInt(stream, REMOTE_ExportDBRefHashTableNum(worker_id));
+  for (i = 0; i < REMOTE_ExportDBRefHashTableSize(worker_id); i++) {
+    export_dbref_hash_entry_t *p = REMOTE_ExportDBRefHashChain(worker_id) + i;
     if (p->val) {
       CHECK(save_UInt(stream, (UInt)(p->val)));
       CHECK(save_UInt(stream, p->sz));

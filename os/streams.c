@@ -164,7 +164,7 @@ int GetFreeStreamD(void) {
   LOCK(GLOBAL_Stream[sno].streamlock);
   GLOBAL_Stream[sno].status &= ~Free_Stream_f;
   UNLOCK(GLOBAL_StreamDescLock);
-  GLOBAL_Stream[sno].encoding = LOCAL_encoding;
+  GLOBAL_Stream[sno].encoding = REMOTE_encoding(worker_id);
   return sno;
 }
 
@@ -336,6 +336,7 @@ bool Yap_SetCurInpPos(
 }
 
 Atom Yap_guessFileName(FILE *file, int sno, size_t max) {
+  CACHE_REGS
   if (!file) {
     Atom at = Yap_LookupAtom("mem");
     return at;
@@ -349,7 +350,7 @@ Atom Yap_guessFileName(FILE *file, int sno, size_t max) {
   int i = push_text_stack();
 #if __linux__
   size_t maxs = Yap_Max(1023, max - 1);
-  char *path = Malloc(1024), *nameb = Malloc(maxs + 1);
+  char *path = Malloc(1024 PASS_REGS), *nameb = Malloc(maxs + 1 PASS_REGS);
   size_t len;
   if ((len = snprintf(path, 1023, "/proc/self/fd/%d", f)) >= 0 &&
       (len = readlink(path, nameb, maxs)) > 0) {
@@ -360,14 +361,14 @@ Atom Yap_guessFileName(FILE *file, int sno, size_t max) {
   }
 #elif __APPLE__
   size_t maxs = Yap_Max(1023, max - 1);
-  char *nameb = Malloc(maxs + 1);
+  char *nameb = Malloc(maxs + 1 PASS_REGS);
   if (fcntl(f, F_GETPATH, nameb) != -1) {
     Atom at = Yap_LookupAtom(nameb);
     pop_text_stack(i);
     return at;
   }
 #else
-  TCHAR *path = Malloc(MAX_PATH + 1), *nameb = Malloc(MAX_PATH + 1);
+  TCHAR *path = Malloc(MAX_PATH + 1 PASS_REGS), *nameb = Malloc(MAX_PATH + 1 PASS_REGS);
 
   if (!GetFullPathName(path, MAX_PATH, nameb, NULL)) {
     pop_text_stack(i);
@@ -537,8 +538,8 @@ SetBuffering(int sno, Atom at) { /* '$set_bufferingt'(+Stream,-ErrorMessage)  */
                        "could not set disable buffering");
   } else {
     CACHE_REGS
-    LOCAL_Error_TYPE = DOMAIN_ERROR_OUT_OF_RANGE;
-    LOCAL_ErrorMessage = "in set_stream/2:buffer";
+    REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_OUT_OF_RANGE;
+    REMOTE_ActiveError(worker_id)->errorMsg = "in set_stream/2:buffer";
     return false;
   }
   return true;
@@ -729,10 +730,10 @@ static Int cont_stream_property(USES_REGS1) { /* current_stream */
                                DOMAIN_ERROR_STREAM_PROPERTY_OPTION);
   }
   if (args == NULL) {
-    if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
-      if (LOCAL_Error_TYPE == DOMAIN_ERROR_GENERIC_ARGUMENT)
-        LOCAL_Error_TYPE = DOMAIN_ERROR_STREAM_PROPERTY_OPTION;
-      Yap_ThrowError(LOCAL_Error_TYPE, t2, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+      if (REMOTE_ActiveError(worker_id)->errorNo == DOMAIN_ERROR_GENERIC_ARGUMENT)
+        REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_STREAM_PROPERTY_OPTION;
+      Yap_ThrowError(REMOTE_ActiveError(worker_id)->errorNo, t2, NULL);
       return false;
     }
     cut_fail();
@@ -804,7 +805,7 @@ static Int stream_property(USES_REGS1) { /* Init current_stream */
                         "current_stream/3");
     if (i < 0) {
       UNLOCK(GLOBAL_Stream[i].streamlock);
-      Yap_ThrowError(LOCAL_Error_TYPE, t1, "bad stream descriptor");
+      Yap_ThrowError(REMOTE_ActiveError(worker_id)->errorNo, t1, "bad stream descriptor");
       return false; // error...
     }
     EXTRA_CBACK_ARG(2, 1) = MkIntTerm(i);
@@ -815,10 +816,10 @@ static Int stream_property(USES_REGS1) { /* Init current_stream */
                                STREAM_PROPERTY_END,
                                DOMAIN_ERROR_STREAM_PROPERTY_OPTION);
     if (args == NULL) {
-      if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
-        if (LOCAL_Error_TYPE == DOMAIN_ERROR_PROLOG_FLAG)
-          LOCAL_Error_TYPE = DOMAIN_ERROR_STREAM_PROPERTY_OPTION;
-        Yap_Error(LOCAL_Error_TYPE, ARG2, NULL);
+      if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+        if (REMOTE_ActiveError(worker_id)->errorNo == DOMAIN_ERROR_PROLOG_FLAG)
+          REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_STREAM_PROPERTY_OPTION;
+        Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, ARG2, NULL);
         return false;
       }
       UNLOCK(GLOBAL_Stream[i].streamlock);
@@ -876,10 +877,10 @@ static bool do_set_stream(int sno,
   args = Yap_ArgListToVector(opts, set_stream_defs, SET_STREAM_END,
                              DOMAIN_ERROR_SET_STREAM_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
-      if (LOCAL_Error_TYPE == DOMAIN_ERROR_GENERIC_ARGUMENT)
-        LOCAL_Error_TYPE = DOMAIN_ERROR_SET_STREAM_OPTION;
-      Yap_Error(LOCAL_Error_TYPE, opts, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+      if (REMOTE_ActiveError(worker_id)->errorNo == DOMAIN_ERROR_GENERIC_ARGUMENT)
+        REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_SET_STREAM_OPTION;
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, opts, NULL);
     }
     UNLOCK(GLOBAL_Stream[sno].streamlock);
     return false;
@@ -923,8 +924,8 @@ static bool do_set_stream(int sno,
           GLOBAL_Stream[sno].status &= ~Eof_Error_Stream_f;
           GLOBAL_Stream[sno].status &= ~Reset_Eof_Stream_f;
         } else {
-          LOCAL_Error_TYPE = DOMAIN_ERROR_OUT_OF_RANGE;
-          LOCAL_ErrorMessage = "in set_stream/2:eof_action";
+          REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_OUT_OF_RANGE;
+          REMOTE_ActiveError(worker_id)->errorMsg = "in set_stream/2:eof_action";
           rc = false;
         }
         break;
@@ -956,8 +957,8 @@ static bool do_set_stream(int sno,
           GLOBAL_Stream[sno].status &= ~RepError_Xml_f;
           GLOBAL_Stream[sno].status |= RepError_Prolog_f;
         } else {
-          LOCAL_Error_TYPE = DOMAIN_ERROR_OUT_OF_RANGE;
-          LOCAL_ErrorMessage = "in set_stream/2:eof_action";
+          REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_OUT_OF_RANGE;
+          REMOTE_ActiveError(worker_id)->errorMsg = "in set_stream/2:eof_action";
           rc = false;
         }
       } break;
@@ -993,7 +994,6 @@ static Int set_stream(USES_REGS1) { /* Init current_stream */
  * and stderr
  */
 void Yap_CloseStreams(void) {
-  CACHE_REGS
   int sno;
   fflush(NULL);
   for (sno = 3; sno < MaxStreams; ++sno) {
@@ -1009,7 +1009,6 @@ void Yap_CloseStreams(void) {
  * and stderr
  */
 void Yap_CloseTemporaryStreams(void) {
-  CACHE_REGS
   int sno;
   fflush(NULL);
   for (sno = 3; sno < MaxStreams; ++sno) {
@@ -1053,14 +1052,14 @@ static void CloseStream(int sno) {
   } else if (GLOBAL_Stream[sno].status & (InMemory_Stream_f)) {
     Yap_CloseMemoryStream(sno);
   }
-  if (LOCAL_c_input_stream == sno) {
-    LOCAL_c_input_stream = StdInStream;
+  if (REMOTE_c_input_stream(worker_id) == sno) {
+    REMOTE_c_input_stream(worker_id) = StdInStream;
   }
-  if (LOCAL_c_output_stream == sno) {
-    LOCAL_c_output_stream = StdOutStream;
+  if (REMOTE_c_output_stream(worker_id) == sno) {
+    REMOTE_c_output_stream(worker_id) = StdOutStream;
   }
-  if (LOCAL_c_error_stream == sno) {
-    LOCAL_c_error_stream = StdErrStream;
+  if (REMOTE_c_error_stream(worker_id) == sno) {
+    REMOTE_c_error_stream(worker_id) = StdErrStream;
   }
   Yap_DeleteAliases(sno);
   GLOBAL_Stream[sno].vfs = NULL;
@@ -1085,14 +1084,14 @@ void Yap_ReleaseStream(int sno) {
   GLOBAL_Stream[sno].vfs = NULL;
   GLOBAL_Stream[sno].file = NULL;
   Yap_DeleteAliases(sno);
-  if (LOCAL_c_input_stream == sno) {
-    LOCAL_c_input_stream = StdInStream;
+  if (REMOTE_c_input_stream(worker_id) == sno) {
+    REMOTE_c_input_stream(worker_id) = StdInStream;
   }
-  if (LOCAL_c_output_stream == sno) {
-    LOCAL_c_output_stream = StdOutStream;
+  if (REMOTE_c_output_stream(worker_id) == sno) {
+    REMOTE_c_output_stream(worker_id) = StdOutStream;
   }
-  if (LOCAL_c_error_stream == sno) {
-    LOCAL_c_error_stream = StdErrStream;
+  if (REMOTE_c_error_stream(worker_id) == sno) {
+    REMOTE_c_error_stream(worker_id) = StdErrStream;
   }
   /*  if (st->status == Socket_Stream_f|Input_Stream_f|Output_Stream_f) {
     Yap_CloseSocket();
@@ -1111,7 +1110,7 @@ void Yap_ReleaseStream(int sno) {
 static Int current_input(USES_REGS1) { /* current_input(?Stream) */
   Term t1 = Deref(ARG1);
   if (IsVarTerm(t1)) {
-    Term t = Yap_MkStream(LOCAL_c_input_stream);
+    Term t = Yap_MkStream(REMOTE_c_input_stream(worker_id));
     YapBind(VarOfTerm(t1), t);
     return TRUE;
   } else if (!IsApplTerm(t1) || FunctorOfTerm(t1) != FunctorStream ||
@@ -1119,15 +1118,16 @@ static Int current_input(USES_REGS1) { /* current_input(?Stream) */
     Yap_Error(DOMAIN_ERROR_STREAM, t1, "current_input/1");
     return FALSE;
   } else {
-    return LOCAL_c_input_stream == IntOfTerm(t1);
+    return REMOTE_c_input_stream(worker_id) == IntOfTerm(t1);
   }
 }
 
 bool Yap_SetInputStream(Term sd) {
+  CACHE_REGS
   int sno = Yap_CheckStream(sd, Input_Stream_f, "set_input/1");
   if (sno < 0)
     return false;
-  LOCAL_c_input_stream = sno;
+  REMOTE_c_input_stream(worker_id) = sno;
   UNLOCK(GLOBAL_Stream[sno].streamlock);
   Yap_SetAlias(AtomUserIn, sno);
   return true;
@@ -1156,7 +1156,7 @@ static Int set_input(USES_REGS1) { /* '$show_stream_position'(+Stream,Pos) */
 static Int current_output(USES_REGS1) { /* current_output(?Stream) */
   Term t1 = Deref(ARG1);
   if (IsVarTerm(t1)) {
-    Term t = Yap_MkStream(LOCAL_c_output_stream);
+    Term t = Yap_MkStream(REMOTE_c_output_stream(worker_id));
     YapBind(VarOfTerm(t1), t);
     return TRUE;
   } else if (!IsApplTerm(t1) || FunctorOfTerm(t1) != FunctorStream ||
@@ -1164,7 +1164,7 @@ static Int current_output(USES_REGS1) { /* current_output(?Stream) */
     Yap_Error(DOMAIN_ERROR_STREAM, t1, "current_output/1");
     return FALSE;
   } else {
-    return (LOCAL_c_output_stream == IntOfTerm(t1));
+    return (REMOTE_c_output_stream(worker_id) == IntOfTerm(t1));
   }
 }
 
@@ -1179,7 +1179,7 @@ static Int current_output(USES_REGS1) { /* current_output(?Stream) */
 static Int current_error(USES_REGS1) { /* current_error(?Stream) */
   Term t1 = Deref(ARG1);
   if (IsVarTerm(t1)) {
-    Term t = Yap_MkStream(LOCAL_c_error_stream);
+    Term t = Yap_MkStream(REMOTE_c_error_stream(worker_id));
     YapBind(VarOfTerm(t1), t);
     return TRUE;
   } else if (!IsApplTerm(t1) || FunctorOfTerm(t1) != FunctorStream ||
@@ -1187,7 +1187,7 @@ static Int current_error(USES_REGS1) { /* current_error(?Stream) */
     Yap_Error(DOMAIN_ERROR_STREAM, t1, "current_error/1");
     return FALSE;
   } else {
-    return (LOCAL_c_error_stream == IntOfTerm(t1));
+    return (REMOTE_c_error_stream(worker_id) == IntOfTerm(t1));
   }
 }
 
@@ -1202,11 +1202,12 @@ bool Yap_SetOutputStream(Term sd) {
 }
 
 bool Yap_SetErrorStream(Term sd) {
+  CACHE_REGS
   int sno =
       Yap_CheckStream(sd, Output_Stream_f | Append_Stream_f, "set_error/2");
   if (sno < 0)
     return false;
-  LOCAL_c_error_stream = sno;
+  REMOTE_c_error_stream(worker_id) = sno;
   UNLOCK(GLOBAL_Stream[sno].streamlock);
   Yap_SetAlias(AtomUserErr, sno);
   return true;

@@ -235,7 +235,7 @@ failloop:
 #ifdef YAPOR_SBA
         (ADDR)pt1 >= HeapTop
 #else
-        IN_BETWEEN(LOCAL_TrailBase, pt1, (ADDR)CurrentTrailTop + MinTrailGap)
+        IN_BETWEEN(REMOTE_TrailBase(worker_id), pt1, (ADDR)CurrentTrailTop + MinTrailGap)
 #endif /* YAPOR_SBA */
     ) {
       pt0 = (tr_fr_ptr)pt1;

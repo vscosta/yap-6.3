@@ -31,6 +31,7 @@
 static char *send_tracer_message(char *start, char *name, arity_t arity,
                                  char *mname, CELL *args, char **s0, char *s,
                                  char **top) {
+  CACHE_REGS
   bool expand = false;
   size_t max = *top - (s + 1);
   int d, min = 1024;
@@ -40,7 +41,7 @@ static char *send_tracer_message(char *start, char *name, arity_t arity,
       Int cbeg = s1 - *s0;
       max = *top - *s0;
       max += min;
-      *s0 = Realloc(*s0, max);
+      *s0 = Realloc(*s0, max PASS_REGS);
 
       *top = *s0 + max;
       max--;
@@ -87,14 +88,14 @@ static char *send_tracer_message(char *start, char *name, arity_t arity,
             continue;
           }
         }
-	//Int md = LOCAL_max_depth, ml = LOCAL_max_list, ma = LOCAL_max_write_args;
-	//LOCAL_max_depth=6, LOCAL_max_list=6, LOCAL_max_write_args = 6;
+	//Int md = REMOTE_max_depth(worker_id), ml = REMOTE_max_list(worker_id), ma = REMOTE_max_write_args(worker_id);
+	//REMOTE_max_depth(worker_id)=6, REMOTE_max_list(worker_id)=6, REMOTE_max_write_args(worker_id) = 6;
         const char *sn = Yap_TermToBuffer(args[i],
                                           Handle_cyclics_f|Quote_illegal_f | Handle_vars_f|Singleton_vars_f);
-//	LOCAL_max_depth=md, LOCAL_max_list=ml, LOCAL_max_write_args = ma;
+//	REMOTE_max_depth(worker_id)=md, REMOTE_max_list(worker_id)=ml, REMOTE_max_write_args(worker_id) = ma;
         size_t sz;
         if (sn == NULL) {
-	  sn = Malloc(strlen("<* error *>")+1);
+	  sn = Malloc(strlen("<* error *>")+1 PASS_REGS);
 	  strcpy((char*)sn, "<* error *>");
         }
         sz = strlen(sn);
@@ -133,7 +134,7 @@ static int thread_trace;
 static int
 check_trail_consistency(void) {
   tr_fr_ptr ptr = TR;
-  while (ptr > (CELL *)LOCAL_TrailBase) {
+  while (ptr > (CELL *)REMOTE_TrailBase(worker_id)) {
     ptr = --ptr;
     if (!IsVarTerm(TrailTerm(ptr))) {
       if (IsApplTerm(TrailTerm(ptr))) {
@@ -213,13 +214,13 @@ bool low_level_trace__(yap_low_level_port port, PredEntry *pred, CELL *args) {
       jmp_deb(1);
   // if (HR < ASP ) return;
   // fif (vsc_count == 12534) jmp_deb( 2 );
-  char *buf = Malloc(512), *top = buf + 511, *b = buf;
+  char *buf = Malloc(512 PASS_REGS), *top = buf + 511, *b = buf;
       // if (!worker_id) return;
   LOCK(Yap_low_level_trace_lock);
   sc = Yap_heap_regs;
 // if (vsc_count == 161862) jmp_deb(1);
 #ifdef THREADS
-  LOCAL_ThreadHandle.thread_inst_count++;
+  REMOTE_ThreadHandle(worker_id).thread_inst_count++;
 #endif
 #ifdef COMMENTED
   b = snprintf(b, top - b, "in %p\n");
@@ -255,7 +256,7 @@ bool low_level_trace__(yap_low_level_port port, PredEntry *pred, CELL *args) {
   } else
     return;
   {
-    tr_fr_ptr pt = (tr_fr_ptr)LOCAL_TrailBase;
+    tr_fr_ptr pt = (tr_fr_ptr)REMOTE_TrailBase(worker_id);
     if (pt[140].term == 0 && pt[140].value != 0)
       jmp_deb(1);
   }
@@ -305,7 +306,7 @@ bool low_level_trace__(yap_low_level_port port, PredEntry *pred, CELL *args) {
   if (TR_FZ > TR)
     jmp_deb(1);
   {
-    tr_fr_ptr pt = (tr_fr_ptr)LOCAL_TrailBase;
+    tr_fr_ptr pt = (tr_fr_ptr)REMOTE_TrailBase(worker_id);
     if (pt[153].term == 0 && pt[153].value == 0 && pt[154].term != 0 &&
         pt[154].value != 0 && (TR > pt + 154 || TR_FZ > pt + 154))
       jmp_deb(2);
@@ -363,7 +364,7 @@ bool low_level_trace__(yap_low_level_port port, PredEntry *pred, CELL *args) {
 #endif
   b += snprintf(b, top - b, "%llud " UInt_FORMAT " ", vsc_count,
                 LCL0 - (CELL *)B);
-  b += snprintf(b, top - b, Int_FORMAT " ", LOCAL_CurHandle);
+  b += snprintf(b, top - b, Int_FORMAT " ", REMOTE_CurHandle(worker_id));
 #if defined(THREADS) || defined(YAPOR)
   b += snprintf(b, top - b, "(%d)", worker_id);
 #endif
@@ -375,7 +376,7 @@ bool low_level_trace__(yap_low_level_port port, PredEntry *pred, CELL *args) {
     return (true);
   }
   if (pred->ModuleOfPred == PROLOG_MODULE) {
-    if (!LOCAL_do_trace_primitives) {
+    if (!REMOTE_do_trace_primitives(worker_id)) {
       // HR = HI;
     UNLOCK(Yap_low_level_trace_lock);
       pop_text_stack(l);
@@ -486,11 +487,11 @@ static Int start_low_level_trace(USES_REGS1) {
 }
 
 static Int total_choicepoints(USES_REGS1) {
-  return Yap_unify(MkIntegerTerm(LOCAL_total_choicepoints), ARG1);
+  return Yap_unify(MkIntegerTerm(REMOTE_total_choicepoints(worker_id)), ARG1);
 }
 
 static Int reset_total_choicepoints(USES_REGS1) {
-  LOCAL_total_choicepoints = 0;
+  REMOTE_total_choicepoints(worker_id) = 0;
   return TRUE;
 }
 
@@ -520,7 +521,7 @@ not being output.
  */
 static Int stop_low_level_trace(USES_REGS1) {
   Yap_do_low_level_trace = FALSE;
-  LOCAL_do_trace_primitives = TRUE;
+  REMOTE_do_trace_primitives(worker_id) = TRUE;
 #if DEBUG_LOCKS////
   debug_locks = TRUE;
 #endif

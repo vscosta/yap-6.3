@@ -576,16 +576,16 @@ typedef enum {
       LOCK(GLOBAL_locks_heap_access);                                          \
       GLOBAL_locks_who_locked_heap = worker_id;                                \
     }                                                                          \
-    LOCAL_PrologMode |= CritMode;                                              \
-    LOCAL_CritLocks++;                                                         \
+    REMOTE_PrologMode(worker_id) |= CritMode;                                              \
+    REMOTE_CritLocks(worker_id)++;                                                         \
   }
 #define YAPLeaveCriticalSection()                                              \
   {                                                                            \
-    LOCAL_CritLocks--;                                                         \
-    if (!LOCAL_CritLocks) {                                                    \
-      LOCAL_PrologMode &= ~CritMode;                                           \
-      if (LOCAL_PrologMode & AbortMode) {                                      \
-        LOCAL_PrologMode &= ~AbortMode;                                        \
+    REMOTE_CritLocks(worker_id)--;                                                         \
+    if (!REMOTE_CritLocks(worker_id)) {                                                    \
+      REMOTE_PrologMode(worker_id) &= ~CritMode;                                           \
+      if (REMOTE_PrologMode(worker_id) & AbortMode) {                                      \
+        REMOTE_PrologMode(worker_id) &= ~AbortMode;                                        \
         Yap_Error(ABORT_EVENT, 0, "");                                         \
       }                                                                        \
       GLOBAL_locks_who_locked_heap = MAX_WORKERS;                              \
@@ -596,13 +596,13 @@ typedef enum {
 #define YAPEnterCriticalSection()                                              \
   {                                                                            \
     /* LOCK(BGL); */                                                           \
-    LOCAL_PrologMode |= CritMode;                                              \
+    REMOTE_PrologMode(worker_id) |= CritMode;                                              \
   }
 #define YAPLeaveCriticalSection()                                              \
   {                                                                            \
-    LOCAL_PrologMode &= ~CritMode;                                             \
-    if (LOCAL_PrologMode & AbortMode) {                                        \
-      LOCAL_PrologMode &= ~AbortMode;                                          \
+    REMOTE_PrologMode(worker_id) &= ~CritMode;                                             \
+    if (REMOTE_PrologMode(worker_id) & AbortMode) {                                        \
+      REMOTE_PrologMode(worker_id) &= ~AbortMode;                                          \
       Yap_Error(ABORT_EVENT, 0, "");                                           \
       Yap_RestartYap(1);                                                       \
     }                                                                          \
@@ -611,19 +611,19 @@ typedef enum {
 #else
 #define YAPEnterCriticalSection()                                              \
   {                                                                            \
-    LOCAL_PrologMode |=                                                        \
+    REMOTE_PrologMode(worker_id) |=                                                        \
         CritMode; /* printf("%d,                                               \
-                     %s:%d\n",LOCAL_CritLocks+1,__FILE__,__LINE__);*/          \
-    LOCAL_CritLocks++;                                                         \
+                     %s:%d\n",REMOTE_CritLocks(worker_id)+1,__FILE__,__LINE__);*/          \
+    REMOTE_CritLocks(worker_id)++;                                                         \
   }
 #define YAPLeaveCriticalSection()                                              \
   {                                                                            \
-    LOCAL_CritLocks--;                                                         \
-    /*printf("%d, %s:%d\n",LOCAL_CritLocks,__FILE__,__LINE__);*/               \
-    if (!LOCAL_CritLocks) {                                                    \
-      LOCAL_PrologMode &= ~CritMode;                                           \
-      if (LOCAL_PrologMode & AbortMode) {                                      \
-        LOCAL_PrologMode &= ~AbortMode;                                        \
+    REMOTE_CritLocks(worker_id)--;                                                         \
+    /*printf("%d, %s:%d\n",REMOTE_CritLocks(worker_id),__FILE__,__LINE__);*/               \
+    if (!REMOTE_CritLocks(worker_id)) {                                                    \
+      REMOTE_PrologMode(worker_id) &= ~CritMode;                                           \
+      if (REMOTE_PrologMode(worker_id) & AbortMode) {                                      \
+        REMOTE_PrologMode(worker_id) &= ~AbortMode;                                        \
         Yap_RestartYap(1);                                                     \
       }                                                                        \
     }                                                                          \

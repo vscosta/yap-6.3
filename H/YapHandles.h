@@ -24,7 +24,7 @@
 #define LOCAL_NHandles LOCAL_NSlots
 #define REMOTE_NHandles REMOTE_NSlots
 #define LOCAL_HandleBase LOCAL_SlotBase
-#define REMOTE_HanvdleBase SlotBase
+#define REMOTE_HandleBase REMOTE_SlotBase
 
 /**
 @groupdef  term_t_slots 
@@ -73,7 +73,7 @@ functions are then exported through corresponding FLI C-functions
 #define Yap_RebootSlots(wid) Yap_RebootHandles__(wid PASS_REGS)
 
 INLINE_ONLY void Yap_RebootHandles__(int wid USES_REGS) {
-  // fprintf(stderr,  " StartHandles = %ld", LOCAL_CurHandle);
+  // fprintf(stderr,  " StartHandles = %ld", REMOTE_CurHandle(worker_id));
   REMOTE_CurHandle(wid) = 1;
 }
 
@@ -81,20 +81,20 @@ INLINE_ONLY void Yap_RebootHandles__(int wid USES_REGS) {
 /// Used to tell how many slots we have so d=dara when we entered a segment of
 /// code.
 //#define Yap_StartHandles() (
-// printf("[<<<%s,%s,%d-%ld\n",__FILE__,__FUNCTION__,__LINE__,LOCAL_CurHandle)?Yap_StartHandles__(PASS_REGS1):
+// printf("[<<<%s,%s,%d-%ld\n",__FILE__,__FUNCTION__,__LINE__,REMOTE_CurHandle(worker_id))?Yap_StartHandles__(PASS_REGS1):
 //-1)
 #define Yap_StartHandles() Yap_StartHandles__(PASS_REGS1)
 #define Yap_StartSlots() Yap_StartHandles__(PASS_REGS1)
 
 INLINE_ONLY yhandle_t Yap_StartHandles__(USES_REGS1);
 INLINE_ONLY yhandle_t Yap_StartHandles__(USES_REGS1) {
-  //  // fprintf(stderr,  " StartHandles = %ld", LOCAL_CurHandle);
+  //  // fprintf(stderr,  " StartHandles = %ld", REMOTE_CurHandle(worker_id));
   // fprintf(stderr,"SS %s:%d\n", __FILE__, __LINE__);;
-  if (LOCAL_CurHandle < 0) {
+  if (REMOTE_CurHandle(worker_id) < 0) {
     Yap_Error(SYSTEM_ERROR_INTERNAL, 0L, " StartHandles = %ld",
-              LOCAL_CurHandle);
+              REMOTE_CurHandle(worker_id));
   }
-  return LOCAL_CurHandle;
+  return REMOTE_CurHandle(worker_id);
 }
 
 /// @brief reset the nmber of slots _slot_ to the number existing before the
@@ -109,7 +109,7 @@ INLINE_ONLY yhandle_t Yap_StartHandles__(USES_REGS1) {
 INLINE_ONLY void Yap_CloseHandles__(yhandle_t slot USES_REGS);
 INLINE_ONLY void Yap_CloseHandles__(yhandle_t slot USES_REGS) {
   // fprintf(stderr,"CS %s:%d\n", __FILE__, __LINE__);
-  LOCAL_CurHandle = slot;
+  REMOTE_CurHandle(worker_id) = slot;
 }
 
 #define Yap_CurrentHandle() Yap_CurrentHandle__(PASS_REGS1)
@@ -119,7 +119,7 @@ INLINE_ONLY void Yap_CloseHandles__(yhandle_t slot USES_REGS) {
 /// the top of the stack.
 INLINE_ONLY yhandle_t Yap_CurrentHandle__(USES_REGS1);
 INLINE_ONLY yhandle_t Yap_CurrentHandle__(USES_REGS1) {
-  return LOCAL_CurHandle;
+  return REMOTE_CurHandle(worker_id);
 }
 
 #define Yap_GetFromHandle(slot) Yap_GetFromHandle__(slot PASS_REGS)
@@ -129,7 +129,7 @@ INLINE_ONLY yhandle_t Yap_CurrentHandle__(USES_REGS1) {
 INLINE_ONLY Term Yap_GetFromHandle__(yhandle_t slot USES_REGS);
 INLINE_ONLY Term Yap_GetFromHandle__(yhandle_t slot USES_REGS) {
   //  fprintf(stderr, "GS %s:%d\n", __FILE__, __LINE__);
-  return Deref(LOCAL_HandleBase[slot]);
+  return Deref(REMOTE_HandleBase(worker_id)[slot]);
 }
 
 #define Yap_GetDerefedFromHandle(slot)                                         \
@@ -142,7 +142,7 @@ Yap_GetDerefedFromHandle__(yhandle_t slot USES_REGS);
 INLINE_ONLY Term
 Yap_GetDerefedFromHandle__(yhandle_t slot USES_REGS) {
   // fprintf(stderr,"GDS %s:%d\n", __FILE__, __LINE__);
-  return LOCAL_HandleBase[slot];
+  return REMOTE_HandleBase(worker_id)[slot];
 }
 
 #define Yap_GetPtrFromHandle(slot) Yap_GetPtrFromHandle__(slot PASS_REGS)
@@ -154,7 +154,7 @@ Yap_GetPtrFromHandle__(yhandle_t slot USES_REGS);
 INLINE_ONLY Term *
 Yap_GetPtrFromHandle__(yhandle_t slot USES_REGS) {
   // fprintf(stderr,"GPS %s:%d\n", __FILE__, __LINE__);
-  return (Term *)LOCAL_HandleBase[slot];
+  return (Term *)REMOTE_HandleBase(worker_id)[slot];
 }
 
 #define Yap_AddressFromHandle(slot) Yap_AddressFromHandle__(slot PASS_REGS)
@@ -166,7 +166,7 @@ INLINE_ONLY CELL *
 Yap_AddressFromHandle__(yhandle_t slot USES_REGS) {
   /// @brief get the memory address of a slot
 
-  return LOCAL_HandleBase + slot;
+  return REMOTE_HandleBase(worker_id) + slot;
 }
 
 #define Yap_PutInSlot(slot, t) Yap_PutInHandle__(slot, t PASS_REGS)
@@ -177,7 +177,7 @@ INLINE_ONLY void Yap_PutInHandle__(yhandle_t slot,
 INLINE_ONLY void Yap_PutInHandle__(yhandle_t slot,
                                                  Term t USES_REGS) {
 // fprintf(stderr,"PS %s:%d\n", __FILE__, __LINE__);
-  LOCAL_HandleBase[slot] = t;
+  REMOTE_HandleBase(worker_id)[slot] = t;
 }
 
 #ifndef Yap_Max
@@ -186,14 +186,14 @@ INLINE_ONLY void Yap_PutInHandle__(yhandle_t slot,
 
 #define ensure_handles ensure_slots
 INLINE_ONLY void ensure_slots(int N USES_REGS) {
-  if (LOCAL_CurHandle + N >= LOCAL_NHandles) {
-    size_t inc = Yap_Max(16 * 1024, LOCAL_NHandles / 2); // measured in cells
+  if (REMOTE_CurHandle(worker_id) + N >= REMOTE_NHandles(worker_id)) {
+    size_t inc = Yap_Max(16 * 1024, REMOTE_NHandles(worker_id) / 2); // measured in cells
     inc = Yap_Max(inc, (size_t)N + 16);                  // measured in cells
-    LOCAL_HandleBase = (CELL *)realloc(LOCAL_HandleBase,
-                                       (inc + LOCAL_NHandles) * sizeof(CELL));
-    LOCAL_NHandles += inc;
-    if (!LOCAL_HandleBase) {
-      size_t kneeds = ((inc + LOCAL_NHandles) * sizeof(CELL)) / 1024;
+    REMOTE_HandleBase(worker_id) = (CELL *)realloc(REMOTE_HandleBase(worker_id),
+                                       (inc + REMOTE_NHandles(worker_id)) * sizeof(CELL));
+    REMOTE_NHandles(worker_id) += inc;
+    if (!REMOTE_HandleBase(worker_id)) {
+      size_t kneeds = ((inc + REMOTE_NHandles(worker_id)) * sizeof(CELL)) / 1024;
       Yap_Error(
           SYSTEM_ERROR_INTERNAL, 0 /* TermNil */,
           "Out of memory for the term handles (term_t) aka slots, l needed",
@@ -204,7 +204,7 @@ INLINE_ONLY void ensure_slots(int N USES_REGS) {
 
 /// @brief create a new slot with term t
 // #define Yap_InitHandle(t)
-//  (printf("+%d %ld %s,%s,%d>>>]\n", 1, LOCAL_CurHandle,__FILE__, __FUNCTION__,
+//  (printf("+%d %ld %s,%s,%d>>>]\n", 1, REMOTE_CurHandle(worker_id),__FILE__, __FUNCTION__,
 //  __LINE__)
 //    ? Yap_InitHandle__(t PASS_REGS)
 //    : -1)
@@ -214,7 +214,7 @@ INLINE_ONLY void ensure_slots(int N USES_REGS) {
 
 INLINE_ONLY yhandle_t Yap_InitHandle__(Term t USES_REGS);
 INLINE_ONLY yhandle_t Yap_InitHandle__(Term t USES_REGS) {
-  yhandle_t old_slots = LOCAL_CurHandle;
+  yhandle_t old_slots = REMOTE_CurHandle(worker_id);
 
   ensure_slots(1 PASS_REGS);
   if (t==0) {
@@ -223,33 +223,33 @@ INLINE_ONLY yhandle_t Yap_InitHandle__(Term t USES_REGS) {
     Term tg = MkVarTerm();
     Bind_Local(VarOfTerm(t), tg);
     }*/
-  LOCAL_HandleBase[old_slots] = t;
-  LOCAL_CurHandle++;
+  REMOTE_HandleBase(worker_id)[old_slots] = t;
+  REMOTE_CurHandle(worker_id)++;
   return old_slots;
 }
 
 //#define Yap_NewHandles(n) ( printf("+%d %ld
-//%s,%s,%d>>>]\n",n,LOCAL_CurHandle,__FILE__,__FUNCTION__,__LINE__)
+//%s,%s,%d>>>]\n",n,REMOTE_CurHandle(worker_id),__FILE__,__FUNCTION__,__LINE__)
 //?Yap_NewHandles__(n PASS_REGS):-1)
 #define Yap_NewHandles(n) Yap_NewHandles__(n PASS_REGS)
 #define Yap_NewSlots(n) Yap_NewHandles__(n PASS_REGS)
 
 INLINE_ONLY yhandle_t Yap_NewHandles__(int n USES_REGS);
 INLINE_ONLY yhandle_t Yap_NewHandles__(int n USES_REGS) {
-  yhandle_t old_slots = LOCAL_CurHandle;
+  yhandle_t old_slots = REMOTE_CurHandle(worker_id);
   int i;
   // fprintf(stderr, "NS %s:%d\n", __FILE__, __LINE__);
 
   ensure_slots(n PASS_REGS);
   for (i = 0; i < n; i++) {
-    LOCAL_HandleBase[old_slots + i] = MkVarTerm();
+    REMOTE_HandleBase(worker_id)[old_slots + i] = MkVarTerm();
   }
-  LOCAL_CurHandle += n;
+  REMOTE_CurHandle(worker_id) += n;
   return old_slots;
 }
 
 //#define Yap_InitHandles(n, ts)
-//  (printf("+%d %d %s,%s,%d>>>]\n", n, LOCAL_CurHandle, __FILE__, __FUNCTION__,
+//  (printf("+%d %d %s,%s,%d>>>]\n", n, REMOTE_CurHandle(worker_id), __FILE__, __FUNCTION__,
 //  __LINE__)
 //   ? Yap_InitHandles__(n, ts PASS_REGS)
 //   : -1)
@@ -261,12 +261,12 @@ INLINE_ONLY yhandle_t Yap_InitHandles__(int n,
                                                       Term *ts USES_REGS);
 INLINE_ONLY yhandle_t Yap_InitHandles__(int n,
                                                       Term *ts USES_REGS) {
-  yhandle_t old_slots = LOCAL_CurHandle;
+  yhandle_t old_slots = REMOTE_CurHandle(worker_id);
   int i;
   ensure_slots(n PASS_REGS);
   for (i = 0; i < n; i++)
-    LOCAL_HandleBase[old_slots + i] = ts[i];
-  LOCAL_CurHandle += n;
+    REMOTE_HandleBase(worker_id)[old_slots + i] = ts[i];
+  REMOTE_CurHandle(worker_id) += n;
   return old_slots;
 }
 
@@ -277,17 +277,17 @@ INLINE_ONLY yhandle_t Yap_InitHandles__(int n,
 /// slots starting at topHandle.
 static inline bool Yap_RecoverHandles__(int n, yhandle_t topHandle USES_REGS);
 static inline bool Yap_RecoverHandles__(int n, yhandle_t topHandle USES_REGS) {
-  if (topHandle + n < LOCAL_CurHandle)
+  if (topHandle + n < REMOTE_CurHandle(worker_id))
     return false;
 #ifdef DEBUG
-  if (n > LOCAL_CurHandle) {
+  if (n > REMOTE_CurHandle(worker_id)) {
     Yap_Error(SYSTEM_ERROR_INTERNAL, 0,
               "Inconsistent slot state in Yap_RecoverHandles.", 0);
     return false;
   }
 #endif
-  LOCAL_CurHandle = topHandle;
-  //fprintf(stderr,"RS %ld %s:%d\n", LOCAL_CurHandle, __FILE__, __LINE__);
+  REMOTE_CurHandle(worker_id) = topHandle;
+  //fprintf(stderr,"RS %ld %s:%d\n", REMOTE_CurHandle(worker_id), __FILE__, __LINE__);
   return true;
 }
 
@@ -297,12 +297,12 @@ static inline bool Yap_RecoverHandles__(int n, yhandle_t topHandle USES_REGS) {
 /// @brief recovers the element at position $n$ dropping any other elements p
 static inline Term Yap_PopHandle__(yhandle_t topHandle USES_REGS);
 static inline Term Yap_PopHandle__(yhandle_t topHandle USES_REGS) {
-  if (LOCAL_CurHandle < topHandle)
+  if (REMOTE_CurHandle(worker_id) < topHandle)
     return TermNil;
   else {
-    LOCAL_CurHandle = topHandle;
-    // fprintf(stderr,"RS %ld %s:%d\n", LOCAL_CurHandle, __FILE__, __LINE__);
-    return LOCAL_HandleBase[topHandle];
+    REMOTE_CurHandle(worker_id) = topHandle;
+    // fprintf(stderr,"RS %ld %s:%d\n", REMOTE_CurHandle(worker_id), __FILE__, __LINE__);
+    return REMOTE_HandleBase(worker_id)[topHandle];
   }
 }
 #endif

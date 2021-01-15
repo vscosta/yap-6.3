@@ -38,8 +38,8 @@ Yap_MAVAR_HASH(CELL *addr USES_REGS) {
 OPT_MAVAR_STATIC struct ma_h_entry *
 Yap_ALLOC_NEW_MASPACE(USES_REGS1)
 {
-  ma_h_inner_struct *newS = LOCAL_ma_h_top;
-  LOCAL_ma_h_top++;
+  ma_h_inner_struct *newS = REMOTE_ma_h_top(worker_id);
+  REMOTE_ma_h_top(worker_id)++;
   return newS;
 }
 
@@ -48,16 +48,16 @@ Yap_lookup_ma_var(CELL *addr USES_REGS) {
   unsigned int i = Yap_MAVAR_HASH(addr PASS_REGS);
   struct ma_h_entry *nptr, *optr;
 
-  if (LOCAL_ma_hash_table[i].timestmp != LOCAL_ma_timestamp) {
-    LOCAL_ma_hash_table[i].timestmp = LOCAL_ma_timestamp;
-    LOCAL_ma_hash_table[i].val.addr = addr;
-    LOCAL_ma_hash_table[i].val.next = NULL;
+  if (REMOTE_ma_hash_table(worker_id)[i].timestmp != REMOTE_ma_timestamp(worker_id)) {
+    REMOTE_ma_hash_table(worker_id)[i].timestmp = REMOTE_ma_timestamp(worker_id);
+    REMOTE_ma_hash_table(worker_id)[i].val.addr = addr;
+    REMOTE_ma_hash_table(worker_id)[i].val.next = NULL;
     return FALSE;
   }
-  if (LOCAL_ma_hash_table[i].val.addr == addr) 
+  if (REMOTE_ma_hash_table(worker_id)[i].val.addr == addr) 
     return TRUE;
-  optr = &(LOCAL_ma_hash_table[i].val);
-  nptr = LOCAL_ma_hash_table[i].val.next;
+  optr = &(REMOTE_ma_hash_table(worker_id)[i].val);
+  nptr = REMOTE_ma_hash_table(worker_id)[i].val.next;
   while (nptr != NULL) {
     if (nptr->addr == addr) {
       return TRUE;
@@ -73,15 +73,15 @@ Yap_lookup_ma_var(CELL *addr USES_REGS) {
 
 OPT_MAVAR_STATIC UInt
 Yap_NEW_MAHASH(ma_h_inner_struct *top USES_REGS) {
-  UInt time = ++LOCAL_ma_timestamp;
+  UInt time = ++REMOTE_ma_timestamp(worker_id);
   if (time == 0) {
     unsigned int i;
     /* damn, we overflowed */
     for (i = 0; i < MAVARS_HASH_SIZE; i++)
-      LOCAL_ma_hash_table[i].timestmp = 0;
-    time = ++LOCAL_ma_timestamp;
+      REMOTE_ma_hash_table(worker_id)[i].timestmp = 0;
+    time = ++REMOTE_ma_timestamp(worker_id);
   }
-  LOCAL_ma_h_top = top;
+  REMOTE_ma_h_top(worker_id) = top;
   return time;
 }
 #else

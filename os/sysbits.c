@@ -194,6 +194,7 @@ static char *unix2win(const char *source, char *target, int max) {
 extern char *virtual_cwd;
 
 bool Yap_ChDir(const char *path) {
+  CACHE_REGS
   bool rc = false;
   int lvl = push_text_stack();
 
@@ -244,7 +245,6 @@ Atom Yap_TemporaryFile(const char *prefix, int *fd) {
 }
 static bool initSysPath(Term tlib, Term tcommons, bool dir_done,
                         bool commons_done) {
-  CACHE_REGS
 
   if (!Yap_PLDIR || !Yap_unify(tlib, MkAtomTerm(Yap_LookupAtom(Yap_PLDIR))))
     return false;
@@ -502,11 +502,11 @@ static Int p_system(USES_REGS1) { /* '$system'(+SystCommand)	       */
   } else if (IsStringTerm(t1)) {
     cmd = StringOfTerm(t1);
   } else {
-    if (!Yap_GetName(LOCAL_FileNameBuf, YAP_FILENAME_MAX, t1)) {
+    if (!Yap_GetName(REMOTE_FileNameBuf(worker_id), YAP_FILENAME_MAX, t1)) {
       Yap_Error(TYPE_ERROR_ATOM, t1, "argument to system/1");
       return false;
     }
-    cmd = LOCAL_FileNameBuf;
+    cmd = REMOTE_FileNameBuf(worker_id);
   }
 /* Yap_CloseStreams(TRUE); */
 #if _MSC_VER || defined(__MINGW32__)
@@ -696,7 +696,7 @@ static Int p_putenv(USES_REGS1) {
     s2 = RepAtom(AtomOfTerm(t2))->StrOfAE;
   while (!(p0 = p = Yap_AllocAtomSpace(strlen(s) + strlen(s2) + 3))) {
     if (!Yap_growheap(FALSE, MinHeapGap, NULL)) {
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return FALSE;
     }
   }
@@ -1074,6 +1074,7 @@ static Int
   p_mtrace()
   {
 #ifdef HAVE_MTRACE
+    CACHE_REGS
     Term t = Deref(ARG1);
     if (t == TermTrue) mtrace();
     else if (t == TermFalse)  muntrace();

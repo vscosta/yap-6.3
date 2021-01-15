@@ -45,8 +45,8 @@ typedef struct non_single_struct_t {
       *ptd0 = tovisit->d0;				\
     }							\
     pop_text_stack(lvl);				\
-    LOCAL_Error_TYPE = RESOURCE_ERROR_TRAIL;		\
-    LOCAL_Error_Size = (TR-TR0)*sizeof(tr_fr_ptr *);	\
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_TRAIL;		\
+    REMOTE_ActiveError(worker_id)->errorMsgLen = (TR-TR0)*sizeof(tr_fr_ptr *);	\
     clean_tr(TR0 PASS_REGS);				\
     HR = InitialH;					\
     return 0L;						\
@@ -72,8 +72,8 @@ typedef struct non_single_struct_t {
     pop_text_stack(lvl);			\
     clean_tr(TR0 PASS_REGS);			\
     HR = InitialH;				\
-    LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;	\
-    LOCAL_Error_Size = (ASP-HR)*sizeof(CELL);	\
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;	\
+    REMOTE_ActiveError(worker_id)->errorMsgLen = (ASP-HR)*sizeof(CELL);	\
     return false; }
 
 
@@ -102,7 +102,7 @@ int Yap_copy_complex_term(register CELL *pt0, register CELL *pt0_end,
   int lvl = push_text_stack();
 
   struct cp_frame *tovisit0,
-    *tovisit = Malloc(1024*sizeof(struct cp_frame));
+    *tovisit = Malloc(1024*sizeof(struct cp_frame) PASS_REGS);
   struct cp_frame *tovisit_max;
 
   CELL *HB0 = HB;
@@ -142,7 +142,7 @@ int Yap_copy_complex_term(register CELL *pt0, register CELL *pt0_end,
 	tovisit++;
 	// move to new list
 	d0 = *headp;
-	if ((ADDR)TR > LOCAL_TrailTop - MIN_ARENA_SIZE)
+	if ((ADDR)TR > REMOTE_TrailTop(worker_id) - MIN_ARENA_SIZE)
           goto trail_overflow;
 	TrailedMaBind(headp, AbsPair(HR));
 	pt0 = headp;
@@ -243,7 +243,7 @@ int Yap_copy_complex_term(register CELL *pt0, register CELL *pt0_end,
 	if (++tovisit >= tovisit_max-32) {
 	  expand_stack(tovisit0, tovisit, tovisit_max, struct cp_frame);
 	}
-	if ((ADDR)TR > LOCAL_TrailTop - MIN_ARENA_SIZE)
+	if ((ADDR)TR > REMOTE_TrailTop(worker_id) - MIN_ARENA_SIZE)
           goto trail_overflow;
 	TrailedMaBind(headp,AbsAppl(HR));
 	ptf = HR;
@@ -284,14 +284,14 @@ int Yap_copy_complex_term(register CELL *pt0, register CELL *pt0_end,
         }
         tovisit = bp;
         new = *ptf;
-	if ((ADDR)TR > LOCAL_TrailTop - MIN_ARENA_SIZE)
+	if ((ADDR)TR > REMOTE_TrailTop(worker_id) - MIN_ARENA_SIZE)
           goto trail_overflow;
         TrailedMaBind(ptd0, new);
         ptf++;
       } else {
         /* first time we met this term */
         RESET_VARIABLE(ptf);
-	if ((ADDR)TR > LOCAL_TrailTop - MIN_ARENA_SIZE)
+	if ((ADDR)TR > REMOTE_TrailTop(worker_id) - MIN_ARENA_SIZE)
           goto trail_overflow;
         TrailedMaBind(ptd0, (CELL)ptf);
         ptf++;
@@ -358,7 +358,7 @@ handle_cp_overflow(int res, tr_fr_ptr TR0, UInt arity, Term t)
   switch(res) {
   case -1:
     if (!Yap_gcl((ASP-HR)*sizeof(CELL), arity+1, ENV, gc_P(P,CP))) {
-      Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return 0L;
     }
     return Deref(XREGS[arity+1]);
@@ -366,19 +366,19 @@ handle_cp_overflow(int res, tr_fr_ptr TR0, UInt arity, Term t)
     return Deref(XREGS[arity+1]);
   case -3:
     {
-      UInt size = LOCAL_Error_Size;
-      LOCAL_Error_Size = 0L;
+      UInt size = REMOTE_ActiveError(worker_id)->errorMsgLen;
+      REMOTE_ActiveError(worker_id)->errorMsgLen = 0L;
       if (size > 4*1024*1024)
 	size = 4*1024*1024;
       if (!Yap_ExpandPreAllocCodeSpace(size, NULL, TRUE)) {
-	Yap_Error(RESOURCE_ERROR_AUXILIARY_STACK, TermNil, LOCAL_ErrorMessage);
+	Yap_Error(RESOURCE_ERROR_AUXILIARY_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	return 0L;
       }
     }
     return Deref(XREGS[arity+1]);
   case -4:
     if (!Yap_growtrail((TR-TR0)*sizeof(tr_fr_ptr *), FALSE)) {
-      Yap_Error(RESOURCE_ERROR_TRAIL, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_TRAIL, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return 0L;
     }
     return Deref(XREGS[arity+1]);
@@ -648,7 +648,7 @@ export_complex_term(Term tf, CELL *pt0, CELL *pt0_end, char * buf, size_t len0, 
       } else {
 	/* first time we met this term */
 	*ptf = (CELL)CellDifH(ptf,HLow);
-	if (TR > (tr_fr_ptr)LOCAL_TrailTop - 256) {
+	if (TR > (tr_fr_ptr)REMOTE_TrailTop(worker_id) - 256) {
 	  /* Trail overflow */
 	  if (!Yap_growtrail((TR-TR0)*sizeof(tr_fr_ptr *), TRUE)) {
 	    goto trail_overflow;
@@ -736,7 +736,7 @@ export_complex_term(Term tf, CELL *pt0, CELL *pt0_end, char * buf, size_t len0, 
   }
 #endif
   reset_trail(TR0);
-  LOCAL_Error_Size = (ADDR)AuxSp-(ADDR)tovisit0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = (ADDR)AuxSp-(ADDR)tovisit0;
   return -3;
 }
 
@@ -879,7 +879,7 @@ Yap_ImportTerm(char * buf) {
   // if not enough stack available
   while (HR + sz > ASP - 4096) {
     if (!Yap_gcl( (sz+4096)*sizeof(CELL), PP->ArityOfPE, ENV, gc_P(P,CP))) {
-      Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return 0L;
     }
   }
@@ -2065,7 +2065,7 @@ static int term_subsumer_complex(register CELL *pt0, register CELL *pt0_end, reg
 	npt++;
 	continue;
       }
-      if (TR > (tr_fr_ptr)LOCAL_TrailTop - 256) {
+      if (TR > (tr_fr_ptr)REMOTE_TrailTop(worker_id) - 256) {
 	goto trail_overflow;
       }
       RESET_VARIABLE(HR);
@@ -2573,7 +2573,7 @@ unnumber_complex_term(CELL *pt0, CELL *pt0_end, CELL *ptf, CELL *HLow, int share
     *pt0 = tovisit->oldv;
   }
   reset_trail(TR0);
-  LOCAL_Error_Size = (ADDR)AuxSp-(ADDR)tovisit0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = (ADDR)AuxSp-(ADDR)tovisit0;
   pop_text_stack(lvl);
   return -3;
 }

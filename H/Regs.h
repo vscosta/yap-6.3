@@ -159,7 +159,7 @@ extern REGSTORE *Yap_regp;
 
 #ifdef PUSH_X
 
-#define XREGS  (Yapregp->XTERMS)
+#define XREGS  (Yap_regp->XTERMS)
 
 #else
 

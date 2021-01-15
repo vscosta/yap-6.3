@@ -1,6 +1,6 @@
 
 
-macro_optional_find_package (Threads OFF)
+macro_optional_find_package (Threads ON)
 if (WITH_Threads)
   #
   #   CMAKE_THREAD_LIBS_INIT     - the thread library
@@ -29,7 +29,6 @@ if (WITH_Threads)
   set( THREADS_PREFER_PTHREAD_FLAG ON)
 
   if (CMAKE_USE_PTHREADS_INIT)
-    target_link_libraries(libYap pthread)
     set (HAVE_READLINE_READLINE_H 1)
 #    set( CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} )
     check_function_exists( pthread_mutexattr_setkind_np HAVE_PTHREAD_MUTEXATTR_SETKIND_NP )
@@ -47,7 +46,7 @@ endif (WITH_Threads)
 
 cmake_dependent_option (WITH_Pthread_Locking
   "use pthread locking primitives for internal locking" ON
-  "WITH_Threads" OFF)
+  "WITH_Threads" ON)
 
 IF(WITH_Pthread_Lockin)
   set_DIRECTORY_properties(PROPERTIES APPEND COMPILE_DEFINITIONS USE_PTHREAD_LOCKING=1)

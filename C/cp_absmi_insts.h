@@ -524,15 +524,15 @@
       LOCK(PREG->y_u.p.p->StatisticsForPred->lock);
       PREG->y_u.p.p->StatisticsForPred->NOfEntries++;
       UNLOCK(PREG->y_u.p.p->StatisticsForPred->lock);
-      LOCAL_ReductionsCounter--;
-      if (LOCAL_ReductionsCounter == 0 && LOCAL_ReductionsCounterOn) {
+      REMOTE_ReductionsCounter(worker_id)--;
+      if (REMOTE_ReductionsCounter(worker_id) == 0 && REMOTE_ReductionsCounterOn(worker_id)) {
         saveregs();
         Yap_NilError(CALL_COUNTER_UNDERFLOW_EVENT, "");
         setregs();
         JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0 && LOCAL_PredEntriesCounterOn) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0 && REMOTE_PredEntriesCounterOn(worker_id)) {
         saveregs();
         Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT, "");
         setregs();
@@ -547,8 +547,8 @@
       LOCK(PREG->y_u.p.p->StatisticsForPred->lock);
       PREG->y_u.p.p->StatisticsForPred->NOfRetries++;
       UNLOCK(PREG->y_u.p.p->StatisticsForPred->lock);
-      LOCAL_RetriesCounter--;
-      if (LOCAL_RetriesCounter == 0 && LOCAL_RetriesCounterOn) {
+      REMOTE_RetriesCounter(worker_id)--;
+      if (REMOTE_RetriesCounter(worker_id) == 0 && REMOTE_RetriesCounterOn(worker_id)) {
         /* act as if we had backtracked */
         ENV = B->cp_env;
         saveregs();
@@ -556,8 +556,8 @@
         setregs();
         JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0 && LOCAL_PredEntriesCounterOn) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0 && REMOTE_PredEntriesCounterOn(worker_id)) {
         ENV = B->cp_env;
         saveregs();
         Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT, "");
@@ -586,15 +586,15 @@
       LOCK(((PredEntry *)(PREG->y_u.Otapl.p))->StatisticsForPred->lock);
       ((PredEntry *)(PREG->y_u.Otapl.p))->StatisticsForPred->NOfRetries++;
       UNLOCK(((PredEntry *)(PREG->y_u.Otapl.p))->StatisticsForPred->lock);
-      LOCAL_RetriesCounter--;
-      if (LOCAL_RetriesCounter == 0 && LOCAL_RetriesCounterOn) {
+      REMOTE_RetriesCounter(worker_id)--;
+      if (REMOTE_RetriesCounter(worker_id) == 0 && REMOTE_RetriesCounterOn(worker_id)) {
         saveregs();
         Yap_NilError(RETRY_COUNTER_UNDERFLOW_EVENT, "");
         setregs();
         JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0 && LOCAL_PredEntriesCounterOn) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0 && REMOTE_PredEntriesCounterOn(worker_id)) {
         saveregs();
         Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT, "");
         setregs();
@@ -629,15 +629,15 @@
       }
       SET_BB(B_YREG);
       ENDCACHE_Y();
-      LOCAL_RetriesCounter--;
-      if (LOCAL_RetriesCounter == 0) {
+      REMOTE_RetriesCounter(worker_id)--;
+      if (REMOTE_RetriesCounter(worker_id) == 0) {
         saveregs();
         Yap_NilError(RETRY_COUNTER_UNDERFLOW_EVENT, "");
         setregs();
         JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0) {
         saveregs();
         Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT, "");
         setregs();
@@ -670,7 +670,7 @@
           PREG = NEXTOP(PREG, Osbpa);
           saveregs();
           if (!Yap_gcl(sz, arity, YENV, PREG)) {
-            Yap_NilError(RESOURCE_ERROR_STACK, LOCAL_ErrorMessage);
+            Yap_NilError(RESOURCE_ERROR_STACK, REMOTE_ActiveError(worker_id)->errorMsg);
             setregs();
             FAIL();
           } else {
@@ -759,15 +759,15 @@
       ENDBOp();
 
       BOp(count_retry_and_mark, Otapl);
-      LOCAL_RetriesCounter--;
-      if (LOCAL_RetriesCounter == 0) {
+      REMOTE_RetriesCounter(worker_id)--;
+      if (REMOTE_RetriesCounter(worker_id) == 0) {
         saveregs();
         Yap_NilError(RETRY_COUNTER_UNDERFLOW_EVENT, "");
         setregs();
         JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0) {
         saveregs();
         Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT, "");
         setregs();

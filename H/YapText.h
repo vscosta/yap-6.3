@@ -1350,7 +1350,7 @@ static inline Atom UTF32ToAtom(const wchar_t *s USES_REGS) {
   out.type = YAP_STRING_ATOM;
   out.max = -1;
   if (!Yap_CVT_Text(&inp, &out PASS_REGS)) {
-    LOCAL_Error_TYPE  = (LOCAL_Error_TYPE  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : LOCAL_Error_TYPE  );
+    REMOTE_ActiveError(worker_id)->errorNo  = (REMOTE_ActiveError(worker_id)->errorNo  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : REMOTE_ActiveError(worker_id)->errorNo  );
     return NULL;
   }
   return out.val.a;
@@ -1401,7 +1401,7 @@ static inline Term Yap_WCharsToString(const wchar_t *s USES_REGS) {
   out.type = YAP_STRING_STRING;
   out.val.uc = NULL;
   if (!Yap_CVT_Text(&inp, &out PASS_REGS)) {
-    LOCAL_Error_TYPE   = (LOCAL_Error_TYPE  == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : LOCAL_Error_TYPE  );
+    REMOTE_ActiveError(worker_id)->errorNo   = (REMOTE_ActiveError(worker_id)->errorNo  == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : REMOTE_ActiveError(worker_id)->errorNo  );
     return 0L;
   }
   return out.val.t;
@@ -1416,7 +1416,7 @@ static inline Atom Yap_ConcatAtoms(Term t1, Term t2 USES_REGS) {
   out.type = YAP_STRING_ATOM;
   out.val.uc = NULL;
   if (!Yap_Concat_Text(2, inpv, &out PASS_REGS)) {
-    LOCAL_Error_TYPE   = (LOCAL_Error_TYPE  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : LOCAL_Error_TYPE  );
+    REMOTE_ActiveError(worker_id)->errorNo   = (REMOTE_ActiveError(worker_id)->errorNo  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : REMOTE_ActiveError(worker_id)->errorNo  );
     return NULL;
   }
   return out.val.a;
@@ -1446,7 +1446,7 @@ static inline Term Yap_ConcatStrings(Term t1, Term t2 USES_REGS) {
   out.type = YAP_STRING_STRING;
 
   if (!Yap_Concat_Text(2, inpv, &out PASS_REGS)){
-    LOCAL_Error_TYPE   = (LOCAL_Error_TYPE  == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : LOCAL_Error_TYPE  );
+    REMOTE_ActiveError(worker_id)->errorNo   = (REMOTE_ActiveError(worker_id)->errorNo  == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : REMOTE_ActiveError(worker_id)->errorNo  );
     return 0L;
   }
   return out.val.t;
@@ -1463,7 +1463,7 @@ static inline Atom Yap_SpliceAtom(Term t1, Atom ats[], size_t cut,
   outv[0].type = YAP_STRING_ATOM;
   outv[1].type = YAP_STRING_ATOM;
   if (!Yap_Splice_Text(2, cuts, &inp, outv PASS_REGS)) {
-    LOCAL_Error_TYPE   = (LOCAL_Error_TYPE  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : LOCAL_Error_TYPE  );
+    REMOTE_ActiveError(worker_id)->errorNo   = (REMOTE_ActiveError(worker_id)->errorNo  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : REMOTE_ActiveError(worker_id)->errorNo  );
     return NULL;
   }
   ats[0] = outv[0].val.a;
@@ -1480,7 +1480,7 @@ static inline Atom Yap_SubtractHeadAtom(Term t1, Term th USES_REGS) {
   outv[1].type = YAP_STRING_ATOM;
   outv[1].val.t = 0;
   if (!Yap_Splice_Text(2, (size_t *)NULL, &inp, outv PASS_REGS)) {
-    LOCAL_Error_TYPE   = (LOCAL_Error_TYPE  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : LOCAL_Error_TYPE  );
+    REMOTE_ActiveError(worker_id)->errorNo   = (REMOTE_ActiveError(worker_id)->errorNo  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : REMOTE_ActiveError(worker_id)->errorNo  );
     return NULL;
   }
   return outv[1].val.a;
@@ -1495,7 +1495,7 @@ static inline Atom Yap_SubtractTailAtom(Term t1, Term th USES_REGS) {
   outv[1].type = YAP_STRING_ATOM;
   outv[1].val.t = th;
   if (!Yap_Splice_Text(2, (size_t *)NULL, &inp, outv PASS_REGS)) {
-    LOCAL_Error_TYPE   = (LOCAL_Error_TYPE  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : LOCAL_Error_TYPE  );
+    REMOTE_ActiveError(worker_id)->errorNo   = (REMOTE_ActiveError(worker_id)->errorNo  == TYPE_ERROR_TEXT ? TYPE_ERROR_ATOM : REMOTE_ActiveError(worker_id)->errorNo  );
     return 0L;
   }
   return outv[0].val.a;
@@ -1512,7 +1512,7 @@ static inline Term Yap_SpliceString(Term t1, Term ts[], size_t cut,
   cuts[0] = cut;
   cuts[1] = max;
   if (!Yap_Splice_Text(2, cuts, &inp, outv PASS_REGS)){
-    LOCAL_Error_TYPE   = (LOCAL_Error_TYPE  == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : LOCAL_Error_TYPE  );
+    REMOTE_ActiveError(worker_id)->errorNo   = (REMOTE_ActiveError(worker_id)->errorNo  == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : REMOTE_ActiveError(worker_id)->errorNo  );
     return 0L;
   }
   ts[0] = outv[0].val.t;
@@ -1529,7 +1529,7 @@ static inline Term Yap_SubtractHeadString(Term t1, Term th USES_REGS) {
   outv[1].type = YAP_STRING_STRING;
   outv[1].val.t = 0;
   if (!Yap_Splice_Text(2, (size_t *)NULL, &inp, outv PASS_REGS)){
-    LOCAL_Error_TYPE   = (LOCAL_Error_TYPE == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : LOCAL_Error_TYPE );
+    REMOTE_ActiveError(worker_id)->errorNo   = (REMOTE_ActiveError(worker_id)->errorNo == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : REMOTE_ActiveError(worker_id)->errorNo );
     return 0L;
   }
   return outv[1].val.t;
@@ -1544,7 +1544,7 @@ static inline Term Yap_SubtractTailString(Term t1, Term th USES_REGS) {
   outv[1].type = YAP_STRING_STRING;
   outv[1].val.t = th;
   if (!Yap_Splice_Text(2, (size_t *)NULL, &inp, outv PASS_REGS)){
-    LOCAL_Error_TYPE   = (LOCAL_Error_TYPE  == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : LOCAL_Error_TYPE  );
+    REMOTE_ActiveError(worker_id)->errorNo   = (REMOTE_ActiveError(worker_id)->errorNo  == TYPE_ERROR_TEXT ? TYPE_ERROR_STRING : REMOTE_ActiveError(worker_id)->errorNo  );
     return 0L;
   }
   return outv[0].val.t;

@@ -162,21 +162,21 @@ static Int do_SYSTEM_ERROR_INTERNAL(yap_error_number etype, const char *msg) {
 #if HAVE_SNPRINTF
 #if HAVE_STRERROR
   snprintf(buf, 1043 - 1, "%s (%s when reading %s)", msg, strerror(errno),
-           LOCAL_FileNameBuf);
+           REMOTE_FileNameBuf(worker_id));
 #else
   snprintf(buf, 1024 - 1, "%s, (system error %d when reading %s)", msg, errno,
-           LOCAL_FileNameBuf);
+           REMOTE_FileNameBuf(worker_id));
 #endif
 #else
 #if HAVE_STRERROR
   snprintf(buf, 1024 - 1, "%s, (%s when reading %s)", msg, strerror(errno),
-           LOCAL_FileNameBuf);
+           REMOTE_FileNameBuf(worker_id));
 #else
   snprintf(buf, 1024 - 1, "%s, (system error %d when reading %s)", msg, errno,
-           LOCAL_FileNameBuf);
+           REMOTE_FileNameBuf(worker_id));
 #endif
 #endif
-  LOCAL_Error_TYPE = etype;
+  REMOTE_ActiveError(worker_id)->errorNo = etype;
   return -1;
 }
 
@@ -333,13 +333,13 @@ static int put_info(int info, int mode USES_REGS) {
     return -1;
   /* current state of stacks, to be used by SavedInfo */
   /* space available in heap area */
-  if (putout(Unsigned(LOCAL_GlobalBase) - Unsigned(Yap_HeapBase)) < 0)
+  if (putout(Unsigned(REMOTE_GlobalBase(worker_id)) - Unsigned(Yap_HeapBase)) < 0)
     return -1;
   /* space available for stacks */
-  if (putout(Unsigned(LOCAL_LocalBase) - Unsigned(LOCAL_GlobalBase)) < 0)
+  if (putout(Unsigned(REMOTE_LocalBase(worker_id)) - Unsigned(REMOTE_GlobalBase(worker_id))) < 0)
     return -1;
   /* space available for trail */
-  if (putout(Unsigned(LOCAL_TrailTop) - Unsigned(LOCAL_TrailBase)) < 0)
+  if (putout(Unsigned(REMOTE_TrailTop(worker_id)) - Unsigned(REMOTE_TrailBase(worker_id))) < 0)
     return -1;
   /* Space used in heap area */
   if (putout(Unsigned(HeapTop) - Unsigned(Yap_HeapBase)) < 0)
@@ -348,10 +348,10 @@ static int put_info(int info, int mode USES_REGS) {
   if (putout(Unsigned(LCL0) - Unsigned(ASP)) < 0)
     return -1;
   /* Space used for global stack */
-  if (putout(Unsigned(HR) - Unsigned(LOCAL_GlobalBase)) < 0)
+  if (putout(Unsigned(HR) - Unsigned(REMOTE_GlobalBase(worker_id))) < 0)
     return -1;
   /* Space used for trail */
-  if (putout(Unsigned(TR) - Unsigned(LOCAL_TrailBase)) < 0)
+  if (putout(Unsigned(TR) - Unsigned(REMOTE_TrailBase(worker_id))) < 0)
     return -1;
   return 0;
 }
@@ -404,18 +404,18 @@ static int save_regs(int mode USES_REGS) {
     return -1;
   if (mode == DO_EVERYTHING) {
 #ifdef COROUTINING
-    if (putout(LOCAL_WokenGoals) < 0)
+    if (putout(REMOTE_WokenGoals(worker_id)) < 0)
       return -1;
 #endif
 #ifdef DEPTH_LIMIT
     if (putout(DEPTH) < 0)
       return -1;
 #endif
-    if (putout(LOCAL_GcGeneration) < 0)
+    if (putout(REMOTE_GcGeneration(worker_id)) < 0)
       return -1;
-    if (putout(LOCAL_GcPhase) < 0)
+    if (putout(REMOTE_GcPhase(worker_id)) < 0)
       return -1;
-    if (putout(LOCAL_GcCurrentPhase) < 0)
+    if (putout(REMOTE_GcCurrentPhase(worker_id)) < 0)
       return -1;
   }
   /* The operand base */
@@ -441,11 +441,11 @@ static int save_regs(int mode USES_REGS) {
     return -1;
   if (putcellptr(CellPtr(AuxTop)) < 0)
     return -1;
-  if (putcellptr(CellPtr(LOCAL_ScratchPad.ptr)) < 0)
+  if (putcellptr(CellPtr(REMOTE_ScratchPad(worker_id).ptr)) < 0)
     return -1;
-  if (putout(LOCAL_ScratchPad.sz) < 0)
+  if (putout(REMOTE_ScratchPad(worker_id).sz) < 0)
     return -1;
-  if (putout(LOCAL_ScratchPad.msz) < 0)
+  if (putout(REMOTE_ScratchPad(worker_id).msz) < 0)
     return -1;
   if (mode == DO_EVERYTHING) {
     /* put the old trail base, just in case it moves again */
@@ -455,7 +455,7 @@ static int save_regs(int mode USES_REGS) {
       if (putout(ARG2) < 0)
         return -1;
     }
-    if (putcellptr(CellPtr(LOCAL_TrailBase)) < 0)
+    if (putcellptr(CellPtr(REMOTE_TrailBase(worker_id))) < 0)
       return -1;
   }
   return 0;
@@ -505,17 +505,17 @@ static int save_stacks(int mode USES_REGS) {
     if (mywrite(splfild, (char *)ASP, j) < 0)
       return -1;
     /* Save the global stack */
-    j = Unsigned(HR) - Unsigned(LOCAL_GlobalBase);
-    if (mywrite(splfild, (char *)LOCAL_GlobalBase, j) < 0)
+    j = Unsigned(HR) - Unsigned(REMOTE_GlobalBase(worker_id));
+    if (mywrite(splfild, (char *)REMOTE_GlobalBase(worker_id), j) < 0)
       return -1;
     /* Save the trail */
-    j = Unsigned(TR) - Unsigned(LOCAL_TrailBase);
-    if (mywrite(splfild, (char *)LOCAL_TrailBase, j) < 0)
+    j = Unsigned(TR) - Unsigned(REMOTE_TrailBase(worker_id));
+    if (mywrite(splfild, (char *)REMOTE_TrailBase(worker_id), j) < 0)
       return -1;
     break;
   case DO_ONLY_CODE: {
     tr_fr_ptr tr_ptr = TR;
-    while (tr_ptr != (tr_fr_ptr)LOCAL_TrailBase) {
+    while (tr_ptr != (tr_fr_ptr)REMOTE_TrailBase(worker_id)) {
       CELL val = TrailTerm(tr_ptr - 1);
       if (IsVarTerm(val)) {
         CELL *d1 = VarOfTerm(val);
@@ -550,19 +550,19 @@ static Int do_save(int mode USES_REGS) {
 
   if (Yap_HoleSize) {
     Yap_Error(SYSTEM_ERROR_INTERNAL,
-              MkAtomTerm(Yap_LookupAtom(LOCAL_FileNameBuf)),
+              MkAtomTerm(Yap_LookupAtom(REMOTE_FileNameBuf(worker_id))),
               "restore/1: address space has holes of size %ld, cannot save",
               (long int)Yap_HoleSize);
     return FALSE;
   }
-  if (!Yap_GetName(LOCAL_FileNameBuf, YAP_FILENAME_MAX, t1)) {
+  if (!Yap_GetName(REMOTE_FileNameBuf(worker_id), YAP_FILENAME_MAX, t1)) {
     Yap_Error(TYPE_ERROR_LIST, t1, "save/1");
     return FALSE;
   }
   Yap_CloseStreams();
-  if ((splfild = open_file(LOCAL_FileNameBuf, O_WRONLY | O_CREAT)) < 0) {
+  if ((splfild = open_file(REMOTE_FileNameBuf(worker_id), O_WRONLY | O_CREAT)) < 0) {
     Yap_Error(SYSTEM_ERROR_INTERNAL,
-              MkAtomTerm(Yap_LookupAtom(LOCAL_FileNameBuf)),
+              MkAtomTerm(Yap_LookupAtom(REMOTE_FileNameBuf(worker_id))),
               "restore/1, open(%s)", strerror(errno));
     return (FALSE);
   }
@@ -655,42 +655,42 @@ static int check_header(CELL *info, CELL *ATrail, CELL *AStack,
     }
   }
   if (strcmp(pp, msg) != 0) {
-    strncpy(LOCAL_ErrorMessage, "saved state ", MAX_ERROR_MSG_SIZE - 1);
-    strncat(LOCAL_ErrorMessage, LOCAL_FileNameBuf, MAX_ERROR_MSG_SIZE - 1);
-    strncat(LOCAL_ErrorMessage, " failed to match version ID",
+    strncpy(REMOTE_ActiveError(worker_id)->errorMsg, "saved state ", MAX_ERROR_MSG_SIZE - 1);
+    strncat(REMOTE_ActiveError(worker_id)->errorMsg, REMOTE_FileNameBuf(worker_id), MAX_ERROR_MSG_SIZE - 1);
+    strncat(REMOTE_ActiveError(worker_id)->errorMsg, " failed to match version ID",
             MAX_ERROR_MSG_SIZE - 1);
-    LOCAL_Error_TYPE = SYSTEM_ERROR_SAVED_STATE;
+    REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_SAVED_STATE;
     return FAIL_RESTORE;
   }
   /* check info on header */
   /* ignore info on saved state */
   *info = get_header_cell();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return FAIL_RESTORE;
   /* check the restore mode */
   mode = get_header_cell();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return FAIL_RESTORE;
   if (mode != DO_EVERYTHING && mode != DO_ONLY_CODE) {
     return FAIL_RESTORE;
   }
   /* ignore info on stacks size */
   *AHeap = get_header_cell();
-  if (LOCAL_ErrorMessage) {
+  if (REMOTE_ActiveError(worker_id)->errorMsg) {
     return FAIL_RESTORE;
   }
   *AStack = get_header_cell();
-  if (LOCAL_ErrorMessage) {
+  if (REMOTE_ActiveError(worker_id)->errorMsg) {
     return FAIL_RESTORE;
   }
   *ATrail = get_header_cell();
-  if (LOCAL_ErrorMessage) {
+  if (REMOTE_ActiveError(worker_id)->errorMsg) {
     return FAIL_RESTORE;
   }
   /* now, check whether we got enough enough space to load the
      saved space */
   hp_size = get_cell();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return FAIL_RESTORE;
   while (Yap_HeapBase != NULL &&
          hp_size > Unsigned(HeapLim) - Unsigned(Yap_HeapBase)) {
@@ -700,35 +700,35 @@ static int check_header(CELL *info, CELL *ATrail, CELL *AStack,
   }
   if (mode == DO_EVERYTHING) {
     lc_size = get_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return FAIL_RESTORE;
     gb_size = get_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return FAIL_RESTORE;
     if (Yap_HeapBase != NULL &&
         lc_size + gb_size >
-            Unsigned(LOCAL_LocalBase) - Unsigned(LOCAL_GlobalBase)) {
-      if (LOCAL_ErrorMessage != NULL)
-        LOCAL_ErrorMessage = "could not allocate enough stack space";
+            Unsigned(REMOTE_LocalBase(worker_id)) - Unsigned(REMOTE_GlobalBase(worker_id))) {
+      if (REMOTE_ActiveError(worker_id)->errorMsg != NULL)
+        REMOTE_ActiveError(worker_id)->errorMsg = "could not allocate enough stack space";
       return FAIL_RESTORE;
     }
     if (Yap_HeapBase != NULL &&
         (tr_size = get_cell()) >
-            Unsigned(LOCAL_TrailTop) - Unsigned(LOCAL_TrailBase)) {
-      if (LOCAL_ErrorMessage != NULL)
-        LOCAL_ErrorMessage = "could not allocate enough trail space";
+            Unsigned(REMOTE_TrailTop(worker_id)) - Unsigned(REMOTE_TrailBase(worker_id))) {
+      if (REMOTE_ActiveError(worker_id)->errorMsg != NULL)
+        REMOTE_ActiveError(worker_id)->errorMsg = "could not allocate enough trail space";
       return FAIL_RESTORE;
     }
   } else {
     /* skip cell size */
     get_header_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return FAIL_RESTORE;
     get_header_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return FAIL_RESTORE;
     get_header_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return FAIL_RESTORE;
   }
   return (mode);
@@ -736,38 +736,38 @@ static int check_header(CELL *info, CELL *ATrail, CELL *AStack,
 
 /* Gets the state of the heap, and evaluates the related variables */
 static int get_heap_info(USES_REGS1) {
-  LOCAL_OldHeapBase = (ADDR)get_cellptr();
-  if (LOCAL_ErrorMessage)
+  REMOTE_OldHeapBase(worker_id) = (ADDR)get_cellptr();
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
-  LOCAL_OldHeapTop = (ADDR)get_cellptr();
+  REMOTE_OldHeapTop(worker_id) = (ADDR)get_cellptr();
 
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
   OldHeapUsed = (Int)get_cell();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
   FreeBlocks = (BlockHeader *)get_cellptr();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
   AuxBase = (ADDR)get_cellptr();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
   AuxSp = get_cellptr();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
   AuxTop = (ADDR)get_cellptr();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
-  LOCAL_ScratchPad.ptr = (ADDR)get_cellptr();
-  if (LOCAL_ErrorMessage)
+  REMOTE_ScratchPad(worker_id).ptr = (ADDR)get_cellptr();
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
-  LOCAL_ScratchPad.sz = get_cell();
-  if (LOCAL_ErrorMessage)
+  REMOTE_ScratchPad(worker_id).sz = get_cell();
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
-  LOCAL_ScratchPad.msz = get_cell();
-  if (LOCAL_ErrorMessage)
+  REMOTE_ScratchPad(worker_id).msz = get_cell();
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
-  LOCAL_HDiff = Unsigned(Yap_HeapBase) - Unsigned(LOCAL_OldHeapBase);
+  REMOTE_HDiff(worker_id) = Unsigned(Yap_HeapBase) - Unsigned(REMOTE_OldHeapBase(worker_id));
   return 1;
 }
 
@@ -775,130 +775,130 @@ static int get_heap_info(USES_REGS1) {
 /* Saves the old bases for the work areas */
 /* and evaluates the difference from the old areas to the new ones */
 static int get_regs(int flag USES_REGS) {
-  CELL *NewGlobalBase = (CELL *)LOCAL_GlobalBase;
+  CELL *NewGlobalBase = (CELL *)REMOTE_GlobalBase(worker_id);
   CELL *NewLCL0 = LCL0;
   CELL *OldXREGS;
 
   /* Get regs */
   compile_arrays = (int)get_cell();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
   if (flag == DO_EVERYTHING) {
     CP = (yamop *)get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     ENV = get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     ASP = get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     /* N = get_cell(); */
     H0 = get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     LCL0 = get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     HR = get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     HB = get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     B = (choiceptr)get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     TR = (tr_fr_ptr)get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     YENV = get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     S = get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     P = (yamop *)get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     CreepFlag = get_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     EventFlag = get_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
 #if defined(YAPOR_SBA) || defined(TABLING)
     H_FZ = get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     B_FZ = (choiceptr)get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     TR_FZ = (tr_fr_ptr)get_cellptr();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
 #endif /* YAPOR_SBA || TABLING */
   }
   CurrentModule = get_cell();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
   if (flag == DO_EVERYTHING) {
 #ifdef COROUTINING
-    LOCAL_WokenGoals = get_cell();
-    if (LOCAL_ErrorMessage)
+    REMOTE_WokenGoals(worker_id) = get_cell();
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
 #endif
 #ifdef DEPTH_LIMIT
     DEPTH = get_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
 #endif
-    LOCAL_GcGeneration = get_cell();
-    if (LOCAL_ErrorMessage)
+    REMOTE_GcGeneration(worker_id) = get_cell();
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
-    LOCAL_GcPhase = get_cell();
-    if (LOCAL_ErrorMessage)
+    REMOTE_GcPhase(worker_id) = get_cell();
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
-    LOCAL_GcCurrentPhase = get_cell();
-    if (LOCAL_ErrorMessage)
+    REMOTE_GcCurrentPhase(worker_id) = get_cell();
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
   }
   /* Get the old bases */
   OldXREGS = get_cellptr();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
   which_save = get_cell();
-  if (LOCAL_ErrorMessage)
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
-  LOCAL_XDiff = (CELL)XREGS - (CELL)OldXREGS;
-  if (LOCAL_ErrorMessage)
+  REMOTE_XDiff(worker_id) = (CELL)XREGS - (CELL)OldXREGS;
+  if (REMOTE_ActiveError(worker_id)->errorMsg)
     return -1;
   if (get_heap_info(PASS_REGS1) < 0)
     return -1;
   if (flag == DO_EVERYTHING) {
     ARG1 = get_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     if (which_save == 2) {
       ARG2 = get_cell();
-      if (LOCAL_ErrorMessage)
+      if (REMOTE_ActiveError(worker_id)->errorMsg)
         return -1;
     }
     /* get old trail base */
-    LOCAL_OldTrailBase = (ADDR)get_cellptr();
-    if (LOCAL_ErrorMessage)
+    REMOTE_OldTrailBase(worker_id) = (ADDR)get_cellptr();
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
     /* Save the old register where we can easily access them */
-    LOCAL_OldASP = ASP;
-    LOCAL_OldLCL0 = LCL0;
-    LOCAL_OldGlobalBase = (CELL *)LOCAL_GlobalBase;
-    LOCAL_OldH = HR;
-    LOCAL_OldTR = TR;
-    LOCAL_GDiff = Unsigned(NewGlobalBase) - Unsigned(LOCAL_GlobalBase);
-    LOCAL_GDiff0 = 0;
-    LOCAL_LDiff = Unsigned(NewLCL0) - Unsigned(LCL0);
-    LOCAL_TrDiff = LOCAL_LDiff;
-    LOCAL_GlobalBase = (ADDR)NewGlobalBase;
+    REMOTE_OldASP(worker_id) = ASP;
+    REMOTE_OldLCL0(worker_id) = LCL0;
+    REMOTE_OldGlobalBase(worker_id) = (CELL *)REMOTE_GlobalBase(worker_id);
+    REMOTE_OldH(worker_id) = HR;
+    REMOTE_OldTR(worker_id) = TR;
+    REMOTE_GDiff(worker_id) = Unsigned(NewGlobalBase) - Unsigned(REMOTE_GlobalBase(worker_id));
+    REMOTE_GDiff0(worker_id) = 0;
+    REMOTE_LDiff(worker_id) = Unsigned(NewLCL0) - Unsigned(LCL0);
+    REMOTE_TrDiff(worker_id) = REMOTE_LDiff(worker_id);
+    REMOTE_GlobalBase(worker_id) = (ADDR)NewGlobalBase;
     LCL0 = NewLCL0;
   }
   return 1;
@@ -918,7 +918,7 @@ static int get_hash(void) {
 /* Copy all of the old code to the new Heap */
 static int CopyCode(USES_REGS1) {
   if (myread(splfild, (char *)Yap_HeapBase,
-             (Unsigned(LOCAL_OldHeapTop) - Unsigned(LOCAL_OldHeapBase))) < 0) {
+             (Unsigned(REMOTE_OldHeapTop(worker_id)) - Unsigned(REMOTE_OldHeapBase(worker_id)))) < 0) {
     return -1;
   }
   return 1;
@@ -930,15 +930,15 @@ static int CopyStacks(USES_REGS1) {
   Int j;
   char *NewASP;
 
-  j = Unsigned(LOCAL_OldLCL0) - Unsigned(ASP);
-  NewASP = (char *)(Unsigned(ASP) + (Unsigned(LCL0) - Unsigned(LOCAL_OldLCL0)));
+  j = Unsigned(REMOTE_OldLCL0(worker_id)) - Unsigned(ASP);
+  NewASP = (char *)(Unsigned(ASP) + (Unsigned(LCL0) - Unsigned(REMOTE_OldLCL0(worker_id))));
   if (myread(splfild, (char *)NewASP, j) < 0)
     return -1;
-  j = Unsigned(HR) - Unsigned(LOCAL_OldGlobalBase);
-  if (myread(splfild, (char *)LOCAL_GlobalBase, j) < 0)
+  j = Unsigned(HR) - Unsigned(REMOTE_OldGlobalBase(worker_id));
+  if (myread(splfild, (char *)REMOTE_GlobalBase(worker_id), j) < 0)
     return -1;
-  j = Unsigned(TR) - Unsigned(LOCAL_OldTrailBase);
-  if (myread(splfild, LOCAL_TrailBase, j))
+  j = Unsigned(TR) - Unsigned(REMOTE_OldTrailBase(worker_id));
+  if (myread(splfild, REMOTE_TrailBase(worker_id), j))
     return -1;
   return 1;
 }
@@ -948,10 +948,10 @@ static int CopyStacks(USES_REGS1) {
 static int CopyTrailEntries(USES_REGS1) {
   CELL entry, *Entries;
 
-  Entries = (CELL *)LOCAL_TrailBase;
+  Entries = (CELL *)REMOTE_TrailBase(worker_id);
   do {
     *Entries++ = entry = get_cell();
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return -1;
   } while ((CODEADDR)entry != NULL);
   return 1;
@@ -983,7 +983,7 @@ static int get_coded(int flag, OPCODE old_ops[] USES_REGS) {
   if (myread(splfild, my_end_msg, 256) < 0)
     return -1;
   if (strcmp(end_msg, my_end_msg) != 0) {
-    LOCAL_ErrorMessage = "bad trailing CRC in saved state";
+    REMOTE_ActiveError(worker_id)->errorMsg = "bad trailing CRC in saved state";
     return -1;
   }
   return 1;
@@ -996,7 +996,7 @@ static void restore_heap_regs(USES_REGS1) {
     *((YAP_SEG_SIZE *)HeapTop) = InUseFlag;
   }
   // HeapMax = HeapUsed = OldHeapUsed;
-  HeapLim = LOCAL_GlobalBase;
+  HeapLim = REMOTE_GlobalBase(worker_id);
 }
 
 /* adjust abstract machine registers */
@@ -1017,7 +1017,7 @@ static void restore_regs(int flag USES_REGS) {
     HB = PtoLocAdjust(HB);
     YENV = PtoLocAdjust(YENV);
     S = PtoGloAdjust(S);
-    LOCAL_WokenGoals = AbsAppl(PtoGloAdjust(RepAppl(LOCAL_WokenGoals)));
+    REMOTE_WokenGoals(worker_id) = AbsAppl(PtoGloAdjust(RepAppl(REMOTE_WokenGoals(worker_id))));
   }
 }
 
@@ -1090,13 +1090,13 @@ static void rehash(CELL *oldcode, int NOfE, int KindOfEntries USES_REGS) {
   CELL WorkTerm, failplace = 0;
   CELL *Base = oldcode;
 
-  if (LOCAL_HDiff == 0)
+  if (REMOTE_HDiff(worker_id) == 0)
     return;
   basep = HR;
   if (HR + (NOfE * 2) > ASP) {
     basep = (CELL *)TR;
-    if (basep + (NOfE * 2) > (CELL *)LOCAL_TrailTop) {
-      if (!Yap_growtrail((ADDR)(basep + (NOfE * 2)) - LOCAL_TrailTop, TRUE)) {
+    if (basep + (NOfE * 2) > (CELL *)REMOTE_TrailTop(worker_id)) {
+      if (!Yap_growtrail((ADDR)(basep + (NOfE * 2)) - REMOTE_TrailTop(worker_id), TRUE)) {
         Yap_Error(RESOURCE_ERROR_TRAIL, TermNil,
                   "not enough space to restore hash tables for indexing");
         Yap_exit(1);
@@ -1158,7 +1158,7 @@ static void RestoreFreeSpace(USES_REGS1) {
   Yap_av = (struct malloc_state *)AddrAdjust((ADDR)Yap_av);
   Yap_RestoreDLMalloc();
   if (AuxSp != NULL) {
-    if (AuxBase < LOCAL_OldHeapBase || AuxBase > LOCAL_OldHeapTop) {
+    if (AuxBase < REMOTE_OldHeapBase(worker_id) || AuxBase > REMOTE_OldHeapTop(worker_id)) {
       AuxSp = NULL;
       AuxBase = NULL;
       AuxTop = NULL;
@@ -1166,7 +1166,7 @@ static void RestoreFreeSpace(USES_REGS1) {
       AuxSp = PtoHeapCellAdjust(AuxSp);
       AuxBase = AddrAdjust(AuxBase);
       AuxTop = AddrAdjust(AuxTop);
-      LOCAL_ScratchPad.ptr = AddrAdjust(LOCAL_ScratchPad.ptr);
+      REMOTE_ScratchPad(worker_id).ptr = AddrAdjust(REMOTE_ScratchPad(worker_id).ptr);
     }
   }
 #else
@@ -1316,7 +1316,7 @@ static int commit_to_saved_state(const char *s, CELL *Astate, CELL *ATrail,
   if ((mode = check_header(Astate, ATrail, AStack, AHeap PASS_REGS)) ==
       FAIL_RESTORE)
     return (FAIL_RESTORE);
-  LOCAL_PrologMode = BootMode;
+  REMOTE_PrologMode(worker_id) = BootMode;
   if (Yap_HeapBase) {
     if (falseGlobalPrologFlag(HALT_AFTER_CONSULT_FLAG) && !silentMode()) {
       strcpy(tmp, Yap_AbsoluteFile(s, true));
@@ -1349,7 +1349,7 @@ static int try_open(const char *inpf, CELL *Astate, CELL *ATrail, CELL *AStack,
   if ((mode = commit_to_saved_state(inpf, Astate, ATrail, AStack, AHeap)) !=
       FAIL_RESTORE) {
     CACHE_REGS
-    LOCAL_ErrorMessage = NULL;
+    REMOTE_ActiveError(worker_id)->errorMsg = NULL;
     return mode;
   }
   return mode;
@@ -1369,11 +1369,11 @@ static int OpenRestore(const char *fname,  CELL *Astate,
   }
   /* try to open from current directory */
   /* could not open file */
-  if (LOCAL_ErrorMessage == NULL) {
+  if (REMOTE_ActiveError(worker_id)->errorMsg == NULL) {
     do_SYSTEM_ERROR_INTERNAL(PERMISSION_ERROR_OPEN_SOURCE_SINK,
                              "incorrect saved state ");
   } else {
-    strncpy(LOCAL_FileNameBuf, fname, YAP_FILENAME_MAX - 1);
+    strncpy(REMOTE_FileNameBuf(worker_id), fname, YAP_FILENAME_MAX - 1);
     do_SYSTEM_ERROR_INTERNAL(PERMISSION_ERROR_OPEN_SOURCE_SINK,
                              "could not open saved state");
   }
@@ -1395,7 +1395,7 @@ static void CloseRestore(void) {
   ShowAtoms();
 #endif
   close_file();
-  LOCAL_PrologMode = UserMode;
+  REMOTE_PrologMode(worker_id) = UserMode;
 }
 
 #if !defined(_WIN32)
@@ -1418,7 +1418,7 @@ static int check_opcodes(OPCODE old_ops[]) {
 #endif
 
 static void RestoreHeap(OPCODE old_ops[] USES_REGS) {
-  bool heap_moved = (LOCAL_OldHeapBase != Yap_HeapBase || LOCAL_XDiff),
+  bool heap_moved = (REMOTE_OldHeapBase(worker_id) != Yap_HeapBase || REMOTE_XDiff(worker_id)),
        opcodes_moved;
   Term mod = CurrentModule;
 
@@ -1489,7 +1489,7 @@ static void UnmarkTrEntries(USES_REGS1) {
   B = (choiceptr)LCL0;
   B--;
   B->cp_ap = NOCODE;
-  Entries = (CELL *)LOCAL_TrailBase;
+  Entries = (CELL *)REMOTE_TrailBase(worker_id);
   while ((entry = *Entries++) != (CELL)NULL) {
     if (!IsVarTerm(entry)) {
       if (IsPairTerm(entry)) {
@@ -1566,9 +1566,9 @@ static int Restore(char *s_dir USES_REGS) {
   RestoreHeap(old_ops PASS_REGS);
   switch (restore_mode) {
   case DO_EVERYTHING:
-    if (LOCAL_OldHeapBase != Yap_HeapBase || LOCAL_OldLCL0 != LCL0 ||
-        LOCAL_OldGlobalBase != (CELL *)LOCAL_GlobalBase ||
-        LOCAL_OldTrailBase != LOCAL_TrailBase) {
+    if (REMOTE_OldHeapBase(worker_id) != Yap_HeapBase || REMOTE_OldLCL0(worker_id) != LCL0 ||
+        REMOTE_OldGlobalBase(worker_id) != (CELL *)REMOTE_GlobalBase(worker_id) ||
+        REMOTE_OldTrailBase(worker_id) != REMOTE_TrailBase(worker_id)) {
       Yap_AdjustStacksAndTrail();
       if (which_save == 2) {
         Yap_AdjustRegs(2);

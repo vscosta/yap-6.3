@@ -2038,10 +2038,10 @@ a_either(op_numbers opcode, COUNT opr, CELL lab, yamop *code_p, int pass_no,
 static yamop *a_gl(op_numbers opcode, yamop *code_p, int pass_no,
                    struct PSEUDO *cpc, struct intermediates *cip USES_REGS) {
 #ifdef YAPOR
-  return a_try(opcode, cpc->rnd1, LOCAL_IPredArity, cpc->rnd2 >> 1,
+  return a_try(opcode, cpc->rnd1, REMOTE_IPredArity(worker_id), cpc->rnd2 >> 1,
                cpc->rnd2 & 1, code_p, pass_no, cip);
 #else
-  return a_try(opcode, cpc->rnd1, LOCAL_IPredArity, code_p, pass_no, cip);
+  return a_try(opcode, cpc->rnd1, REMOTE_IPredArity(worker_id), code_p, pass_no, cip);
 #endif /* YAPOR */
 }
 
@@ -2827,17 +2827,17 @@ static yamop *a_special_label(yamop *code_p, int pass_no,
 #ifdef YAPOR
 #define TRYCODE(G, P)                                                          \
   a_try((G), Unsigned(cip->code_addr) + cip->label_offset[cip->cpc->rnd1],     \
-        LOCAL_IPredArity, cip->cpc->rnd2 >> 1, cip->cpc->rnd2 & 1, code_p,     \
+        REMOTE_IPredArity(worker_id), cip->cpc->rnd2 >> 1, cip->cpc->rnd2 & 1, code_p,     \
         pass_no, cip)
 #define TABLE_TRYCODE(G)                                                       \
-  a_try((G), (CELL)emit_ilabel(cip->cpc->rnd1, cip), LOCAL_IPredArity,         \
+  a_try((G), (CELL)emit_ilabel(cip->cpc->rnd1, cip), REMOTE_IPredArity(worker_id),         \
         cip->cpc->rnd2 >> 1, cip->cpc->rnd2 & 1, code_p, pass_no, cip)
 #else
 #define TRYCODE(G, P)                                                          \
   a_try((G), Unsigned(cip->code_addr) + cip->label_offset[cip->cpc->rnd1],     \
-        LOCAL_IPredArity, code_p, pass_no, cip)
+        REMOTE_IPredArity(worker_id), code_p, pass_no, cip)
 #define TABLE_TRYCODE(G)                                                       \
-  a_try((G), (CELL)emit_ilabel(cip->cpc->rnd1, cip), LOCAL_IPredArity, code_p, \
+  a_try((G), (CELL)emit_ilabel(cip->cpc->rnd1, cip), REMOTE_IPredArity(worker_id), code_p, \
         pass_no, cip)
 #endif /* YAPOR */
 
@@ -2949,24 +2949,24 @@ static yamop *do_pass(int pass_no, yamop **entry_codep, int assembling,
       }
       code_p = cl_u->sc.ClCode;
     }
-    LOCAL_IPredArity = cip->CurrentPred->ArityOfPE; /* number of args */
+    REMOTE_IPredArity(worker_id) = cip->CurrentPred->ArityOfPE; /* number of args */
     *entry_codep = code_p;
     if (tabled) {
 #if TABLING
 #ifdef YAPOR
       code_p = a_try(_table_try_single, (CELL)NEXTOP(code_p, Otapl),
-                     LOCAL_IPredArity, 1, 0, code_p, pass_no, cip);
+                     REMOTE_IPredArity(worker_id), 1, 0, code_p, pass_no, cip);
 #else
       code_p = a_try(_table_try_single, (CELL)NEXTOP(code_p, Otapl),
-                     LOCAL_IPredArity, code_p, pass_no, cip);
+                     REMOTE_IPredArity(worker_id), code_p, pass_no, cip);
 #endif
 #endif
     }
     if (dynamic) {
 #ifdef YAPOR
-      code_p = a_try(_try_me, 0, LOCAL_IPredArity, 1, 0, code_p, pass_no, cip);
+      code_p = a_try(_try_me, 0, REMOTE_IPredArity(worker_id), 1, 0, code_p, pass_no, cip);
 #else
-      code_p = a_try(_try_me, 0, LOCAL_IPredArity, code_p, pass_no, cip);
+      code_p = a_try(_try_me, 0, REMOTE_IPredArity(worker_id), code_p, pass_no, cip);
 #endif /* YAPOR */
     }
 #if THREADS || YAPOR
@@ -3429,7 +3429,7 @@ static yamop *do_pass(int pass_no, yamop **entry_codep, int assembling,
       if (!pass_no) {
 #if !USE_SYSTEM_MALLOC
         if (CellPtr(cip->label_offset + cip->cpc->rnd1) > ASP - 256) {
-          LOCAL_Error_Size =
+          REMOTE_ActiveError(worker_id)->errorMsgLen =
               256 + ((char *)(cip->label_offset + cip->cpc->rnd1) - (char *)HR);
           save_machine_regs();
           siglongjmp(cip->CompilerBotch, 3);
@@ -3689,9 +3689,9 @@ static DBTerm *fetch_clause_space(Term *tp, UInt size,
   while ((x = Yap_StoreTermInDBPlusExtraSpace(*tp, size, osizep)) == NULL) {
 
     HR = h0;
-    switch (LOCAL_Error_TYPE) {
+    switch (REMOTE_ActiveError(worker_id)->errorNo) {
     case RESOURCE_ERROR_STACK:
-      LOCAL_Error_Size = 256 + ((char *)cip->freep - (char *)HR);
+      REMOTE_ActiveError(worker_id)->errorMsgLen = 256 + ((char *)cip->freep - (char *)HR);
       save_machine_regs();
       siglongjmp(cip->CompilerBotch, 3);
     case RESOURCE_ERROR_TRAIL:
@@ -3700,15 +3700,15 @@ static DBTerm *fetch_clause_space(Term *tp, UInt size,
       if (!Yap_growtrail(K64, FALSE)) {
         return NULL;
       }
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       *tp = ARG1;
       break;
     case RESOURCE_ERROR_AUXILIARY_STACK:
       ARG1 = *tp;
-      if (!Yap_ExpandPreAllocCodeSpace(LOCAL_Error_Size, (void *)cip, TRUE)) {
+      if (!Yap_ExpandPreAllocCodeSpace(REMOTE_ActiveError(worker_id)->errorMsgLen, (void *)cip, TRUE)) {
         return NULL;
       }
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       *tp = ARG1;
       break;
     case RESOURCE_ERROR_HEAP:
@@ -3717,7 +3717,7 @@ static DBTerm *fetch_clause_space(Term *tp, UInt size,
       if (!Yap_growheap(TRUE, size, cip)) {
         return NULL;
       }
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       *tp = ARG1;
       break;
     default:
@@ -3763,17 +3763,17 @@ yamop *Yap_assemble(int mode, Term t, PredEntry *ap, int is_fact,
 
 #if USE_SYSTEM_MALLOC
   if (!cip->label_offset) {
-    if (!LOCAL_LabelFirstArray && max_label <= DEFAULT_NLABELS) {
-      LOCAL_LabelFirstArray =
+    if (!REMOTE_LabelFirstArray(worker_id) && max_label <= DEFAULT_NLABELS) {
+      REMOTE_LabelFirstArray(worker_id) =
           (Int *)Yap_AllocCodeSpace(sizeof(Int) * DEFAULT_NLABELS);
-      LOCAL_LabelFirstArraySz = DEFAULT_NLABELS;
-      if (!LOCAL_LabelFirstArray) {
+      REMOTE_LabelFirstArraySz(worker_id) = DEFAULT_NLABELS;
+      if (!REMOTE_LabelFirstArray(worker_id)) {
         save_machine_regs();
         siglongjmp(cip->CompilerBotch, OUT_OF_HEAP_BOTCH);
       }
     }
-    if (LOCAL_LabelFirstArray && max_label <= LOCAL_LabelFirstArraySz) {
-      cip->label_offset = LOCAL_LabelFirstArray;
+    if (REMOTE_LabelFirstArray(worker_id) && max_label <= REMOTE_LabelFirstArraySz(worker_id)) {
+      cip->label_offset = REMOTE_LabelFirstArray(worker_id);
     } else {
       cip->label_offset = (Int *)Yap_AllocCodeSpace(sizeof(Int) * max_label);
       if (!cip->label_offset) {
@@ -3835,15 +3835,15 @@ yamop *Yap_assemble(int mode, Term t, PredEntry *ap, int is_fact,
     cl->ClFlags |= SrcMask;
     x->ag.line_number = Yap_source_line_no();
     cl->ClSize = osize;
-    LOCAL_ProfEnd = code_p;
-    Yap_inform_profiler_of_clause(cl, LOCAL_ProfEnd, ap, GPROF_CLAUSE);
+    REMOTE_ProfEnd(worker_id) = code_p;
+    Yap_inform_profiler_of_clause(cl, REMOTE_ProfEnd(worker_id), ap, GPROF_CLAUSE);
     return entry_code;
   } else {
     while ((cip->code_addr = (yamop *)Yap_AllocCodeSpace(size)) == NULL) {
 
       if (!Yap_growheap(TRUE, size, cip)) {
-        LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;
-        LOCAL_Error_Size = size;
+        REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_HEAP;
+        REMOTE_ActiveError(worker_id)->errorMsgLen = size;
         return NULL;
       }
     }

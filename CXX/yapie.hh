@@ -35,9 +35,10 @@ class X_API YAPError {
 public:
   /// wraps the default error descriptor
   YAPError() {
-    info = LOCAL_ActiveError;
+    CACHE_REGS
+    info = REMOTE_ActiveError(worker_id);
     if (!info)
-      LOCAL_ActiveError = info = (yap_error_descriptor_t *)calloc( sizeof( yap_error_descriptor_t ), 1);
+      REMOTE_ActiveError(worker_id) = info = (yap_error_descriptor_t *)calloc( sizeof( yap_error_descriptor_t ), 1);
     //  if (info->errorNo != YAP_NO_ERROR) {};
     //std::cerr << "Error detected" << info->errorNo << "\n";
   }

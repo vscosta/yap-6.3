@@ -33,6 +33,7 @@ void YAPPy_ThrowError__(const char *file, const char *function, int lineno,
 }
 
 static Term repr_term(PyObject *pVal) {
+  CACHE_REGS
   Term t = MkAddressTerm(pVal);
   return Yap_MkApplTerm(FunctorObj, 1, &t);
 }
@@ -52,6 +53,7 @@ foreign_t assign_to_symbol(term_t t, PyObject *e) {
 }
 
 static Term python_to_term__(PyObject *pVal) {
+  CACHE_REGS
   if (pVal == Py_None) {
     // fputs("<<*** ",stderr);Yap_DebugPlWrite(YAP_GetFromSlot(t));   fputs("
     // >>***\n",stderr);
@@ -195,6 +197,7 @@ foreign_t python_to_term(PyObject *pVal, term_t t) {
 // extern bool Yap_do_low_level_trace;
 
 X_API YAP_Term pythonToYAP(PyObject *pVal) {
+  CACHE_REGS
   // Yap_do_low_level_trace=1;
   /* fputs(" ***    ", stderr); */
   /* PyObject_Print(pVal, stderr, 0); */
@@ -231,6 +234,7 @@ PyObject *py_Local, *py_Global;
  *pythonfind_assign.
  */
 bool python_assign(term_t t, PyObject *exp, PyObject *context) {
+  CACHE_REGS
   PyErr_Print();
   // Yap_DebugPlWriteln(yt);
   if (PL_term_type(t) == PL_VARIABLE) {

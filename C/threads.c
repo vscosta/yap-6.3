@@ -253,9 +253,9 @@ store_specs(int new_worker_id, UInt ssize, UInt tsize, UInt sysize, Term tgoal, 
   REMOTE_ThreadHandle(new_worker_id).sysize = sysize;
 
   if ((REGSTORE *)pthread_getspecific(Yap_yaamregs_key)) {
-    REMOTE_c_input_stream(new_worker_id) = LOCAL_c_input_stream;
-    REMOTE_c_output_stream(new_worker_id) = LOCAL_c_output_stream;
-    REMOTE_c_error_stream(new_worker_id) = LOCAL_c_error_stream;
+    REMOTE_c_input_stream(new_worker_id) = REMOTE_c_input_stream(worker_id);
+    REMOTE_c_output_stream(new_worker_id) = REMOTE_c_output_stream(worker_id);
+    REMOTE_c_error_stream(new_worker_id) = REMOTE_c_error_stream(worker_id);
   } else {
     // thread is created by a thread that has never run Prolog
     REMOTE_c_input_stream(new_worker_id) = REMOTE_c_input_stream(0);
@@ -384,7 +384,7 @@ setup_engine(int myworker_id, int init_thread)
   // create a mbox
   mboxCreate( MkIntTerm(myworker_id), &REMOTE_ThreadHandle(myworker_id).mbox_handle PASS_REGS );
   Yap_InitTime( myworker_id );
-  Yap_InitYaamRegs( myworker_id, true] );
+  Yap_InitYaamRegs( myworker_id, true );
   REFRESH_CACHE_REGS
     Yap_ReleasePreAllocCodeSpace(Yap_PreAllocCodeSpace());
   /* I exist */
@@ -404,7 +404,7 @@ start_thread(int myworker_id)
     pthread_setspecific(Yap_yaamregs_key, (void *)REMOTE_ThreadHandle(myworker_id).default_yaam_regs);
   REFRESH_CACHE_REGS;
   worker_id = myworker_id;
-  LOCAL = REMOTE(myworker_id);
+  REMOTE(worker_id) = REMOTE(myworker_id);
 }
 
 static void *
@@ -426,19 +426,19 @@ thread_run(void *widp)
   start_thread(myworker_id);
   REFRESH_CACHE_REGS;
   do {
-    t = tgs[0] = Yap_PopTermFromDB(LOCAL_ThreadHandle.tgoal);
+    t = tgs[0] = Yap_PopTermFromDB(REMOTE_ThreadHandle(worker_id).tgoal);
     if (t == 0) {
-      if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-	LOCAL_Error_TYPE = YAP_NO_ERROR;
+      if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+	REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
 	if (!Yap_growglobal(NULL)) {
-	  Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil, LOCAL_ErrorMessage);
+	  Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	  thread_die(worker_id, FALSE);
 	  return NULL;
 	}
       } else {
-	LOCAL_Error_TYPE = YAP_NO_ERROR;
-	if (!Yap_growstack(LOCAL_ThreadHandle.tgoal->NOfCells*CellSize)) {
-	  Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+	REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+	if (!Yap_growstack(REMOTE_ThreadHandle(worker_id).tgoal->NOfCells*CellSize)) {
+	  Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	  thread_die(worker_id, FALSE);
 	  return NULL;
 	}
@@ -446,9 +446,9 @@ thread_run(void *widp)
     }
   } while (t == 0);
   REMOTE_ThreadHandle(myworker_id).tgoal = NULL;
-  tgs[1] = LOCAL_ThreadHandle.tdetach;
+  tgs[1] = REMOTE_ThreadHandle(worker_id).tdetach;
   tgoal = Yap_MkApplTerm(FunctorThreadRun, 2, tgs);
-  Yap_RunTopGoal(tgoal);
+  Yap_RunTopGoal(tgoal PASS_REGS);
 #ifdef TABLING
   {
     tab_ent_ptr tab_ent;
@@ -479,7 +479,7 @@ thread_run(void *widp)
     DETACH_PAGES(_pages_gt_node);
     DETACH_PAGES(_pages_gt_hash);
 #ifdef OUTPUT_THREADS_TABLING 
-    fclose(LOCAL_thread_output);
+    fclose(REMOTE_thread_output(worker_id));
 #endif /* OUTPUT_THREADS_TABLING */
 
   }
@@ -600,9 +600,9 @@ p_thread_zombie_self( USES_REGS1 )
     return FALSE;
   }
   //  fprintf(stderr," -- %d\n", worker_id); 
-  LOCAL_ThreadHandle.in_use = FALSE;
-  LOCAL_ThreadHandle.zombie = TRUE;
-  MUTEX_UNLOCK(&(LOCAL_ThreadHandle.tlock));
+  REMOTE_ThreadHandle(worker_id).in_use = FALSE;
+  REMOTE_ThreadHandle(worker_id).zombie = TRUE;
+  MUTEX_UNLOCK(&(REMOTE_ThreadHandle(worker_id).tlock));
   return Yap_unify(MkIntegerTerm(worker_id), ARG1);
 }
 
@@ -612,7 +612,7 @@ p_thread_status_lock( USES_REGS1 )
   /* make sure the lock is available */
   if (pthread_getspecific(Yap_yaamregs_key) == NULL)
     return FALSE;
-  MUTEX_LOCK(&(LOCAL_ThreadHandle.tlock_status));
+  MUTEX_LOCK(&(REMOTE_ThreadHandle(worker_id).tlock_status));
   return Yap_unify(MkIntegerTerm(worker_id), ARG1);
 }
 
@@ -622,7 +622,7 @@ p_thread_status_unlock( USES_REGS1 )
   /* make sure the lock is available */
   if (pthread_getspecific(Yap_yaamregs_key) == NULL)
     return FALSE;
-  MUTEX_UNLOCK(&(LOCAL_ThreadHandle.tlock_status));
+  MUTEX_UNLOCK(&(REMOTE_ThreadHandle(worker_id).tlock_status));
   return Yap_unify(MkIntegerTerm(worker_id), ARG1);
 }
 
@@ -780,8 +780,8 @@ p_thread_detach( USES_REGS1 )
 static Int
 p_thread_detached( USES_REGS1 )
 {
-  if (LOCAL_ThreadHandle.tdetach)
-    return Yap_unify(ARG1,LOCAL_ThreadHandle.tdetach);
+  if (REMOTE_ThreadHandle(worker_id).tdetach)
+    return Yap_unify(ARG1,REMOTE_ThreadHandle(worker_id).tdetach);
   else
     return FALSE;
 }
@@ -998,12 +998,12 @@ LockMutex( SWIMutex *mut USES_REGS)
 #endif
   mut->owners++;
   mut->tid_own = worker_id;
-  if (LOCAL_Mutexes)
-    mut->prev = LOCAL_Mutexes->prev;
+  if (REMOTE_Mutexes(worker_id))
+    mut->prev = REMOTE_Mutexes(worker_id)->prev;
   else
     mut->prev = NULL;
-  mut->next = LOCAL_Mutexes;
-  LOCAL_Mutexes = NULL;
+  mut->next = REMOTE_Mutexes(worker_id);
+  REMOTE_Mutexes(worker_id) = NULL;
   return true;
 }
 
@@ -1020,7 +1020,7 @@ UnLockMutex( SWIMutex *mut USES_REGS)
   if (mut->prev) {
     mut->prev->next = mut->next;
   } else {
-    LOCAL_Mutexes = mut->next;
+    REMOTE_Mutexes(worker_id) = mut->next;
     if (mut->next)
       mut->next->prev = NULL;
   }
@@ -1174,14 +1174,14 @@ p_with_mutex( USES_REGS1 )
     rc = TRUE;
   }
  end:
-  excep = Yap_GetException(LOCAL_ComiittedError);
+  excep = Yap_GetException(REMOTE_CommittedError(worker_id));
   if ( !UnLockMutex(mut PASS_REGS) ) {
-    return FALSE;c
+    return FALSE;
   }
   if (creeping) {
     Yap_signal( YAP_CREEP_SIGNAL );
   } else if ( excep != 0) {
-    return Yap_JumpToEnv(excep);
+    return Yap_JumpToEnv();
   }
   return rc;
 }
@@ -1460,32 +1460,32 @@ p_thread_atexit( USES_REGS1 )
 {				/* '$thread_signal'(+P)	 */
   Term t;
 
-  if (LOCAL_ThreadHandle.texit == NULL ||
-      LOCAL_ThreadHandle.texit->Entry == MkAtomTerm(AtomTrue)) {
+  if (REMOTE_ThreadHandle(worker_id).texit == NULL ||
+      REMOTE_ThreadHandle(worker_id).texit->Entry == MkAtomTerm(AtomTrue)) {
     return FALSE;
   }
   do {
-    t = Yap_PopTermFromDB(LOCAL_ThreadHandle.texit);
+    t = Yap_PopTermFromDB(REMOTE_ThreadHandle(worker_id).texit);
     if (t == 0) {
-      if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-	LOCAL_Error_TYPE = YAP_NO_ERROR;
+      if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+	REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
 	if (!Yap_growglobal(NULL)) {
-	  Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil, LOCAL_ErrorMessage);
+	  Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	  thread_die(worker_id, FALSE);
 	  return FALSE;
 	}
       } else {
-	LOCAL_Error_TYPE = YAP_NO_ERROR;
-	if (!Yap_growstack(LOCAL_ThreadHandle.tgoal->NOfCells*CellSize)) {
-	  Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+	REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+	if (!Yap_growstack(REMOTE_ThreadHandle(worker_id).tgoal->NOfCells*CellSize)) {
+	  Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	  thread_die(worker_id, FALSE);
 	  return FALSE;
 	}
       }
     }
   } while (t == 0);
-  LOCAL_ThreadHandle.texit = NULL;
-  return Yap_unify(ARG1, t) && Yap_unify(ARG2, LOCAL_ThreadHandle.texit_mod);
+  REMOTE_ThreadHandle(worker_id).texit = NULL;
+  return Yap_unify(ARG1, t) && Yap_unify(ARG2, REMOTE_ThreadHandle(worker_id).texit_mod);
 }
 
 
@@ -1553,7 +1553,7 @@ p_thread_runtime( USES_REGS1 )
 static Int 
 p_thread_self_lock( USES_REGS1 )
 {				/* '$thread_unlock'	 */
-  MUTEX_LOCK(&(LOCAL_ThreadHandle.tlock));
+  MUTEX_LOCK(&(REMOTE_ThreadHandle(worker_id).tlock));
   return Yap_unify(ARG1,MkIntegerTerm(worker_id));
 }
 
@@ -1588,17 +1588,17 @@ void
 Yap_InitFirstWorkerThreadHandle(void)
 {
   CACHE_REGS
-  LOCAL_ThreadHandle.id = 0;
-  LOCAL_ThreadHandle.in_use = TRUE;
-  LOCAL_ThreadHandle.default_yaam_regs = 
+  REMOTE_ThreadHandle(worker_id).id = 0;
+  REMOTE_ThreadHandle(worker_id).in_use = TRUE;
+  REMOTE_ThreadHandle(worker_id).default_yaam_regs = 
     &Yap_standard_regs;
-  LOCAL_ThreadHandle.current_yaam_regs = 
+  REMOTE_ThreadHandle(worker_id).current_yaam_regs = 
     &Yap_standard_regs;
-  LOCAL_ThreadHandle.pthread_handle = pthread_self();
+  REMOTE_ThreadHandle(worker_id).pthread_handle = pthread_self();
   pthread_mutex_init(&REMOTE_ThreadHandle(0).tlock, NULL);
   pthread_mutex_init(&REMOTE_ThreadHandle(0).tlock_status, NULL);
-  LOCAL_ThreadHandle.tdetach = MkAtomTerm(AtomFalse);
-  LOCAL_ThreadHandle.ref_count = 1;
+  REMOTE_ThreadHandle(worker_id).tdetach = MkAtomTerm(AtomFalse);
+  REMOTE_ThreadHandle(worker_id).ref_count = 1;
 }
 
 void Yap_InitThreadPreds(void)
@@ -1817,7 +1817,7 @@ p_new_mutex(void)
   if (creeping) {
     Yap_signal( YAP_CREEP_SIGNAL );
   } else if ( err ) {
-    LOCAL_ActiveError->errorNo = err->errorNo;
+    REMOTE_ActiveError(worker_id)->errorNo = err->errorNo;
     return Yap_JumpToEnv();
   }
   return rc;

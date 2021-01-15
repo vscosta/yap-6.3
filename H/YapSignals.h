@@ -95,19 +95,19 @@ INLINE_ONLY int Yap_only_has_signal__(yap_signals sig USES_REGS);
 INLINE_ONLY int
 Yap_has_a_signal__ (USES_REGS1)
 {
-  return LOCAL_Signals != ((uint64_t)0);
+  return REMOTE_Signals(worker_id) != ((uint64_t)0);
 }
 
 INLINE_ONLY int
 Yap_has_signal__(yap_signals sig USES_REGS)
 {
-  return (LOCAL_Signals & SIGNAL_TO_BIT(sig)) != ((uint64_t)0);
+  return (REMOTE_Signals(worker_id) & SIGNAL_TO_BIT(sig)) != ((uint64_t)0);
 }
 
 INLINE_ONLY int
 Yap_only_has_signal__(yap_signals sig USES_REGS)
 {
-  return (LOCAL_Signals & SIGNAL_TO_BIT(sig)) == SIGNAL_TO_BIT(sig);
+  return (REMOTE_Signals(worker_id) & SIGNAL_TO_BIT(sig)) == SIGNAL_TO_BIT(sig);
 }
 
 

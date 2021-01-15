@@ -967,7 +967,7 @@ static void RestoreYapRecords__(USES_REGS1) {
 /* restore the failcodes */
 static void restore_codes(void) {
   CACHE_REGS
-  HeapTop = AddrAdjust(LOCAL_OldHeapTop);
+  HeapTop = AddrAdjust(REMOTE_OldHeapTop(worker_id));
 
 #include "rhstruct.h"
 

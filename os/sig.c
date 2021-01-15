@@ -157,7 +157,7 @@ static void my_signal_info(int sig, void *handler) {
 
 static void HandleMatherr(int sig, void *sipv, void *uapv) {
   CACHE_REGS
-  LOCAL_Error_TYPE = Yap_MathException();
+  REMOTE_ActiveError(worker_id)->errorNo = Yap_MathException();
   /* reset the registers so that we don't have trash in abstract machine */
   Yap_external_signal(worker_id, YAP_FPE_SIGNAL);
 }
@@ -191,8 +191,8 @@ static void SearchForTrailFault(void *ptr, int sure) {
    crash again
 */
 #if OS_HANDLES_TR_OVERFLOW && !USE_SYSTEM_MALLOC
-  if ((ptr > (void *)LOCAL_TrailTop - 1024 &&
-       TR < (tr_fr_ptr)LOCAL_TrailTop + (64 * 1024))) {
+  if ((ptr > (void *)REMOTE_TrailTop(worker_id) - 1024 &&
+       TR < (tr_fr_ptr)REMOTE_TrailTop(worker_id) + (64 * 1024))) {
     if (!Yap_growtrail(64 * 1024, TRUE)) {
       Yap_Error(RESOURCE_ERROR_TRAIL, TermNil,
                 "YAP failed to reserve %ld bytes in growtrail", K64);
@@ -217,10 +217,10 @@ HandleSIGSEGV(int sig, void *sipv, void *uap) {
 
   void *ptr = TR;
   int sure = FALSE;
-  if (LOCAL_PrologMode & ExtendStackMode) {
+  if (REMOTE_PrologMode(worker_id) & ExtendStackMode) {
     Yap_Error(SYSTEM_ERROR_FATAL, TermNil,
               "OS memory allocation crashed at address %p, bailing out\n",
-              LOCAL_TrailTop);
+              REMOTE_TrailTop(worker_id));
   }
 #if (defined(__svr4__) || defined(__SVR4))
   siginfo_t *sip = sipv;
@@ -314,10 +314,10 @@ static bool set_fpu_exceptions(Term flag) {
 
 static void ReceiveSignal(int s, void *x, void *y) {
   CACHE_REGS
-  LOCAL_PrologMode |= InterruptMode;
+  REMOTE_PrologMode(worker_id) |= InterruptMode;
 #if !defined(LIGHT) && !_MSC_VER && !defined(__MINGW32__)
 
-  if (s == SIGINT && (LOCAL_PrologMode & ConsoleGetcMode)) {
+  if (s == SIGINT && (REMOTE_PrologMode(worker_id) & ConsoleGetcMode)) {
     return;
   }
     my_signal(s, ReceiveSignal);
@@ -343,7 +343,7 @@ static void ReceiveSignal(int s, void *x, void *y) {
   /* These signals are not handled by WIN32 and not the Macintosh */
   case SIGQUIT:
   case SIGKILL:
-    LOCAL_PrologMode &= ~InterruptMode;
+    REMOTE_PrologMode(worker_id) &= ~InterruptMode;
     Yap_Error(INTERRUPT_EVENT, MkIntTerm(s), NULL);
     break;
 #endif
@@ -376,7 +376,7 @@ static void ReceiveSignal(int s, void *x, void *y) {
     exit(s);
   }
 #endif
-  LOCAL_PrologMode &= ~InterruptMode;
+  REMOTE_PrologMode(worker_id) &= ~InterruptMode;
 }
 
 #if (_MSC_VER || defined(__MINGW32__))
@@ -385,7 +385,7 @@ static BOOL WINAPI MSCHandleSignal(DWORD dwCtrlType) {
 #if THREADS
       REMOTE_InterruptsDisabled(0)
 #else
-      LOCAL_InterruptsDisabled
+      REMOTE_InterruptsDisabled(worker_id)
 #endif
           ) {
     return FALSE;
@@ -398,7 +398,7 @@ static BOOL WINAPI MSCHandleSignal(DWORD dwCtrlType) {
     REMOTE_PrologMode(0) |= InterruptMode;
 #else
     Yap_signal(YAP_WINTIMER_SIGNAL);
-    LOCAL_PrologMode |= InterruptMode;
+    REMOTE_PrologMode(worker_id) |= InterruptMode;
 #endif
     return (TRUE);
   default:
@@ -438,8 +438,8 @@ static DWORD WINAPI DoTimerThread(LPVOID targ) {
 #endif
 
 static Int enable_interrupts(USES_REGS1) {
-  LOCAL_InterruptsDisabled--;
-  if (LOCAL_Signals && !LOCAL_InterruptsDisabled) {
+  REMOTE_InterruptsDisabled(worker_id)--;
+  if (REMOTE_Signals(worker_id) && !REMOTE_InterruptsDisabled(worker_id)) {
     CreepFlag = Unsigned(LCL0);
     if (!Yap_only_has_signal(YAP_CREEP_SIGNAL))
       EventFlag = Unsigned(LCL0);
@@ -448,7 +448,7 @@ static Int enable_interrupts(USES_REGS1) {
 }
 
 static Int disable_interrupts(USES_REGS1) {
-  LOCAL_InterruptsDisabled++;
+  REMOTE_InterruptsDisabled(worker_id)++;
   CalculateStackGap(PASS_REGS1);
   return TRUE;
 }
@@ -818,7 +818,7 @@ yap_error_number Yap_MathException__(USES_REGS1) {
   set_fpu_exceptions(0);
 #endif
 
-  return LOCAL_Error_TYPE;
+  return REMOTE_ActiveError(worker_id)->errorNo;
 }
 
 /**

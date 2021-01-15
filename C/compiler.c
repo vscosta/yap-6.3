@@ -289,7 +289,7 @@ static inline int active_branch(int i, int onbranch) {
 
 #define FAIL(M, T, E)                                                          \
   {                                                                            \
-    LOCAL_Error_TYPE = T;                                                      \
+    REMOTE_ActiveError(worker_id)->errorNo = T;                                                      \
     return;                                                                    \
   }
 
@@ -579,8 +579,8 @@ static void compile_sf_term(Term t, int argno, int level) {
         Yap_emit((cglobs->onhead ? unify_s_a_op : write_s_a_op), t, (CELL)argno,
                  &cglobs->cint);
       else if (!IsVarTerm(t)) {
-        LOCAL_Error_TYPE = SYSTEM_ERROR_COMPILER;
-        LOCAL_ErrorMessage = "illegal argument of soft functor";
+        REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_COMPILER;
+        REMOTE_ActiveError(worker_id)->errorMsg = "illegal argument of soft functor";
         save_machine_regs();
         siglongjmp(cglobs->cint.CompilerBotch, COMPILER_ERR_BOTCH);
       } else
@@ -606,8 +606,8 @@ inline static void c_args(Term app, unsigned int level,
 
   if (level == 0) {
     if (Arity >= MaxTemps) {
-      LOCAL_Error_TYPE = SYSTEM_ERROR_COMPILER;
-      LOCAL_ErrorMessage = "exceed maximum arity of compiled goal";
+      REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_COMPILER;
+      REMOTE_ActiveError(worker_id)->errorMsg = "exceed maximum arity of compiled goal";
       save_machine_regs();
       siglongjmp(cglobs->cint.CompilerBotch, COMPILER_ERR_BOTCH);
     }
@@ -628,7 +628,7 @@ static int try_store_as_dbterm(Term t, Int argno, unsigned int arity, int level,
   while ((g = Yap_SizeGroundTerm(t, TRUE)) < 0) {
     /* oops, too deep a term */
     save_machine_regs();
-    LOCAL_Error_Size = 0;
+    REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
     siglongjmp(cglobs->cint.CompilerBotch, OUT_OF_AUX_BOTCH);
   }
   // if (g < 16)
@@ -637,18 +637,18 @@ static int try_store_as_dbterm(Term t, Int argno, unsigned int arity, int level,
   HR = CellPtr(cglobs->cint.freep);
   if ((dbt = Yap_StoreTermInDB(t, -1)) == NULL) {
     HR = h0;
-    switch (LOCAL_Error_TYPE) {
+    switch (REMOTE_ActiveError(worker_id)->errorNo) {
     case RESOURCE_ERROR_STACK:
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       siglongjmp(cglobs->cint.CompilerBotch, OUT_OF_STACK_BOTCH);
     case RESOURCE_ERROR_TRAIL:
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       siglongjmp(cglobs->cint.CompilerBotch, OUT_OF_TRAIL_BOTCH);
     case RESOURCE_ERROR_HEAP:
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       siglongjmp(cglobs->cint.CompilerBotch, OUT_OF_HEAP_BOTCH);
     case RESOURCE_ERROR_AUXILIARY_STACK:
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       siglongjmp(cglobs->cint.CompilerBotch, OUT_OF_AUX_BOTCH);
     default:
       siglongjmp(cglobs->cint.CompilerBotch, COMPILER_ERR_BOTCH);
@@ -983,8 +983,8 @@ static void c_test(Int Op, Term t1, compiler_struct *cglobs) {
   if (Op == _save_by) {
     if (!IsNewVar(t)) {
 
-      LOCAL_Error_TYPE = UNINSTANTIATION_ERROR;
-      sprintf(LOCAL_ErrorMessage, "compiling %s/2 on bound variable", Yap_bip_name(Op));
+      REMOTE_ActiveError(worker_id)->errorNo = UNINSTANTIATION_ERROR;
+      sprintf(REMOTE_ActiveError(worker_id)->errorMsg, "compiling %s/2 on bound variable", Yap_bip_name(Op));
       save_machine_regs();
       siglongjmp(cglobs->cint.CompilerBotch, 1);
     }
@@ -1174,7 +1174,7 @@ static void c_bifun(basic_preds Op, Term t1, Term t2, Term t3, Term Goal,
         if (IsAtomicTerm(t2) ||
             (IsApplTerm(t2) && IsExtensionFunctor(FunctorOfTerm(t2)))) {
 
-          LOCAL_Error_TYPE = TYPE_ERROR_COMPOUND;
+          REMOTE_ActiveError(worker_id)->errorNo = TYPE_ERROR_COMPOUND;
           Yap_Error(TYPE_ERROR_COMPOUND, t2,  "compiling %s/2", 1, Yap_bip_name(Op));
 
           save_machine_regs();
@@ -1201,8 +1201,8 @@ static void c_bifun(basic_preds Op, Term t1, Term t2, Term t3, Term Goal,
           }
         }
       } else {
-         LOCAL_Error_TYPE = TYPE_ERROR_INTEGER;
-        sprintf(LOCAL_ErrorMessage, "compiling %s/2", Yap_bip_name(Op));
+         REMOTE_ActiveError(worker_id)->errorNo = TYPE_ERROR_INTEGER;
+        sprintf(REMOTE_ActiveError(worker_id)->errorMsg, "compiling %s/2", Yap_bip_name(Op));
         save_machine_regs();
         siglongjmp(cglobs->cint.CompilerBotch, 1);
       }
@@ -1210,8 +1210,8 @@ static void c_bifun(basic_preds Op, Term t1, Term t2, Term t3, Term Goal,
     if (Op == _functor) {
       if (!IsAtomicTerm(t1)) {
 
-        LOCAL_Error_TYPE = TYPE_ERROR_ATOM;
-        sprintf(LOCAL_ErrorMessage, "compiling %s/2", Yap_bip_name(Op));
+        REMOTE_ActiveError(worker_id)->errorNo = TYPE_ERROR_ATOM;
+        sprintf(REMOTE_ActiveError(worker_id)->errorMsg, "compiling %s/2", Yap_bip_name(Op));
         save_machine_regs();
         siglongjmp(cglobs->cint.CompilerBotch, 1);
       } else {
@@ -1222,8 +1222,8 @@ static void c_bifun(basic_preds Op, Term t1, Term t2, Term t3, Term Goal,
            * now */
           if (!IsIntegerTerm(t2)) {
 
-            LOCAL_Error_TYPE = TYPE_ERROR_INTEGER;
-            sprintf(LOCAL_ErrorMessage, "compiling %s/2", Yap_bip_name(Op));
+            REMOTE_ActiveError(worker_id)->errorNo = TYPE_ERROR_INTEGER;
+            sprintf(REMOTE_ActiveError(worker_id)->errorMsg, "compiling %s/2", Yap_bip_name(Op));
             save_machine_regs();
             siglongjmp(cglobs->cint.CompilerBotch, 1);
           }
@@ -1236,8 +1236,8 @@ static void c_bifun(basic_preds Op, Term t1, Term t2, Term t3, Term Goal,
             Term tnew;
             if (!IsAtomTerm(t1)) {
 
-              LOCAL_Error_TYPE = TYPE_ERROR_ATOM;
-              sprintf(LOCAL_ErrorMessage, "compiling %s/2", Yap_bip_name(Op));
+              REMOTE_ActiveError(worker_id)->errorNo = TYPE_ERROR_ATOM;
+              sprintf(REMOTE_ActiveError(worker_id)->errorMsg, "compiling %s/2", Yap_bip_name(Op));
               save_machine_regs();
               siglongjmp(cglobs->cint.CompilerBotch, 1);
             }
@@ -1276,8 +1276,8 @@ static void c_bifun(basic_preds Op, Term t1, Term t2, Term t3, Term Goal,
       /* now we know where the arguments are */
     } else {
 
-      LOCAL_Error_TYPE = UNINSTANTIATION_ERROR;
-      sprintf(LOCAL_ErrorMessage, "compiling %s/2 with output bound", Yap_bip_name(Op));
+      REMOTE_ActiveError(worker_id)->errorNo = UNINSTANTIATION_ERROR;
+      sprintf(REMOTE_ActiveError(worker_id)->errorMsg, "compiling %s/2 with output bound", Yap_bip_name(Op));
       save_machine_regs();
       siglongjmp(cglobs->cint.CompilerBotch, 1);
     }
@@ -1295,8 +1295,8 @@ static void c_bifun(basic_preds Op, Term t1, Term t2, Term t3, Term Goal,
       c_eq(tmpvar, t3, cglobs);
     } else {
 
-      LOCAL_Error_TYPE = UNINSTANTIATION_ERROR;
-      sprintf(LOCAL_ErrorMessage, "compiling %s/2 with input unbound", Yap_bip_name(Op));
+      REMOTE_ActiveError(worker_id)->errorNo = UNINSTANTIATION_ERROR;
+      sprintf(REMOTE_ActiveError(worker_id)->errorMsg, "compiling %s/2 with input unbound", Yap_bip_name(Op));
       save_machine_regs();
       siglongjmp(cglobs->cint.CompilerBotch, 1);
     }
@@ -1454,10 +1454,8 @@ static void c_goal(Term Goal, Term mod, compiler_struct *cglobs) {
   if (IsVarTerm(Goal)) {
     Goal = Yap_MkApplTerm(FunctorCall, 1, &Goal);
   } else if (IsNumTerm(Goal)) {
-    CACHE_REGS
       Yap_ThrowError(TYPE_ERROR_CALLABLE, cglobs->body, "goal can not be a number");
   } else if (IsRefTerm(Goal)) {
-    CACHE_REGS
     Yap_ThrowError(TYPE_ERROR_CALLABLE, cglobs->body,"goal argument in static procedure can not be a data base reference");
   } else if (IsPairTerm(Goal)) {
     Goal = Yap_MkApplTerm(FunctorCall, 1, &Goal);
@@ -2172,7 +2170,7 @@ static void tag_use(Ventry *v USES_REGS) {
 #ifdef BEAM
   if (EAM) {
     if (v->NoOfVE == Unassigned || v->KindOfVE != PermVar) {
-      v->NoOfVE = PermVar | (LOCAL_nperm++);
+      v->NoOfVE = PermVar | (REMOTE_nperm(worker_id)++);
       v->KindOfVE = PermVar;
       v->FlagsOfVE |= PermFlag;
     }
@@ -2184,7 +2182,7 @@ static void tag_use(Ventry *v USES_REGS) {
 					 * * || (v->FlagsOfVE & NonVoid && !(v->FlagsOfVE &
 					 * * OnHeadFlag))
 					 */) {
-      v->NoOfVE = PermVar | (LOCAL_nperm++);
+      v->NoOfVE = PermVar | (REMOTE_nperm(worker_id)++);
       v->KindOfVE = PermVar;
       v->FlagsOfVE |= PermFlag;
     } else {
@@ -2252,23 +2250,23 @@ static void AssignPerm(PInstr *pc, compiler_struct *cglobs) {
       }
 
     } else if (pc->op == empty_call_op) {
-      pc->rnd2 = LOCAL_nperm;
+      pc->rnd2 = REMOTE_nperm(worker_id);
     } else if (pc->op == call_op || pc->op == either_op ||
                pc->op == orelse_op || pc->op == push_or_op) {
 #ifdef LOCALISE_VOIDS
       EnvTmps = (EnvTmp *)(pc->ops.opseqt[1]);
       while (EnvTmps) {
         Ventry *v = EnvTmps->Var;
-        v->NoOfVE = PermVar | (LOCAL_nperm++);
+        v->NoOfVE = PermVar | (REMOTE_nperm(worker_id)++);
         v->KindOfVE = PermVar;
         v->FlagsOfVE |= (PermFlag | SafeVar);
         EnvTmps = EnvTmps->Next;
       }
 #endif
-      pc->rnd2 = LOCAL_nperm;
+      pc->rnd2 = REMOTE_nperm(worker_id);
     } else if (pc->op == cut_op || pc->op == cutexit_op ||
                pc->op == commit_b_op) {
-      pc->rnd2 = LOCAL_nperm;
+      pc->rnd2 = REMOTE_nperm(worker_id);
     }
     opc = pc;
     pc = npc;
@@ -2303,8 +2301,8 @@ static void clear_bvarray(int var, CELL *bvarray
   if (*bvarray & nbit) {
     CACHE_REGS
     /* someone had already marked this variable: complain */
-    LOCAL_Error_TYPE = SYSTEM_ERROR_COMPILER;
-    LOCAL_ErrorMessage = "compiler internal error: variable initialized twice";
+    REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_COMPILER;
+    REMOTE_ActiveError(worker_id)->errorMsg = "compiler internal error: variable initialized twice";
     save_machine_regs();
     siglongjmp(cglobs->cint.CompilerBotch, COMPILER_ERR_BOTCH);
   }
@@ -2341,8 +2339,8 @@ static int bvindex = 0;
 static void push_bvmap(int label, PInstr *pcpc, compiler_struct *cglobs) {
   if (bvindex == MAX_DISJUNCTIONS) {
     CACHE_REGS
-    LOCAL_Error_TYPE = SYSTEM_ERROR_COMPILER;
-    LOCAL_ErrorMessage = "Too many embedded disjunctions";
+    REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_COMPILER;
+    REMOTE_ActiveError(worker_id)->errorMsg = "Too many embedded disjunctions";
     save_machine_regs();
     siglongjmp(cglobs->cint.CompilerBotch, COMPILER_ERR_BOTCH);
   }
@@ -2362,8 +2360,8 @@ static void reset_bvmap(CELL *bvarray, int nperm, compiler_struct *cglobs) {
 
     if (bvindex == 0) {
       CACHE_REGS
-      LOCAL_Error_TYPE = SYSTEM_ERROR_COMPILER;
-      LOCAL_ErrorMessage = "No embedding in disjunctions";
+      REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_COMPILER;
+      REMOTE_ActiveError(worker_id)->errorMsg = "No embedding in disjunctions";
       save_machine_regs();
       siglongjmp(cglobs->cint.CompilerBotch, COMPILER_ERR_BOTCH);
     }
@@ -2380,8 +2378,8 @@ static void reset_bvmap(CELL *bvarray, int nperm, compiler_struct *cglobs) {
 static void pop_bvmap(CELL *bvarray, int nperm, compiler_struct *cglobs) {
   if (bvindex == 0) {
     CACHE_REGS
-    LOCAL_Error_TYPE = SYSTEM_ERROR_COMPILER;
-    LOCAL_ErrorMessage = "Too few embedded disjunctions";
+    REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_COMPILER;
+    REMOTE_ActiveError(worker_id)->errorMsg = "Too few embedded disjunctions";
     /*  save_machine_regs();
         siglongjmp(cglobs->cint.CompilerBotch, OUT_OF_HEAP_BOTCH); */
   }
@@ -2400,9 +2398,9 @@ static void CheckUnsafe(PInstr *pc, compiler_struct *cglobs) {
   int pending = 0;
 
   /* say that all variables are yet to initialize */
-  CELL *vstat = init_bvarray(LOCAL_nperm, cglobs);
+  CELL *vstat = init_bvarray(REMOTE_nperm(worker_id), cglobs);
   UnsafeEntry *UnsafeStack = (UnsafeEntry *)Yap_AllocCMem(
-      LOCAL_nperm * sizeof(UnsafeEntry), &cglobs->cint);
+      REMOTE_nperm(worker_id) * sizeof(UnsafeEntry), &cglobs->cint);
   /* keep a copy of previous cglobs->cint.cpc and CodeStart */
   PInstr *opc = cglobs->cint.cpc;
   PInstr *OldCodeStart = cglobs->cint.CodeStart;
@@ -2429,8 +2427,8 @@ static void CheckUnsafe(PInstr *pc, compiler_struct *cglobs) {
       if ((v->FlagsOfVE & PermFlag && pc == v->FirstOpForV) ||
           (v3->FlagsOfVE & PermFlag && pc == v3->FirstOpForV)) {
         CACHE_REGS
-        LOCAL_Error_TYPE = SYSTEM_ERROR_COMPILER;
-        LOCAL_ErrorMessage =
+        REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_COMPILER;
+        REMOTE_ActiveError(worker_id)->errorMsg =
             "comparison should not have first instance of variables";
         save_machine_regs();
         siglongjmp(cglobs->cint.CompilerBotch, COMPILER_ERR_BOTCH);
@@ -2471,7 +2469,7 @@ static void CheckUnsafe(PInstr *pc, compiler_struct *cglobs) {
       add_bvarray_op(pc, vstat, pc->rnd2, cglobs);
       break;
     case pushpop_or_op:
-      reset_bvmap(vstat, LOCAL_nperm, cglobs);
+      reset_bvmap(vstat, REMOTE_nperm(worker_id), cglobs);
       goto reset_safe_map;
     case orelse_op:
       Yap_emit(label_op, ++cglobs->labelno, Zero, &cglobs->cint);
@@ -2479,7 +2477,7 @@ static void CheckUnsafe(PInstr *pc, compiler_struct *cglobs) {
       add_bvarray_op(pc, vstat, pc->rnd2, cglobs);
       break;
     case pop_or_op:
-      pop_bvmap(vstat, LOCAL_nperm, cglobs);
+      pop_bvmap(vstat, REMOTE_nperm(worker_id), cglobs);
       goto reset_safe_map;
       break;
     case empty_call_op:
@@ -2665,9 +2663,9 @@ static int checktemp(Int arg, Int rn, compiler_vm_op ic,
     }
   if (target1 == cglobs->MaxCTemps) {
     CACHE_REGS
-    LOCAL_Error_TYPE = SYSTEM_ERROR_COMPILER;
+    REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_COMPILER;
 
-    LOCAL_ErrorMessage = "too many temporaries";
+    REMOTE_ActiveError(worker_id)->errorMsg = "too many temporaries";
     save_machine_regs();
     siglongjmp(cglobs->cint.CompilerBotch, COMPILER_ERR_BOTCH);
   }
@@ -2788,17 +2786,17 @@ static void c_layout(compiler_struct *cglobs) {
 #else
     if (cglobs->needs_env) {
 #endif
-      LOCAL_nperm = 0;
+      REMOTE_nperm(worker_id) = 0;
       AssignPerm(cglobs->cint.CodeStart, cglobs);
 #ifdef DEBUG
       cglobs->pbvars = 0;
 #endif
       CheckUnsafe(cglobs->cint.CodeStart, cglobs);
 #ifdef DEBUG
-      if (cglobs->pbvars != LOCAL_nperm) {
+      if (cglobs->pbvars != REMOTE_nperm(worker_id)) {
         CACHE_REGS
-        LOCAL_Error_TYPE = SYSTEM_ERROR_COMPILER;
-        LOCAL_ErrorMessage = "wrong number of variables found in bitmap";
+        REMOTE_ActiveError(worker_id)->errorNo = SYSTEM_ERROR_COMPILER;
+        REMOTE_ActiveError(worker_id)->errorMsg = "wrong number of variables found in bitmap";
         save_machine_regs();
         siglongjmp(cglobs->cint.CompilerBotch, OUT_OF_HEAP_BOTCH);
       }
@@ -2863,7 +2861,7 @@ static void c_layout(compiler_struct *cglobs) {
           cglobs->cint.cpc->op = nop_op;
         else
 #endif /* TABLING */
-            if (cglobs->goalno == 1 && !cglobs->or_found && LOCAL_nperm == 0)
+            if (cglobs->goalno == 1 && !cglobs->or_found && REMOTE_nperm(worker_id) == 0)
           cglobs->cint.cpc->op = nop_op;
 #ifdef TABLING
         UNLOCK(cglobs->cint.CurrentPred->PELock);
@@ -3349,12 +3347,12 @@ yamop *Yap_cclause(volatile Term inp_clause, Int NOfArgs, Term mod,
 #endif /* TABLING_INNER_CUTS */
 
   /* make sure we know there was no error yet */
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   if ((botch_why = sigsetjmp(cglobs.cint.CompilerBotch, 0))) {
     restore_machine_regs();
     reset_vars(cglobs.vtable);
     Yap_ReleaseCMem(&cglobs.cint);
-    if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+    if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
         Yap_ThrowExistingError();
   }
     switch (botch_why) {
@@ -3366,12 +3364,12 @@ yamop *Yap_cclause(volatile Term inp_clause, Int NOfArgs, Term mod,
         ARG3 = src;
 
         YAPLeaveCriticalSection();
-        if (!Yap_gcl(LOCAL_Error_Size, NOfArgs, ENV, gc_P(P, CP))) {
-          LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, NOfArgs, ENV, gc_P(P, CP))) {
+          REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;
         }
         if (osize > ASP - HR) {
           if (!Yap_growstack(2 * sizeof(CELL) * (ASP - HR))) {
-            LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;
+            REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;
           }
         }
         YAPEnterCriticalSection();
@@ -3384,8 +3382,8 @@ yamop *Yap_cclause(volatile Term inp_clause, Int NOfArgs, Term mod,
       YAPLeaveCriticalSection();
       ARG1 = inp_clause;
       ARG3 = src;
-      if (!Yap_ExpandPreAllocCodeSpace(LOCAL_Error_Size, NULL, TRUE)) {
-        LOCAL_Error_TYPE = RESOURCE_ERROR_AUXILIARY_STACK;
+      if (!Yap_ExpandPreAllocCodeSpace(REMOTE_ActiveError(worker_id)->errorMsgLen, NULL, TRUE)) {
+        REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_AUXILIARY_STACK;
       }
       YAPEnterCriticalSection();
       src = ARG3;
@@ -3404,8 +3402,8 @@ yamop *Yap_cclause(volatile Term inp_clause, Int NOfArgs, Term mod,
       ARG1 = inp_clause;
       ARG3 = src;
       YAPLeaveCriticalSection();
-      if (!Yap_growheap(FALSE, LOCAL_Error_Size, NULL)) {
-        LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;
+      if (!Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL)) {
+        REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_HEAP;
         return NULL;
       }
       YAPEnterCriticalSection();
@@ -3417,8 +3415,8 @@ yamop *Yap_cclause(volatile Term inp_clause, Int NOfArgs, Term mod,
       ARG1 = inp_clause;
       ARG3 = src;
       YAPLeaveCriticalSection();
-      if (!Yap_growtrail(LOCAL_TrailTop - (ADDR)TR, FALSE)) {
-        LOCAL_Error_TYPE = RESOURCE_ERROR_TRAIL;
+      if (!Yap_growtrail(REMOTE_TrailTop(worker_id) - (ADDR)TR, FALSE)) {
+        REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_TRAIL;
         return NULL;
       }
       YAPEnterCriticalSection();
@@ -3431,9 +3429,9 @@ yamop *Yap_cclause(volatile Term inp_clause, Int NOfArgs, Term mod,
   }
   my_clause = inp_clause;
   HB = HR;
-  LOCAL_ErrorMessage = NULL;
-  LOCAL_Error_Size = 0;
-  LOCAL_Error_TYPE = YAP_NO_ERROR;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
+  REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
   /* initialize variables for code generation                              */
 
   cglobs.cint.CodeStart = cglobs.cint.cpc = NULL;
@@ -3447,7 +3445,7 @@ yamop *Yap_cclause(volatile Term inp_clause, Int NOfArgs, Term mod,
   cglobs.cint.success_handler = 0L;
   if (ASP <= CellPtr(cglobs.cint.freep) + 256) {
     cglobs.vtable = NULL;
-    LOCAL_Error_Size = (256 + maxvnum) * sizeof(CELL);
+    REMOTE_ActiveError(worker_id)->errorMsgLen = (256 + maxvnum) * sizeof(CELL);
     save_machine_regs();
     siglongjmp(cglobs.cint.CompilerBotch, 3);
   }
@@ -3540,7 +3538,7 @@ yamop *Yap_cclause(volatile Term inp_clause, Int NOfArgs, Term mod,
       cglobs.cint.cpc->nextInst = cglobs.cint.BlobsStart;
       cglobs.cint.BlobsStart = NULL;
     }
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return (0);
     /* make sure we give enough space for the  fact */
     if (cglobs.space_op)
@@ -3578,7 +3576,7 @@ yamop *Yap_cclause(volatile Term inp_clause, Int NOfArgs, Term mod,
     if (B != NULL) {
       HB = B->cp_h;
     }
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return (0);
 #ifdef DEBUG
     if (GLOBAL_Option['g' - 96])

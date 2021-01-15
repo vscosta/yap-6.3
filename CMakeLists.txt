@@ -180,6 +180,7 @@ option(WITH_PRISM    "use PRISM system in YAP" ${WITH_PACKAGES})
 option(WITH_PYTHON  "Allow Python->YAP  and YAP->Python" ${WITH_PACKAGES})
 option(WITH_R  "Use R Interface" ${WITH_PACKAGES})
 option(WITH_JAVA "Try to use Java (currently Java )" ${WITH_PACKAGES})
+option(WITH_Threads "Enable POSIX Style Threads" ON)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
@@ -413,6 +414,8 @@ else()
       set (READLINE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
   endif ()
 endif()
+
+include(Threads)
 
 include_directories(
   ${CMAKE_SOURCE_DIR}/H
@@ -719,13 +722,15 @@ string(TIMESTAMP YAP_TIMESTAMP)
 
 string(SUBSTRING ${CMAKE_SHARED_LIBRARY_SUFFIX} 1 -1 SO_EXT)
 
-set_property(DIRECTORY PROPERTY CXX_STANDARD 11)
+set_property(DIRECTORY APPEND PROPERTY CXX_STANDARD 11)
 
 
 if (ANDROID)
   include_directories(CXX ${CMAKE_SOURCE_DIR}/../yaplib/generated/src/jni)
 endif ()
-include(Threads)
+if (WITH_Threads)
+target_link_libraries(libYap pthread)
+endif()
 #
 # include OS and I/o stuff
 #

@@ -711,15 +711,15 @@
       LOCK(PREG->y_u.p.p->StatisticsForPred->lock);
       PREG->y_u.p.p->StatisticsForPred->NOfEntries++;
       UNLOCK(PREG->y_u.p.p->StatisticsForPred->lock);
-      LOCAL_ReductionsCounter--;
-      if (LOCAL_ReductionsCounter == 0 && LOCAL_ReductionsCounterOn) {
+      REMOTE_ReductionsCounter(worker_id)--;
+      if (REMOTE_ReductionsCounter(worker_id) == 0 && REMOTE_ReductionsCounterOn(worker_id)) {
 	saveregs();
 	Yap_NilError(CALL_COUNTER_UNDERFLOW,"");
 	setregs();
 	JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0 && LOCAL_PredEntriesCounterOn) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0 && REMOTE_PredEntriesCounterOn(worker_id)) {
 	saveregs();
 	Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT,"");
 	setregs();
@@ -734,8 +734,8 @@
       LOCK(PREG->y_u.p.p->StatisticsForPred->lock);
       PREG->y_u.p.p->StatisticsForPred->NOfRetries++;
       UNLOCK(PREG->y_u.p.p->StatisticsForPred->lock);
-      LOCAL_RetriesCounter--;
-      if (LOCAL_RetriesCounter == 0 && LOCAL_RetriesCounterOn) {
+      REMOTE_RetriesCounter(worker_id)--;
+      if (REMOTE_RetriesCounter(worker_id) == 0 && REMOTE_RetriesCounterOn(worker_id)) {
 	/* act as if we had backtracked */
 	ENV = B->cp_env;
 	saveregs();
@@ -743,8 +743,8 @@
 	setregs();
 	JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0 && LOCAL_PredEntriesCounterOn) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0 && REMOTE_PredEntriesCounterOn(worker_id)) {
 	ENV = B->cp_env;
 	saveregs();
 	Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT,"");
@@ -773,15 +773,15 @@
       LOCK(((PredEntry *)(PREG->y_u.Otapl.p))->StatisticsForPred->lock);
       ((PredEntry *)(PREG->y_u.Otapl.p))->StatisticsForPred->NOfRetries++;
       UNLOCK(((PredEntry *)(PREG->y_u.Otapl.p))->StatisticsForPred->lock);
-      LOCAL_RetriesCounter--;
-      if (LOCAL_RetriesCounter == 0 && LOCAL_RetriesCounterOn) {
+      REMOTE_RetriesCounter(worker_id)--;
+      if (REMOTE_RetriesCounter(worker_id) == 0 && REMOTE_RetriesCounterOn(worker_id)) {
 	saveregs();
 	Yap_NilError(RETRY_COUNTER_UNDERFLOW,"");
 	setregs();
 	JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0 && LOCAL_PredEntriesCounterOn) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0 && REMOTE_PredEntriesCounterOn(worker_id)) {
 	saveregs();
 	Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT,"");
 	setregs();
@@ -817,15 +817,15 @@
 	}
       SET_BB(B_YREG);
       ENDCACHE_Y();
-      LOCAL_RetriesCounter--;
-      if (LOCAL_RetriesCounter == 0) {
+      REMOTE_RetriesCounter(worker_id)--;
+      if (REMOTE_RetriesCounter(worker_id) == 0) {
 	saveregs();
 	Yap_NilError(RETRY_COUNTER_UNDERFLOW,"");
 	setregs();
 	JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0) {
 	saveregs();
 	Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT,"");
 	setregs();
@@ -859,15 +859,15 @@
 	}
 	restore_yaam_regs(PREG->y_u.OtaLl.n);
 	restore_args(PREG->y_u.OtaLl.s);
-	LOCAL_RetriesCounter--;
-	if (LOCAL_RetriesCounter == 0) {
+	REMOTE_RetriesCounter(worker_id)--;
+	if (REMOTE_RetriesCounter(worker_id) == 0) {
 	  saveregs();
 	  Yap_NilError(RETRY_COUNTER_UNDERFLOW,"");
 	  setregs();
 	  JMPNext();
 	}
-	LOCAL_PredEntriesCounter--;
-	if (LOCAL_PredEntriesCounter == 0) {
+	REMOTE_PredEntriesCounter(worker_id)--;
+	if (REMOTE_PredEntriesCounter(worker_id) == 0) {
 	  saveregs();
 	  Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT,"");
 	  setregs();
@@ -911,15 +911,15 @@
 	  /* jump to next alternative */
 	  PREG = FAILCODE;
 	} else {
-	  LOCAL_RetriesCounter--;
-	  if (LOCAL_RetriesCounter == 0) {
+	  REMOTE_RetriesCounter(worker_id)--;
+	  if (REMOTE_RetriesCounter(worker_id) == 0) {
 	    saveregs();
 	    Yap_NilError(RETRY_COUNTER_UNDERFLOW,"");
 	    setregs();
 	    JMPNext();
 	  }
-	  LOCAL_PredEntriesCounter--;
-	  if (LOCAL_PredEntriesCounter == 0) {
+	  REMOTE_PredEntriesCounter(worker_id)--;
+	  if (REMOTE_PredEntriesCounter(worker_id) == 0) {
 	    saveregs();
 	    Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT,"");
 	    setregs();
@@ -1138,7 +1138,7 @@
 	if (!(cl->ClFlags & InUseMask)) {
 	  /* Clause *cl = (Clause *)PREG->y_u.EC.ClBase;
 
-	     PREG->y_u.EC.ClTrail = TR-(tr_fr_ptr)LOCAL_TrailBase;
+	     PREG->y_u.EC.ClTrail = TR-(tr_fr_ptr)REMOTE_TrailBase(worker_id);
 	     PREG->y_u.EC.ClENV = LCL0-YREG;*/
 	  cl->ClFlags |= InUseMask;
 	  TRAIL_CLREF(cl);
@@ -1190,7 +1190,7 @@
 	if (!(cl->ClFlags & InUseMask)) {
 	  /* Clause *cl = (Clause *)PREG->y_u.EC.ClBase;
 
-	     PREG->y_u.EC.ClTrail = TR-(tr_fr_ptr)LOCAL_TrailBase;
+	     PREG->y_u.EC.ClTrail = TR-(tr_fr_ptr)REMOTE_TrailBase(worker_id);
 	     PREG->y_u.EC.ClENV = LCL0-YREG;*/
 	  cl->ClFlags |= InUseMask;
 	  TRAIL_CLREF(cl);
@@ -1315,15 +1315,15 @@
       ENDBOp();
 
       BOp(count_retry_and_mark, Otapl);
-      LOCAL_RetriesCounter--;
-      if (LOCAL_RetriesCounter == 0) {
+      REMOTE_RetriesCounter(worker_id)--;
+      if (REMOTE_RetriesCounter(worker_id) == 0) {
 	saveregs();
 	Yap_NilError(RETRY_COUNTER_UNDERFLOW,"");
 	setregs();
 	JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0) {
 	saveregs();
 	Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT,"");
 	setregs();
@@ -1595,7 +1595,7 @@
 	    register CELL flags;
 	    CELL *pt1 = RepPair(d1);
 #ifdef LIMIT_TABLING
-	    if ((ADDR) pt1 == LOCAL_TrailBase) {
+	    if ((ADDR) pt1 == REMOTE_TrailBase(worker_id)) {
 	      sg_fr_ptr sg_fr = (sg_fr_ptr) TrailVal(pt0);
 	      TrailTerm(pt0) = AbsPair((CELL *)(pt0 - 1));
 	      SgFr_state(sg_fr)--;  /* complete_in_use --> complete : compiled_in_use --> compiled */
@@ -1609,7 +1609,7 @@
 #ifdef YAPOR_SBA
 		(ADDR) pt1 >= HeapTop
 #else
-		IN_BETWEEN(LOCAL_TrailBase, pt1, (ADDR)CurrentTrailTop+MinTrailGap)
+		IN_BETWEEN(REMOTE_TrailBase(worker_id), pt1, (ADDR)CurrentTrailTop+MinTrailGap)
 #endif /* YAPOR_SBA */
 		)
 	      {
@@ -6265,7 +6265,7 @@
 	  /* make sure that we can still have access to our old PREG after calling user defined goals and backtracking or failing */
 	  yamop *savedP;
 
-	  LOCAL_PrologMode |= UserCCallMode;
+	  REMOTE_PrologMode(worker_id) |= UserCCallMode;
 	  {
 	    PredEntry *p = PREG->y_u.Osbpp.p;
 
@@ -6277,7 +6277,7 @@
 	    SREG = (CELL *) YAP_Execute(p, p->cs.f_code);
 	  }
 	  setregs();
-	  LOCAL_PrologMode &= ~UserCCallMode;
+	  REMOTE_PrologMode(worker_id) &= ~UserCCallMode;
 	  restore_machine_regs();
 	  PREG = savedP;
 	}
@@ -6442,7 +6442,7 @@
 #endif
 	SET_BB(B_YREG);
 	ENDCACHE_Y();
-	LOCAL_PrologMode |= UserCCallMode;
+	REMOTE_PrologMode(worker_id) |= UserCCallMode;
 	ASP = YREG;
 	saveregs();
 	save_machine_regs();
@@ -6450,7 +6450,7 @@
 	EX = NULL;
 	restore_machine_regs();
 	setregs();
-	LOCAL_PrologMode &= ~UserCCallMode;
+	REMOTE_PrologMode(worker_id) &= ~UserCCallMode;
 	if (!SREG) {
 	  FAIL();
 	}
@@ -6482,7 +6482,7 @@
 	restore_args(PREG->y_u.OtapFs.s);
 	ENDCACHE_Y();
 
-	LOCAL_PrologMode |= UserCCallMode;
+	REMOTE_PrologMode(worker_id) |= UserCCallMode;
 	SET_ASP(YREG, E_CB*sizeof(CELL));
 	saveregs();
 	save_machine_regs();
@@ -6490,7 +6490,7 @@
 	EX = NULL;
 	restore_machine_regs();
 	setregs();
-	LOCAL_PrologMode &= ~UserCCallMode;
+	REMOTE_PrologMode(worker_id) &= ~UserCCallMode;
 	if (!SREG) {
 	  /* Removes the cut functions from the stack
 	     without executing them because we have fail
@@ -10202,9 +10202,9 @@
 	   * We may wake up goals during our attempt to unify the
 	   * two terms. If we are adding to the tail of a list of
 	   * woken goals that should be ok, but otherwise we need
-	   * to restore LOCAL_WokenGoals to its previous value.
+	   * to restore REMOTE_WokenGoals(worker_id) to its previous value.
 	   */
-	  CELL OldWokenGoals = Yap_ReadTimedVar(LOCAL_WokenGoals);
+	  CELL OldWokenGoals = Yap_ReadTimedVar(REMOTE_WokenGoals(worker_id));
 
 #endif
 	  /* We will have to look inside compound terms */
@@ -10224,7 +10224,7 @@
 	  opresult = Yap_IUnify(d0, d1);
 #ifdef COROUTINING
 	  /* now restore Woken Goals to its old value */
-	  Yap_UpdateTimedVar(LOCAL_WokenGoals, OldWokenGoals);
+	  Yap_UpdateTimedVar(REMOTE_WokenGoals(worker_id), OldWokenGoals);
 	  if (OldWokenGoals == TermNil) {
 	    Yap_get_signal(YAP_WAKEUP_SIGNAL);
 	  }

@@ -123,7 +123,7 @@ Term Yap_XREGS[MaxTemps]; /* 29                                     */
 
 static void save_goal(PredEntry *pe USES_REGS) {
   CELL *S_PT;
-  //  printf("D %lx %p\n", LOCAL_ActiveSignals, P);
+  //  printf("D %lx %p\n", REMOTE_ActiveSignals(worker_id), P);
   /* tell whether we can creep or not, this is hard because we will
      lose the info RSN
   */
@@ -235,7 +235,7 @@ static int check_alarm_fail_int(int CONT USES_REGS) {
 #if defined(_MSC_VER) || defined(__MINGW32__)
   /* I need this for Windows and any system where SIGINT
      is not proceesed by same thread as absmi */
-  if (LOCAL_PrologMode & (AbortMode | InterruptMode)) {
+  if (REMOTE_PrologMode(worker_id) & (AbortMode | InterruptMode)) {
     CalculateStackGap(PASS_REGS1);
   }
 #endif
@@ -351,7 +351,7 @@ static Term save_xregs(yamop *pco) {
 // interrupt handling code that sets up the case when we do not have
 // a guaranteed environment.
 static int interrupt_wake_up(Term cut_t, yamop *p USES_REGS) {
-  //  printf("D %lx %p\n", LOCAL_ActiveSignals, P);
+  //  printf("D %lx %p\n", REMOTE_ActiveSignals(worker_id), P);
   /* tell whether we can creep or not, this is hard because we will
      lose the info RSN
   */
@@ -364,7 +364,7 @@ static int interrupt_wake_up(Term cut_t, yamop *p USES_REGS) {
   if (p) {
     Term ts[2];
     ts[0] = tg;
-    Term regs = save_xregs(p PASS_REGS);
+    Term regs = save_xregs(p);
     ts[1] = Yap_MkApplTerm(FunctorRestoreRegs1, 1, &regs);
     if (tg == TermTrue) {
 	tg =ts[1];
@@ -384,7 +384,7 @@ static int interrupt_wake_up(Term cut_t, yamop *p USES_REGS) {
     if (t2 != TermNil) {
       pe = WakeUpCode;
       /* no more goals to wake up */
-      Yap_UpdateTimedVar(LOCAL_WokenGoals, TermNil);
+      Yap_UpdateTimedVar(REMOTE_WokenGoals(worker_id), TermNil);
     } else if (t1 == TermTrue) {
       
     }
@@ -392,7 +392,7 @@ static int interrupt_wake_up(Term cut_t, yamop *p USES_REGS) {
   ARG1 = t1;
   ARG2 = t2;
   CACHE_A1();
-  return Yap_execute_pred(pe, NULL, true) ?
+  return Yap_execute_pred(pe, NULL, true PASS_REGS) ?
 	  INT_HANDLER_RET_JMP :
 	  INT_HANDLER_FAIL;
 
@@ -400,7 +400,7 @@ static int interrupt_wake_up(Term cut_t, yamop *p USES_REGS) {
 
 static int interrupt_handler(PredEntry *pe USES_REGS) {
 
-  //  printf("D %lx %p\n", LOCAL_ActiveSignals, P);
+  //  printf("D %lx %p\n", REMOTE_ActiveSignals(worker_id), P);
   /* tell whether we can creep or not, this is hard because we will
      lose the info RSN
   */
@@ -446,7 +446,7 @@ static int interrupt_handlerc(PredEntry *pe USES_REGS) {
 /* to trace interrupt calls */
 #define DEBUG_INTERRUPTS()					\
     fprintf(stderr, "[%d] %" PRId64 " %s:%d:  (B=%p ENV=%p ASP=%p)\n",\
-      worker_id, LOCAL_Signals,\
+      worker_id, REMOTE_Signals(worker_id),\
             __FUNCTION__, __LINE__, B, ENV, ASP)
 #endif
 
@@ -866,8 +866,8 @@ static void spy_goal(USES_REGS1) {
     LOCK(pe->StatisticsForPred->lock);
     pe->StatisticsForPred->NOfEntries++;
     UNLOCK(pe->StatisticsForPred->lock);
-    LOCAL_ReductionsCounter--;
-    if (LOCAL_ReductionsCounter == 0 && LOCAL_ReductionsCounterOn) {
+    REMOTE_ReductionsCounter(worker_id)--;
+    if (REMOTE_ReductionsCounter(worker_id) == 0 && REMOTE_ReductionsCounterOn(worker_id)) {
 #if defined(YAPOR) || defined(THREADS)
       if (PP) {
         UNLOCKPE(20, pe);
@@ -877,8 +877,8 @@ static void spy_goal(USES_REGS1) {
       Yap_NilError(CALL_COUNTER_UNDERFLOW_EVENT, "");
       return;
     }
-    LOCAL_PredEntriesCounter--;
-    if (LOCAL_PredEntriesCounter == 0 && LOCAL_PredEntriesCounterOn) {
+    REMOTE_PredEntriesCounter(worker_id)--;
+    if (REMOTE_PredEntriesCounter(worker_id) == 0 && REMOTE_PredEntriesCounterOn(worker_id)) {
 #if defined(YAPOR) || defined(THREADS)
       if (PP) {
         UNLOCKPE(21, pe);
@@ -1076,7 +1076,7 @@ Int Yap_absmi(int inp) {
     old_regs = &Yap_REGS;
     init_absmi_regs(&absmi_regs);
 #if THREADS
-    regcache = Yap_regp LOCAL_PL_local_data_p->reg_cache = regcache;
+    regcache = Yap_regp REMOTE_PL_local_data_p(worker_id)->reg_cache = regcache;
 #else
     Yap_regp = &absmi_regs;
 #endif
@@ -1111,9 +1111,9 @@ Int Yap_absmi(int inp) {
   /* the registers are all set up, let's swap */
 #ifdef THREADS
   pthread_setspecific(Yap_yaamregs_key, (const void *)&absmi_regs);
-  LOCAL_ThreadHandle.current_yaam_regs = &absmi_regs;
+  REMOTE_ThreadHandle(worker_id).current_yaam_regs = &absmi_regs;
   regcache = &absmi_regs;
-  // LOCAL_PL_local_data_p->reg_cache = regcache;
+// REMOTE_PL_local_data_p(worker_id)->reg_cache = regcache;
 #else
   Yap_regp = &absmi_regs;
 #endif

@@ -499,7 +499,7 @@ static Int p_rational(USES_REGS1) {
     UInt size = (mpq_numref(rat)->_mp_alloc) * (sizeof(mp_limb_t) / CellSize) +
                 (mpq_denref(rat)->_mp_alloc) * (sizeof(mp_limb_t) / CellSize);
     if (!Yap_gcl(size, 3, ENV, P)) {
-      Yap_Error(RESOURCE_ERROR_STACK, t, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_STACK, t, REMOTE_ActiveError(worker_id)->errorMsg);
       return FALSE;
     }
   }

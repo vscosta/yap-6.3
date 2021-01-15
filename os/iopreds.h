@@ -265,10 +265,10 @@ inline static void console_count_output_char(int ch, StreamDesc *s) {
     ++s->charcount;
     ++s->linecount;
     s->linepos = 0;
-    LOCAL_newline = TRUE;
+    REMOTE_newline(worker_id) = TRUE;
     /* Inform we are not at the start of a newline */
   } else {
-    LOCAL_newline = FALSE;
+    REMOTE_newline(worker_id) = FALSE;
 #if MAC
     if ((sno == StdOutStream || sno == StdErrStream) && s->linepos > 200)
       sno->stream_putc(sno, '\n');
@@ -283,9 +283,9 @@ inline static Term StreamPosition(int sno) {
   Term sargs[5];
   Int cpos;
   cpos = GLOBAL_Stream[sno].charcount;
-  sargs[0] = MkIntegerTerm(LOCAL_StartCharCount = cpos);
-  sargs[1] = MkIntegerTerm(LOCAL_StartLineCount = GLOBAL_Stream[sno].linecount);
-  sargs[2] = MkIntegerTerm(LOCAL_StartLinePos = GLOBAL_Stream[sno].linepos);
+  sargs[0] = MkIntegerTerm(REMOTE_StartCharCount(worker_id) = cpos);
+  sargs[1] = MkIntegerTerm(REMOTE_StartLineCount(worker_id) = GLOBAL_Stream[sno].linecount);
+  sargs[2] = MkIntegerTerm(REMOTE_StartLinePos(worker_id) = GLOBAL_Stream[sno].linepos);
   sargs[3] = sargs[4] = MkIntTerm(0);
   return Yap_MkApplTerm(FunctorStreamPos, 5, sargs);
 }
@@ -293,9 +293,9 @@ inline static Term StreamPosition(int sno) {
 inline static Term CurrentPositionToTerm(void) {
   CACHE_REGS
   Term sargs[5];
-  sargs[0] = MkIntegerTerm(LOCAL_StartCharCount);
-  sargs[1] = MkIntegerTerm(LOCAL_StartLineCount);
-  sargs[2] = MkIntegerTerm(LOCAL_StartLinePos);
+  sargs[0] = MkIntegerTerm(REMOTE_StartCharCount(worker_id));
+  sargs[1] = MkIntegerTerm(REMOTE_StartLineCount(worker_id));
+  sargs[2] = MkIntegerTerm(REMOTE_StartLinePos(worker_id));
   sargs[3] = sargs[4] = MkIntTerm(0);
   return Yap_MkApplTerm(FunctorStreamPos, 5, sargs);
 }
@@ -305,7 +305,7 @@ char *Yap_MemExportStreamPtr(int sno);
 
 static inline void freeBuffer(const void *ptr) {
   CACHE_REGS
-  if (ptr == NULL || ptr == LOCAL_FileNameBuf || ptr == LOCAL_FileNameBuf2 ||
+  if (ptr == NULL || ptr == REMOTE_FileNameBuf(worker_id) || ptr == REMOTE_FileNameBuf2(worker_id) ||
       ptr == AuxBase)
     return;
   free((void *)ptr);

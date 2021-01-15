@@ -200,7 +200,7 @@ static char *ensure_space(size_t sz) {
   }
   if (!s) {
     s = (char *)TR;
-    while (s + sz >= LOCAL_TrailTop) {
+    while (s + sz >= REMOTE_TrailTop(worker_id)) {
       if (!Yap_growtrail(sz / sizeof(CELL), FALSE)) {
         s = NULL;
         break;
@@ -373,7 +373,7 @@ int Yap_FormatFloat(Float f, char **s, size_t sz) {
   struct write_globs wglb;
   int sno;
 
-  sno = Yap_open_buf_write_stream(GLOBAL_Stream[LOCAL_c_output_stream].encoding,
+  sno = Yap_open_buf_write_stream(GLOBAL_Stream[REMOTE_c_output_stream(worker_id)].encoding,
                                   0);
   if (sno < 0)
     return false;
@@ -723,6 +723,7 @@ static void write_var(CELL *t, int depth, struct write_globs *wglb) {
 
 static void write_list(Term t, int direction, int depth,
                        struct write_globs *wglb) {
+  CACHE_REGS
   Term ti;
 
   while (1) {
@@ -1157,9 +1158,9 @@ wglb.trailings  = TR-tr0;
   wglb.Write_Loops = flags & Handle_cyclics_f;
   wglb.Quote_illegal = flags & Quote_illegal_f;
   wglb.lw = separator;
-  LOCAL_max_depth=200;
+  REMOTE_max_depth(worker_id)=200;
    /* protect slots for portray */
-   writeTerm(tn, priority, LOCAL_max_depth, false, &wglb);
+   writeTerm(tn, priority, REMOTE_max_depth(worker_id), false, &wglb);
      if (flags & New_Line_f) {
     if (flags & Fullstop_f) {
       wrputc('.', wglb.stream);

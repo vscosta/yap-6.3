@@ -1292,7 +1292,7 @@ INLINE_ONLY struct pred_entry *
 Yap_GetThreadPred(struct pred_entry *ap USES_REGS) {
   Functor f = ap->FunctorOfPred;
   Term mod = ap->ModuleOfPred;
-  Prop p0 = AbsPredProp(LOCAL_ThreadHandle.local_preds);
+  Prop p0 = AbsPredProp(REMOTE_ThreadHandle(worker_id).local_preds);
 
   while (p0) {
     PredEntry *ap = RepPredProp(p0);
@@ -1529,15 +1529,17 @@ extern bool Yap_HasException(void);
 extern yap_error_descriptor_t *Yap_GetException();
 extern void Yap_PrintException(yap_error_descriptor_t *i);
 INLINE_ONLY bool Yap_HasException(void) {
+  CACHE_REGS
   extern yap_error_number Yap_MathException__(USES_REGS1);
   yap_error_number me;
-  if ((me = Yap_MathException__(PASS_REGS1)) && LOCAL_ActiveError->errorNo != YAP_NO_ERROR) {
-    LOCAL_ActiveError->errorNo = me;
+  if ((me = Yap_MathException__(PASS_REGS1)) && REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+    REMOTE_ActiveError(worker_id)->errorNo = me;
   }
-  return LOCAL_ActiveError->errorNo != YAP_NO_ERROR;
+  return REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR;
 }
 
 INLINE_ONLY Term MkSysError(yap_error_descriptor_t *i) {
+  CACHE_REGS
   Term et = MkAddressTerm(i);
   return Yap_MkApplTerm(FunctorException, 1, &et);
 }

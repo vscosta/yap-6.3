@@ -15,7 +15,7 @@
 #include "py4yap.h"
 #include <VFS.h>
 
-#define USES_REGS
+//#define USES_REGS
 
 #include "YapStreams.h"
 

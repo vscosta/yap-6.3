@@ -315,8 +315,8 @@ static Term GetTermFromArray(DBTerm *ref USES_REGS) {
     Term TRef;
 
     while ((TRef = Yap_FetchTermFromDB(ref)) == 0L) {
-      if (!Yap_gcl(LOCAL_Error_Size, 3, ENV, Yap_gcP())) {
-        Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+      if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 3, ENV, Yap_gcP())) {
+        Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return 0;
       }
     }
@@ -628,8 +628,8 @@ static void CreateNamedArray(PropEntry *pp, Int dim, AtomEntry *ae USES_REGS) {
 #if THREADS
   p->owner_id = worker_id;
 #endif
-  p->NextAE = LOCAL_DynamicArrays;
-  LOCAL_DynamicArrays = p;
+  p->NextAE = REMOTE_DynamicArrays(worker_id);
+  REMOTE_DynamicArrays(worker_id) = p;
   InitNamedArray(p, dim PASS_REGS);
 }
 
@@ -666,7 +666,7 @@ static void AllocateStaticArraySpace(StaticArrayEntry *p,
     while ((p->ValueOfVE.floats = (Float *)Yap_AllocCodeSpace(asize)) == NULL) {
       YAPLeaveCriticalSection();
       if (!Yap_growheap(FALSE, asize, NULL)) {
-        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return;
       }
       YAPEnterCriticalSection();
@@ -676,7 +676,7 @@ static void AllocateStaticArraySpace(StaticArrayEntry *p,
            NULL) {
       YAPLeaveCriticalSection();
       if (!Yap_growheap(FALSE, asize, NULL)) {
-        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return;
       }
       YAPEnterCriticalSection();
@@ -692,7 +692,7 @@ static StaticArrayEntry *CreateStaticArray(AtomEntry *ae, size_t dim,
   if (EndOfPAEntr(p)) {
     while ((p = (StaticArrayEntry *)Yap_AllocCodeSpace(sizeof(*p))) == NULL) {
       if (!Yap_growheap(FALSE, sizeof(*p), NULL)) {
-        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return NULL;
       }
     }
@@ -700,8 +700,8 @@ static StaticArrayEntry *CreateStaticArray(AtomEntry *ae, size_t dim,
     p->ValueOfVE.ints = NULL;
     INIT_RWLOCK(p->ArRWLock);
     AddPropToAtom(ae, (PropEntry *)p);
-    p->NextAE = LOCAL_StaticArrays;
-    LOCAL_StaticArrays = p;
+    p->NextAE = REMOTE_StaticArrays(worker_id);
+    REMOTE_StaticArrays(worker_id) = p;
   }
   WRITE_LOCK(p->ArRWLock);
   p->ArrayEArity = dim;
@@ -954,12 +954,12 @@ restart:
     farray = Yap_MkFunctor(AtomArray, size);
     if (HR + 1 + size > ASP - 1024) {
       if (!Yap_gcl((1 + size) * sizeof(CELL), 2, ENV, Yap_gcP())) {
-        Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return (FALSE);
       } else {
         if (HR + 1 + size > ASP - 1024) {
           if (!Yap_growstack(sizeof(CELL) * (size + 1 - (HR - ASP - 1024)))) {
-            Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+            Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
             return FALSE;
           }
         }
@@ -990,7 +990,7 @@ restart:
       if (HR + 1 + size > ASP - 1024) {
         WRITE_UNLOCK(ae->ARWLock);
         if (!Yap_gcl((1 + size) * sizeof(CELL), 2, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return (FALSE);
         } else
           goto restart;
@@ -1010,7 +1010,7 @@ restart:
       } else {
         if (HR + 1 + size > ASP - 1024) {
           if (!Yap_gcl((1 + size) * sizeof(CELL), 2, ENV, gc_P(P, CP))) {
-            Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+            Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
             return (FALSE);
           } else
             goto restart;
@@ -1085,8 +1085,8 @@ static Int create_static_array(USES_REGS1) {
       Yap_ArgListToVector(tprops, create_array_defs, CREATE_ARRAY_NB_TERM,
                           DOMAIN_ERROR_CREATE_ARRAY_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
-      Yap_Error(LOCAL_Error_TYPE, tprops, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, tprops, NULL);
     }
     return false;
   }
@@ -2285,12 +2285,12 @@ static Int static_array_to_term(USES_REGS1) {
 
       while (HR + 1 + dim > ASP - 1024) {
         if (!Yap_gcl((1 + dim) * sizeof(CELL), 2, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return (FALSE);
         } else {
           if (HR + 1 + dim > ASP - 1024) {
             if (!Yap_growstack(sizeof(CELL) * (dim + 1 - (HR - ASP - 1024)))) {
-              Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+              Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
               return FALSE;
             }
           }

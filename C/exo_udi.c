@@ -39,8 +39,8 @@ static int
 compar(const void *ip0, const void *jp0) {
   CACHE_REGS
   BITS32 *ip = (BITS32 *)ip0, *jp = (BITS32 *)jp0;
-  Term i = EXO_OFFSET_TO_ADDRESS(LOCAL_exo_it, *ip)[LOCAL_exo_arg];
-  Term j = EXO_OFFSET_TO_ADDRESS(LOCAL_exo_it, *jp)[LOCAL_exo_arg];
+  Term i = EXO_OFFSET_TO_ADDRESS(REMOTE_exo_it(worker_id), *ip)[REMOTE_exo_arg(worker_id)];
+  Term j = EXO_OFFSET_TO_ADDRESS(REMOTE_exo_it(worker_id), *jp)[REMOTE_exo_arg(worker_id)];
   //fprintf(stderr, "%ld-%ld\n", IntOfTerm(i), IntOfTerm(j)); 
   return IntOfTerm(i)-IntOfTerm(j);
 }
@@ -71,18 +71,18 @@ static int
 compar2(const void *ip0, const void *jp0) {
   CACHE_REGS
   BITS32 *ip = (BITS32 *)ip0, *jp = (BITS32 *)jp0;
-  struct index_t *it = LOCAL_exo_it;
+  struct index_t *it = REMOTE_exo_it(worker_id);
   Term* si = EXO_OFFSET_TO_ADDRESS(it, *ip);
   Term* sj = EXO_OFFSET_TO_ADDRESS(it, *jp);
   int cmp = cmp_extra_args(si, sj, it);
   if (cmp)
     return cmp;
-  return IntOfTerm(si[LOCAL_exo_arg])-IntOfTerm(sj[LOCAL_exo_arg]);
+  return IntOfTerm(si[REMOTE_exo_arg(worker_id)])-IntOfTerm(sj[REMOTE_exo_arg(worker_id)]);
 }
 
 static int
 compare(const BITS32 *ip, Int j USES_REGS) {
-  Term i = EXO_OFFSET_TO_ADDRESS(LOCAL_exo_it, *ip)[LOCAL_exo_arg];
+  Term i = EXO_OFFSET_TO_ADDRESS(REMOTE_exo_it(worker_id), *ip)[REMOTE_exo_arg(worker_id)];
   //fprintf(stderr, "%ld-%ld\n", IntOfTerm(i), j); 
   return IntOfTerm(i)-j;
 }
@@ -201,10 +201,10 @@ IntervalUDIRefitIndex(struct index_t **ip, UInt b[] USES_REGS)
   if (it->bmap & b[i]) return;
   /* no constraints, nothing to gain */
   //if (!IsAttVar(VarOfTerm(Deref(XREGS[i+1])))) return;
-  LOCAL_exo_it = it;
-  LOCAL_exo_base = it->bcls;
-  LOCAL_exo_arity = it->arity;
-  LOCAL_exo_arg = i;
+  REMOTE_exo_it(worker_id) = it;
+  REMOTE_exo_base(worker_id) = it->bcls;
+  REMOTE_exo_arity(worker_id) = it->arity;
+  REMOTE_exo_arg(worker_id) = i;
   it->udi_free_args = free_args(b, it->arity, i);
   if (!it->key) {
     UInt ncls = it->ap->NOfClauses, i;
@@ -297,10 +297,10 @@ Interval(struct index_t *it, Term min, Term max, Term op, BITS32 off USES_REGS)
    BITS32 *end;
    Atom at;
 
-   LOCAL_exo_it = it;
-   LOCAL_exo_base = it->bcls;
-   LOCAL_exo_arity = it->arity;
-   LOCAL_exo_arg = it->udi_arg;
+   REMOTE_exo_it(worker_id) = it;
+   REMOTE_exo_base(worker_id) = it->bcls;
+   REMOTE_exo_arity(worker_id) = it->arity;
+   REMOTE_exo_arg(worker_id) = it->udi_arg;
    if (!it->links) {
      c = (BITS32 *)it->udi_data;
      n = it->nels;
@@ -323,7 +323,7 @@ Interval(struct index_t *it, Term min, Term max, Term op, BITS32 off USES_REGS)
 	 }
        }
        x = IntegerOfTerm(min);
-       if (x >= IntegerOfTerm(S[LOCAL_exo_arg])) {
+       if (x >= IntegerOfTerm(S[REMOTE_exo_arg(worker_id)])) {
 	 return FAILCODE;
        }     
      }
@@ -337,7 +337,7 @@ Interval(struct index_t *it, Term min, Term max, Term op, BITS32 off USES_REGS)
 	 }
        }
        x = IntegerOfTerm(max);
-       if (x <= IntegerOfTerm(S[LOCAL_exo_arg])) {
+       if (x <= IntegerOfTerm(S[REMOTE_exo_arg(worker_id)])) {
 	 return FAILCODE;
        }     
      }
@@ -558,7 +558,7 @@ IntervalUdiInsert (void *control,
 
   struct index_t **ip = (struct index_t **)term;
   (*ip)->udi_arg = arg-1;
-  (ExoCB.refit)(ip, LOCAL_ibnds PASS_REGS);
+  (ExoCB.refit)(ip, REMOTE_ibnds(worker_id) PASS_REGS);
   (*ip)->udi_first = (void *)IntervalEnterUDIIndex;
   (*ip)->udi_next = (void *)IntervalRetryUDIIndex;
   return control;

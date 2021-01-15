@@ -758,7 +758,8 @@ Atom Yap_LookupAtomWithLength(const char *atom,
       return NIL;
     }
     INIT_LOCK(p->PELock);
-    p->StatisticsForPred = NULL : p->KindOfPE = PEProp;
+    p->StatisticsForPred = NULL;
+    p->KindOfPE = PEProp;
     p->ArityOfPE = ap->ArityOfPE;
     p->FirstClause = p->LastClause = NULL;
     p->NOfClauses = 0;
@@ -782,8 +783,8 @@ Atom Yap_LookupAtomWithLength(const char *atom,
     p->beamTable = NULL;
 #endif
     /* careful that they don't cross MkFunctor */
-    p->NextOfPE = AbsPredProp(LOCAL_ThreadHandle.local_preds);
-    LOCAL_ThreadHandle.local_preds = p;
+    p->NextOfPE = AbsPredProp(REMOTE_ThreadHandle(worker_id).local_preds);
+    REMOTE_ThreadHandle(worker_id).local_preds = p;
     p->FunctorOfPred = ap->FunctorOfPred;
     Yap_inform_profiler_of_clause(&(p->OpcodeOfPred), &(p->OpcodeOfPred) + 1, p,
 				  GPROF_NEW_PRED_THREAD);
@@ -1267,15 +1268,16 @@ Atom Yap_LookupAtomWithLength(const char *atom,
   }
 
   const char *IndicatorOfPred(PredEntry *pe) {
+    CACHE_REGS
     const char *mods;
     Atom at;
     arity_t arity;
     if (pe->ModuleOfPred == IDB_MODULE) {
       mods = "idb";
       if (pe->PredFlags & NumberDBPredFlag) {
-	snprintf(LOCAL_FileNameBuf, YAP_FILENAME_MAX, "idb:" UInt_FORMAT,
+	snprintf(REMOTE_FileNameBuf(worker_id), YAP_FILENAME_MAX, "idb:" UInt_FORMAT,
 		 (Int)(pe->FunctorOfPred));
-	return LOCAL_FileNameBuf;
+	return REMOTE_FileNameBuf(worker_id);
       } else if (pe->PredFlags & AtomDBPredFlag) {
 	at = (Atom)pe->FunctorOfPred;
 	arity = 0;
@@ -1296,10 +1298,10 @@ Atom Yap_LookupAtomWithLength(const char *atom,
       }
     }
     if (pe->ModuleOfPred == PROLOG_MODULE || pe->ModuleOfPred == USER_MODULE)
-    snprintf(LOCAL_FileNameBuf, YAP_FILENAME_MAX, "%s/" UInt_FORMAT, 
+    snprintf(REMOTE_FileNameBuf(worker_id), YAP_FILENAME_MAX, "%s/" UInt_FORMAT, 
 	     RepAtom(at)->StrOfAE, arity);
     else 
-    snprintf(LOCAL_FileNameBuf, YAP_FILENAME_MAX, "%s:%s/" UInt_FORMAT, mods,
+    snprintf(REMOTE_FileNameBuf(worker_id), YAP_FILENAME_MAX, "%s:%s/" UInt_FORMAT, mods,
 	     RepAtom(at)->StrOfAE, arity);
-    return LOCAL_FileNameBuf;
+    return REMOTE_FileNameBuf(worker_id);
   }

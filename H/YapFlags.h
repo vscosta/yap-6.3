@@ -119,6 +119,7 @@ INLINE_ONLY Term aro(Term inp) {
 // INLINE_ONLY Term booleanFlag( Term inp );
 
 static inline Term booleanFlag(Term inp) {
+  CACHE_REGS
   if (IsStringTerm(inp)) {
     inp = MkStringTerm(RepAtom(AtomOfTerm(inp))->StrOfAE);
   }
@@ -142,6 +143,7 @@ static inline Term booleanFlag(Term inp) {
 }
 
 static Term synerr(Term inp) {
+  CACHE_REGS
   if (IsStringTerm(inp)) {
     inp = MkStringTerm(RepAtom(AtomOfTerm(inp))->StrOfAE);
   }
@@ -173,6 +175,7 @@ static inline Term list_filler(Term inp) {
 // INLINE_ONLY  Term isatom( Term inp );
 
 static inline Term isatom(Term inp) {
+  CACHE_REGS
   if (IsVarTerm(inp)) {
     Yap_Error(INSTANTIATION_ERROR, inp, "set_prolog_flag %s",
               "value must be bound");
@@ -302,18 +305,16 @@ static inline Term getAtomicGlobalPrologFlag(int id) {
 }
 
 static inline void setAtomicLocalPrologFlag(int id, Term v) {
-  CACHE_REGS
   check_refs_to_ltable();
-  LOCAL_Flags[id].at = v;
+  REMOTE_Flags(id)->at = v;
 }
 
 static inline void setBooleanLocalPrologFlag(int id, bool v) {
-  CACHE_REGS
   check_refs_to_ltable();
   if (v) {
-    LOCAL_Flags[id].at = TermTrue;
+    REMOTE_Flags(id)->at = TermTrue;
   } else {
-    LOCAL_Flags[-id].at = TermFalse;
+    REMOTE_Flags(-id)->at = TermFalse;
   }
 }
 
@@ -334,13 +335,11 @@ static inline bool falseGlobalPrologFlag(int id) {
 }
 
 static inline bool trueLocalPrologFlag(int id) {
-  CACHE_REGS
-  return LOCAL_Flags[id].at == TermTrue;
+  return REMOTE_Flags(id)->at == TermTrue;
 }
 
 static inline bool falseLocalPrologFlag(int id) {
-  CACHE_REGS
-  return LOCAL_Flags[id].at == TermFalse;
+  return REMOTE_Flags(id)->at == TermFalse;
 }
 
 static inline bool isoLanguageFlag(void) {
@@ -369,14 +368,12 @@ static inline void setVerbosity(Term val) {
 static inline bool setSyntaxErrorsFlag(Term val) {
   if ((val = synerr(val)) == TermZERO)
     return false;
-  CACHE_REGS
-  LOCAL_Flags[SYNTAX_ERRORS_FLAG].at = val;
+  REMOTE_Flags(SYNTAX_ERRORS_FLAG)->at = val;
   return true;
 }
 
 static inline Term getSyntaxErrorsFlag(void) {
-  CACHE_REGS
-  return LOCAL_Flags[SYNTAX_ERRORS_FLAG].at;
+  return REMOTE_Flags(SYNTAX_ERRORS_FLAG)->at;
 }
 
 // used to overwrite singletons quoteFunc flag

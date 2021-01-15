@@ -20,7 +20,7 @@ if (!init_stack(&stt, sz)) {
     while (pop_sub_term(&stt, NULL, NULL)) {
     };
     HR = HStart;
-    LOCAL_Error_TYPE = RESOURCE_ERROR_TRAIL;
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_TRAIL;
     ssize_t expand = 0L;
     if (!Yap_gcl(expand, 3, ENV, gc_P(P, CP))) {
 
@@ -33,7 +33,7 @@ if (!init_stack(&stt, sz)) {
     while (pop_sub_term(&stt, NULL, NULL)) {
     };
     HR = HStart;
-    LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;
     ssize_t expand = 0L;
     if (!Yap_gcl(expand, 3, ENV, gc_P(P, CP))) {
 
@@ -43,7 +43,7 @@ if (!init_stack(&stt, sz)) {
   }
  }
 
-if (TR > (tr_fr_ptr)LOCAL_TrailTop - 256) {
+if (TR > (tr_fr_ptr)REMOTE_TrailTop(worker_id) - 256) {
   /* Trail overflow */
   goto trail_overflow;
 }

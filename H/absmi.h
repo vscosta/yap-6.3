@@ -198,7 +198,7 @@ INLINE_ONLY void restore_absmi_regs(REGSTORE *old_regs) {
   memmove(old_regs, Yap_regp, sizeof(REGSTORE));
 #ifdef THREADS
   pthread_setspecific(Yap_yaamregs_key, (void *)old_regs);
-  LOCAL_ThreadHandle.current_yaam_regs = old_regs;
+  REMOTE_ThreadHandle(worker_id).current_yaam_regs = old_regs;
 #else
   Yap_regp = old_regs;
 #endif

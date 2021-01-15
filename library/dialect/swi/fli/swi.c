@@ -224,7 +224,7 @@ X_API int PL_get_nchars(term_t l, size_t *lengthp, char **s, unsigned flags) {
     size_t len = strlen(out.val.c);
     if (flags & (BUF_DISCARDABLE | BUF_RING)) {
       if (!*s)
-      *s = LOCAL_FileNameBuf;
+      *s = REMOTE_FileNameBuf(worker_id);
       strncpy(*s, out.val.c, YAP_FILENAME_MAX);
       pop_text_stack(lvl);
       return true;
@@ -359,7 +359,7 @@ X_API term_t PL_new_term_refs(int n) {
  */
 X_API void PL_reset_term_refs(term_t after) {
   CACHE_REGS
-  LOCAL_CurSlot = after;
+  REMOTE_CurSlot(worker_id) = after;
 }
 
 /** @}
@@ -935,7 +935,7 @@ X_API atom_t PL_new_atom(const char *c) {
   atom_t sat;
 
   while ((at = Yap_LookupAtom(c)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_new_atom"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_new_atom"))
       return false;
   }
   Yap_AtomIncreaseHold(at);
@@ -949,7 +949,7 @@ X_API atom_t PL_new_atom_nchars(size_t len, const char *c) {
   atom_t sat;
 
   while ((at = Yap_NCharsToAtom(c, len, ENC_ISO_LATIN1 PASS_REGS)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_new_atom_nchars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_new_atom_nchars"))
       return FALSE;
   }
   Yap_AtomIncreaseHold(at);
@@ -963,7 +963,7 @@ X_API atom_t PL_new_atom_wchars(size_t len, const wchar_t *c) {
   atom_t sat;
 
   while ((at = Yap_NWCharsToAtom(c, len PASS_REGS)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_new_atom_wchars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_new_atom_wchars"))
       return FALSE;
   }
   Yap_AtomIncreaseHold(at);
@@ -972,10 +972,11 @@ X_API atom_t PL_new_atom_wchars(size_t len, const wchar_t *c) {
 }
 
 X_API wchar_t *PL_atom_wchars(atom_t name, size_t *sp) {
+  CACHE_REGS
   Atom at = SWIAtomToAtom(name);
   const unsigned char *s = at->UStrOfAE;
   size_t sz = *sp = strlen_utf8(s);
-  wchar_t *out = Malloc((sz + 1) * sizeof(wchar_t));
+  wchar_t *out = Malloc((sz + 1) * sizeof(wchar_t) PASS_REGS);
   size_t i = 0;
   for (; i < sz; i++) {
     int32_t v;
@@ -1102,7 +1103,7 @@ X_API int PL_put_atom_chars(term_t t, const char *s) {
   CACHE_REGS
   Atom at;
   while ((at = Yap_CharsToAtom(s, ENC_ISO_LATIN1 PASS_REGS)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_atom_nchars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_atom_nchars"))
       return FALSE;
   }
   Yap_AtomIncreaseHold(at);
@@ -1115,7 +1116,7 @@ X_API int PL_put_atom_nchars(term_t t, size_t len, const char *s) {
   CACHE_REGS
   Atom at;
   while ((at = Yap_NCharsToAtom(s, len, ENC_ISO_LATIN1 PASS_REGS)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_atom_nchars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_atom_nchars"))
       return FALSE;
   }
   Yap_AtomIncreaseHold(at);
@@ -1224,7 +1225,7 @@ X_API int PL_put_list_chars(term_t t, const char *s) {
   CACHE_REGS
   Term nt;
   while ((nt = Yap_CharsToListOfAtoms(s, ENC_ISO_LATIN1 PASS_REGS)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_put_string_nchars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_put_string_nchars"))
       return FALSE;
   }
   Yap_PutInSlot(t, nt);
@@ -1251,7 +1252,7 @@ X_API int PL_put_string_chars(term_t t, const char *chars) {
   CACHE_REGS
   Term nt;
   while ((nt = Yap_CharsToString(chars, ENC_ISO_LATIN1 PASS_REGS)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_putPL_put_string_chars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_putPL_put_string_chars"))
       return FALSE;
   }
   Yap_PutInSlot(t, nt);
@@ -1263,7 +1264,7 @@ X_API int PL_put_string_nchars(term_t t, size_t len, const char *chars) {
   Term nt;
   while ((nt = Yap_NCharsToString(chars, len, ENC_ISO_LATIN1 PASS_REGS)) ==
          0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_putPL_put_string_chars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_putPL_put_string_chars"))
       return FALSE;
   }
   Yap_PutInSlot(t, nt);
@@ -1336,7 +1337,7 @@ X_API int PL_unify_atom_chars(term_t t, const char *s) {
   CACHE_REGS
   Atom at;
   while ((at = Yap_LookupAtom(s)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_atom_nchars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_atom_nchars"))
       return true;
   }
   Yap_AtomIncreaseHold(at);
@@ -1349,7 +1350,7 @@ X_API int PL_unify_atom_nchars(term_t t, size_t len, const char *s) {
   CACHE_REGS
   Atom at;
   while ((at = Yap_NCharsToAtom(s, len, ENC_ISO_LATIN1 PASS_REGS)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_atom_nchars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_atom_nchars"))
       return FALSE;
   }
   Yap_AtomIncreaseHold(at);
@@ -1518,7 +1519,7 @@ X_API int PL_unify_list_chars(term_t t, const char *chars) {
   Term chterm;
   while ((chterm = Yap_CharsToListOfAtoms(chars, ENC_ISO_LATIN1 PASS_REGS)) ==
          0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_list_chars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_list_chars"))
       return FALSE;
   }
   return Yap_unify(Yap_GetFromSlot(t), chterm);
@@ -1531,7 +1532,7 @@ X_API int PL_unify_list_ncodes(term_t t, size_t len, const char *chars) {
   Term chterm;
   while ((chterm = Yap_NCharsToListOfCodes(chars, len,
                                            ENC_ISO_LATIN1 PASS_REGS)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_list_ncodes"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_list_ncodes"))
       return FALSE;
   }
   return Yap_unify(Yap_GetFromSlot(t), chterm);
@@ -1542,7 +1543,7 @@ X_API int PL_unify_list_codes(term_t t, const char *chars) {
   Term chterm;
   while ((chterm = Yap_CharsToListOfCodes(chars, ENC_ISO_LATIN1 PASS_REGS)) ==
          0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_list_codes"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_list_codes"))
       return FALSE;
   }
   return Yap_unify(Yap_GetFromSlot(t), chterm);
@@ -1570,7 +1571,7 @@ X_API int PL_unify_string_chars(term_t t, const char *chars) {
   CACHE_REGS
   Term chterm;
   while ((chterm = MkStringTerm(chars)) == 0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_list_ncodes"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_list_ncodes"))
       return FALSE;
   }
   return Yap_unify(Yap_GetFromSlot(t), chterm);
@@ -1581,7 +1582,7 @@ X_API int PL_unify_string_nchars(term_t t, size_t len, const char *chars) {
   Term chterm;
   while ((chterm = Yap_NCharsToString(chars, len, ENC_ISO_LATIN1 PASS_REGS)) ==
          0L) {
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_list_ncodes"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_list_ncodes"))
       return FALSE;
   }
   return Yap_unify(Yap_GetFromSlot(t), chterm);
@@ -1625,7 +1626,7 @@ X_API int PL_unify_wchars(term_t t, int type, size_t len,
       /* should give error?? */
       return FALSE;
     }
-    if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_wchars"))
+    if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_wchars"))
       return FALSE;
   }
   return FALSE;
@@ -1721,7 +1722,7 @@ int PL_unify_termv(term_t l, va_list ap) {
 
         while ((chterm = Yap_CharsToString(chars, ENC_ISO_LATIN1 PASS_REGS)) ==
                0L) {
-          if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_term"))
+          if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_term"))
             return FALSE;
         }
         *pt++ = chterm;
@@ -1730,7 +1731,7 @@ int PL_unify_termv(term_t l, va_list ap) {
         Atom at;
         const char *chars = va_arg(ap, char *);
         while ((at = Yap_CharsToAtom(chars, ENC_ISO_LATIN1 PASS_REGS)) == 0L) {
-          if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_term"))
+          if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_term"))
             return FALSE;
         }
         *pt++ = MkAtomTerm(at);
@@ -1742,7 +1743,7 @@ int PL_unify_termv(term_t l, va_list ap) {
         const char *chars = va_arg(ap, char *);
         while ((at = Yap_NCharsToAtom(chars, sz, ENC_ISO_LATIN1 PASS_REGS)) ==
                0L) {
-          if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_term"))
+          if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_term"))
             return FALSE;
         }
         *pt++ = MkAtomTerm(at);
@@ -1753,7 +1754,7 @@ int PL_unify_termv(term_t l, va_list ap) {
         size_t sz = va_arg(ap, size_t);
         const wchar_t *chars = va_arg(ap, wchar_t *);
         while ((at = Yap_NWCharsToAtom(chars, sz PASS_REGS)) == 0L) {
-          if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_term"))
+          if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_term"))
             return FALSE;
         }
         *pt++ = MkAtomTerm(at);
@@ -1844,7 +1845,7 @@ int PL_unify_termv(term_t l, va_list ap) {
         Atom at;
 
         while ((at = Yap_CharsToAtom(fname, ENC_ISO_LATIN1 PASS_REGS)) == 0L) {
-          if (LOCAL_Error_TYPE && !Yap_SWIHandleError("PL_unify_term"))
+          if (REMOTE_ActiveError(worker_id)->errorNo && !Yap_SWIHandleError("PL_unify_term"))
             return FALSE;
         }
         Yap_AtomIncreaseHold(at);
@@ -2265,7 +2266,7 @@ X_API int PL_is_initialised(int *argcp, char ***argvp) {
 
 X_API module_t PL_context(void) {
   CACHE_REGS
-  return Yap_GetModuleEntry(LOCAL_SourceModule);
+  return Yap_GetModuleEntry(REMOTE_SourceModule(worker_id));
 }
 
 X_API int PL_strip_module(term_t raw, module_t *m, term_t plain) {
@@ -2314,7 +2315,7 @@ X_API predicate_t PL_predicate(const char *name, size_t arity, const char *m) {
     Atom at;
     while (!(at = Yap_LookupAtom((char *)m))) {
       if (!Yap_growheap(FALSE, 0L, NULL)) {
-        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return NULL;
       }
     }
@@ -2322,7 +2323,7 @@ X_API predicate_t PL_predicate(const char *name, size_t arity, const char *m) {
   }
   while (!(at = Yap_LookupAtom((char *)name))) {
     if (!Yap_growheap(FALSE, 0L, NULL)) {
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return NULL;
     }
   }
@@ -2466,8 +2467,8 @@ X_API qid_t PL_open_query(module_t ctx, int flags, predicate_t p, term_t t0) {
 
   /* ignore flags  and module for now */
   struct open_query_struct *new = (struct open_query_struct*)Yap_AllocCodeSpace(sizeof(struct open_query_struct));
-  new->oq = LOCAL_execution;
-  LOCAL_execution = new;
+  new->oq = REMOTE_execution(worker_id);
+  REMOTE_execution(worker_id) = new;
   new->q_open = 1;
   new->q_state = 0;
   new->q_flags = flags;
@@ -2483,14 +2484,14 @@ X_API int PL_next_solution(qid_t q) {
   
   if (qi->q_open != 1)
     return 0;
-  if (setjmp(LOCAL_execution->q_env))
+  if (setjmp(REMOTE_execution(worker_id)->q_env))
     return 0;
   // don't forget, on success these guys must create slots
   if (qi->q_state == 0) {
     result = YAP_EnterGoal((YAP_PredEntryPtr)qi->q_pe,
                            Yap_GetPtrFromHandle(qi->q_g), &qi->q_h);
   } else {
-    LOCAL_AllowRestart = qi->q_open;
+    REMOTE_AllowRestart(worker_id) = qi->q_open;
     result = YAP_RetryGoal(&qi->q_h);
   }
   qi->q_state = 1;
@@ -2509,7 +2510,7 @@ X_API void PL_cut_query(qid_t q) {
     return;
   YAP_LeaveGoal(false, &qi->q_h);
   qi->q_open = 0;
-  LOCAL_execution = qi->oq;
+  REMOTE_execution(worker_id) = qi->oq;
   Yap_FreeCodeSpace((char *)qi);
 }
 
@@ -2517,7 +2518,7 @@ X_API void PL_cut_query(qid_t q) {
 X_API qid_t PL_current_query(void) {
   CACHE_REGS
 
-    return (qid_t)LOCAL_execution;
+    return (qid_t)REMOTE_execution(worker_id);
 }
 
 X_API void PL_close_query(qid_t q) {
@@ -2533,7 +2534,7 @@ X_API void PL_close_query(qid_t q) {
   }
   YAP_LeaveGoal(FALSE, &qi->q_h);
   qi->q_open = 0;
-  LOCAL_execution = qi->oq;
+  REMOTE_execution(worker_id) = qi->oq;
   Yap_FreeCodeSpace((char *)qi);
 }
 
@@ -2800,7 +2801,7 @@ X_API PL_engine_t PL_create_engine(const PL_thread_attr_t *attr) {
 X_API int PL_destroy_engine(PL_engine_t e) {
 #if THREADS
   return YAP_ThreadDestroyEngine(
-      ((struct worker_local *)e)->ThreadHandle_.current_yaam_regs->worker_id_);
+      ((struct worker_local *)e)->ThreadHandle.current_yaam_regs->worker_id_);
 #else
   return FALSE;
 #endif
@@ -2832,7 +2833,7 @@ X_API int PL_set_engine(PL_engine_t engine, PL_engine_t *old) {
     }
     return PL_ENGINE_SET;
   } else {
-    nwid = ((struct worker_local *)engine)->ThreadHandle_.id;
+    nwid = ((struct worker_local *)engine)->ThreadHandle.id;
   }
 
   MUTEX_LOCK(&(REMOTE_ThreadHandle(nwid).tlock));
@@ -3038,7 +3039,7 @@ static int atom_generator(const char *prefix, char **hit, int state) {
     i = 0;
     catom = NIL;
   } else {
-    index = LOCAL_search_atoms;
+    index = REMOTE_search_atoms(worker_id);
     catom = index->atom;
     i = index->pos;
   }
@@ -3061,7 +3062,7 @@ static int atom_generator(const char *prefix, char **hit, int state) {
         CACHE_REGS
         index->pos = i;
         index->atom = ap->NextOfAE;
-        LOCAL_search_atoms = index;
+        REMOTE_search_atoms(worker_id) = index;
         *hit = ap->StrOfAE;
         READ_UNLOCK(ap->ARWLock);
         return TRUE;
@@ -3070,7 +3071,7 @@ static int atom_generator(const char *prefix, char **hit, int state) {
       READ_UNLOCK(ap->ARWLock);
     }
   }
-  LOCAL_search_atoms = NULL;
+  REMOTE_search_atoms(worker_id) = NULL;
   free(index);
   return FALSE;
 }

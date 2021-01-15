@@ -253,6 +253,7 @@ static InitConstEntry InitConstTab[] = {
 void
 Yap_InitConstExps(void)
 {
+  CACHE_REGS
   unsigned int    i;
   ExpEntry       *p;
 

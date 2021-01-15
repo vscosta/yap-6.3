@@ -135,7 +135,7 @@ bool Yap_IsCyclicTerm(Term t USES_REGS) {
 */
 static Int cyclic_term(USES_REGS1) /* cyclic_term(+T)		 */
 {
-  return Yap_IsCyclicTerm(Deref(ARG1));
+  return Yap_IsCyclicTerm(Deref(ARG1) PASS_REGS);
 }
 
 /**
@@ -275,7 +275,7 @@ static Term vars_in_complex_term(CELL *pt0_, CELL *pt0_end_,
       CELL *ptr = VarOfTerm(t);
       Bind_and_Trail(ptr, TermFoundVar);
       count++;
-      if (TR > (tr_fr_ptr)LOCAL_TrailTop - 1024)
+      if (TR > (tr_fr_ptr)REMOTE_TrailTop(worker_id) - 1024)
         goto trail_overflow;
       /* do or pt2 are unbound  */
     }
@@ -297,7 +297,7 @@ static Term vars_in_complex_term(CELL *pt0_, CELL *pt0_end_,
         HR+=2;
    
 /* next make sure noone will see this as a variable again */
-  if (TR > (tr_fr_ptr)LOCAL_TrailTop - 256) {
+  if (TR > (tr_fr_ptr)REMOTE_TrailTop(worker_id) - 256) {
     /* Trail overflow */
     goto trail_overflow;
   }
@@ -449,7 +449,7 @@ static Term attvars_in_complex_term(CELL *pt0_, CELL *pt0_end_,
     }
     output = MkPairTerm((CELL)ptd0, output);
     /* store the terms to visit */
-    if (TR > (tr_fr_ptr)LOCAL_TrailTop - 256) {
+    if (TR > (tr_fr_ptr)REMOTE_TrailTop(worker_id) - 256) {
       /* Trail overflow */
       goto trail_overflow;
     }
@@ -513,8 +513,8 @@ static Term new_vars_in_complex_term(CELL *pt0_, CELL *pt0_end_,
     if (IsVarTerm(t)) {
       n++;
       Bind_and_Trail(VarOfTerm(t), TermFoundVar);
-      if ((tr_fr_ptr)LOCAL_TrailTop - TR < 1024) {
-        size_t expand = (tr_fr_ptr)LOCAL_TrailTop - TR;
+      if ((tr_fr_ptr)REMOTE_TrailTop(worker_id) - TR < 1024) {
+        size_t expand = (tr_fr_ptr)REMOTE_TrailTop(worker_id) - TR;
         clean_tr(TR0 PASS_REGS);
         *HR++ = inp0;
         /* Trail overflow */
@@ -530,7 +530,7 @@ static Term new_vars_in_complex_term(CELL *pt0_, CELL *pt0_end_,
 #include "term_visit.h"
   output = MkPairTerm((CELL)ptd0, output);
   mBind_And_Trail(ptd0, TermFoundVar);
-  if ((tr_fr_ptr)LOCAL_TrailTop - TR < 1024) {
+  if ((tr_fr_ptr)REMOTE_TrailTop(worker_id) - TR < 1024) {
     goto trail_overflow;
   }
   /* leave an empty slot to fill in later */
@@ -603,7 +603,7 @@ static Term vars_within_complex_term(CELL *pt0_, CELL *pt0_end_,
       CELL *ptr = VarOfTerm(t);
       n++;
       Bind_and_Trail(ptr,TermFoundVar);
-      if (TR > (tr_fr_ptr)LOCAL_TrailTop - 256) {
+      if (TR > (tr_fr_ptr)REMOTE_TrailTop(worker_id) - 256) {
         Yap_growtrail(2 * n * sizeof(tr_fr_ptr *), true);
       }
     }
@@ -675,7 +675,7 @@ static Int free_variables_in_term(USES_REGS1) {
     out = TermNil;
   else {
     out = new_vars_in_complex_term(&(t)-1, &(t),
-                                   Yap_TermVariables(bounds, 3) PASS_REGS);
+                                   Yap_TermVariables(bounds, 3 PASS_REGS) PASS_REGS);
   }
 
   if (found_module && t != t0) {
@@ -714,7 +714,7 @@ static Term non_singletons_in_complex_term(CELL *pt0_, CELL *pt0_end_,
 
 #include "term_visit.h"
   /* next make sure noone will see this as a variable again */
-  if (TR > (tr_fr_ptr)LOCAL_TrailTop - 256) {
+  if (TR > (tr_fr_ptr)REMOTE_TrailTop(worker_id) - 256) {
     /* Trail overflow */
         goto trail_overflow;
   }
@@ -818,7 +818,7 @@ static Term numbervars_in_complex_term(CELL *pt0_, CELL *pt0_end_, Int vno,
 }
 
 Int Yap_NumberVars(Term t, Int numbv, bool handle_singles,
-                   Int *tr_entries) /*
+                   Int *tr_entries USES_REGS) /*
                                      * numbervariables in term t         */
 {
     if ( handle_singles ) return t;
@@ -845,7 +845,7 @@ static Int p_numbervars(USES_REGS1) {
         Yap_Error(TYPE_ERROR_INTEGER, t2, "numbervars/3");
         return (false);
     }
-    out = Yap_NumberVars(Deref(ARG1), IntegerOfTerm(t2), false, NULL);
+    out = Yap_NumberVars(Deref(ARG1), IntegerOfTerm(t2), false, NULL PASS_REGS);
     return Yap_unify(ARG3, MkIntegerTerm(out));
 }
 
@@ -887,7 +887,7 @@ static int max_numbered_var(CELL *pt0_, CELL *pt0_end_, Int *maxp USES_REGS) {
   return 0;
 }
 
-static Int MaxNumberedVar(Term inp, arity_t arity PASS_REGS) {
+static Int MaxNumberedVar(Term inp, arity_t arity USES_REGS) {
   Term t = Deref(inp);
 
   if (IsPrimitiveTerm(t)) {
@@ -919,6 +919,7 @@ static Int largest_numbervar(USES_REGS1) {
 
 
 void Yap_InitTermCPreds(void) {
+  CACHE_REGS
   Yap_InitCPred("term_variables", 2, term_variables, 0);
   Yap_InitCPred("term_variables", 3, term_variables3, 0);
   Yap_InitCPred("$variables_in_term", 3, variables_in_term, 0);

@@ -135,7 +135,6 @@ bool Yap_CharacterEscapes(Term mt) {
 
 #define ByteAdr(X) ((char *)&(X))
 Term Yap_Module_Name(PredEntry *ap) {
-  CACHE_REGS
 
   if (!ap)
     return TermUser;
@@ -249,7 +248,7 @@ static Int
     LookupModule(t);
     CurrentModule = t;
   }
-  LOCAL_SourceModule = CurrentModule;
+  REMOTE_SourceModule(worker_id) = CurrentModule;
   return TRUE;
 }
 
@@ -257,7 +256,7 @@ static Int change_module(USES_REGS1) { /* $change_module(N)		 */
   Term mod = Deref(ARG1);
   LookupModule(mod);
   CurrentModule = mod;
-  LOCAL_SourceModule = mod;
+  REMOTE_SourceModule(worker_id) = mod;
   return TRUE;
 }
 
@@ -390,7 +389,7 @@ static Int strip_module(USES_REGS1) {
 }
 
 static Int yap_strip_clause(USES_REGS1) {
-  Term t1 = Deref(ARG1), tmod = LOCAL_SourceModule;
+  Term t1 = Deref(ARG1), tmod = REMOTE_SourceModule(worker_id);
   if (tmod == PROLOG_MODULE) {
     tmod = TermProlog;
   }
@@ -510,10 +509,10 @@ static Int context_module(USES_REGS1) {
  *  : _Mod_ is the current read-in or source module.
  */
 static Int source_module(USES_REGS1) {
-  if (LOCAL_SourceModule == PROLOG_MODULE) {
+  if (REMOTE_SourceModule(worker_id) == PROLOG_MODULE) {
     return Yap_unify(ARG1, TermProlog);
   }
-  return Yap_unify(ARG1, LOCAL_SourceModule);
+  return Yap_unify(ARG1, REMOTE_SourceModule(worker_id));
 }
 
 /**
@@ -525,10 +524,10 @@ static Int source_module(USES_REGS1) {
  */
 static Int current_source_module(USES_REGS1) {
   Term t;
-  if (LOCAL_SourceModule == PROLOG_MODULE) {
-    LOCAL_SourceModule = TermProlog;
+  if (REMOTE_SourceModule(worker_id) == PROLOG_MODULE) {
+    REMOTE_SourceModule(worker_id) = TermProlog;
   }
-  if (!Yap_unify(ARG1, LOCAL_SourceModule)) {
+  if (!Yap_unify(ARG1, REMOTE_SourceModule(worker_id))) {
     return false;
   };
   if (IsVarTerm(t = Deref(ARG2))) {
@@ -539,7 +538,7 @@ static Int current_source_module(USES_REGS1) {
     Yap_Error(TYPE_ERROR_ATOM, t, NULL);
     return false;
   }
-  LOCAL_SourceModule = CurrentModule = t;
+  REMOTE_SourceModule(worker_id) = CurrentModule = t;
   return true;
 }
 
@@ -635,7 +634,7 @@ void Yap_InitModules(void) {
   CACHE_REGS
   CurrentModules = NULL;
   LookupSystemModule(MkAtomTerm(AtomProlog));
-  LOCAL_SourceModule = MkAtomTerm(AtomProlog);
+  REMOTE_SourceModule(worker_id) = MkAtomTerm(AtomProlog);
   LookupModule(USER_MODULE);
   LookupModule(IDB_MODULE);
   LookupModule(ATTRIBUTES_MODULE);

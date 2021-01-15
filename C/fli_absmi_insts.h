@@ -190,7 +190,7 @@
          * user defined goals and backtracking or failing */
         yamop *savedP;
 
-        LOCAL_PrologMode |= UserCCallMode;
+        REMOTE_PrologMode(worker_id) |= UserCCallMode;
         {
           PredEntry *p = PREG->y_u.Osbpp.p;
 
@@ -201,7 +201,7 @@
           SREG = (CELL *)YAP_Execute(p, p->cs.f_code);
         setregs();
         }
-        LOCAL_PrologMode &= ~UserCCallMode;
+        REMOTE_PrologMode(worker_id) &= ~UserCCallMode;
         restore_machine_regs();
         PREG = savedP;
       }
@@ -365,7 +365,7 @@
 #endif
       SET_BB(B_YREG);
       ENDCACHE_Y();
-      LOCAL_PrologMode = UserCCallMode;
+      REMOTE_PrologMode(worker_id) = UserCCallMode;
       ASP = YREG;
       saveregs();
       save_machine_regs();
@@ -374,7 +374,7 @@
       Yap_ResetException( worker_id );
       restore_machine_regs();
       setregs();
-      LOCAL_PrologMode &= UserMode;
+      REMOTE_PrologMode(worker_id) &= UserMode;
       if (!SREG) {
         FAIL();
       }
@@ -406,7 +406,7 @@
       restore_args(PREG->y_u.OtapFs.s);
       ENDCACHE_Y();
 
-      LOCAL_PrologMode |= UserCCallMode;
+      REMOTE_PrologMode(worker_id) |= UserCCallMode;
       SET_ASP(YREG, E_CB * sizeof(CELL));
       saveregs();
       save_machine_regs();
@@ -415,7 +415,7 @@
       Yap_ResetException( worker_id);
       restore_machine_regs();
       setregs();
-      LOCAL_PrologMode &= ~UserCCallMode;
+      REMOTE_PrologMode(worker_id) &= ~UserCCallMode;
       if (!SREG) {
         /* Removes the cut functions from the stack
            without executing them because we have fail
@@ -611,16 +611,16 @@
 
       BOp(undef_p, e);
       /* save S for module name */
-      if (LOCAL_DoingUndefp) {
+      if (REMOTE_DoingUndefp(worker_id)) {
 	PREG=FAILCODE;
 	JMPNext();
       }
-        LOCAL_DoingUndefp = true;
+        REMOTE_DoingUndefp(worker_id) = true;
 	saveregs();
       undef_goal(PASS_REGS1);
       setregs();
       /* for profiler */
-        LOCAL_DoingUndefp = false;
+        REMOTE_DoingUndefp(worker_id) = false;
       CACHE_A1();
       JMPNext();
       ENDBOp();

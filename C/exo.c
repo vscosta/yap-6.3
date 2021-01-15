@@ -394,15 +394,15 @@ add_index(struct index_t **ip, UInt bmap, PredEntry *ap, UInt count)
   struct index_t *i;
   size_t sz, dsz;
   yamop *ptr;
-  UInt *bnds = LOCAL_ibnds;
+  UInt *bnds = REMOTE_ibnds(worker_id);
 
   sz =   (CELL)NEXTOP(NEXTOP((yamop*)NULL,lp),lp)+ap->ArityOfPE*(CELL)NEXTOP((yamop *)NULL,x) +(CELL)NEXTOP(NEXTOP((yamop *)NULL,p),l);
   if (!(i = (struct index_t *)Yap_AllocCodeSpace(sizeof(struct index_t)+sz))) {
     CACHE_REGS
     save_machine_regs();
-    LOCAL_Error_Size = 3*ncls*sizeof(CELL);
-    LOCAL_ErrorMessage = "not enough space to index";
-    Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+    REMOTE_ActiveError(worker_id)->errorMsgLen = 3*ncls*sizeof(CELL);
+    REMOTE_ActiveError(worker_id)->errorMsg = "not enough space to index";
+    Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
     return NULL;
   }
   i->is_key = FALSE;
@@ -419,10 +419,10 @@ add_index(struct index_t **ip, UInt bmap, PredEntry *ap, UInt count)
     if (!(base = (CELL *)Yap_AllocCodeSpace(dsz))) {
       CACHE_REGS
       save_machine_regs();
-      LOCAL_Error_Size = dsz;
-      LOCAL_ErrorMessage = "not enough space to generate indices";
+      REMOTE_ActiveError(worker_id)->errorMsgLen = dsz;
+      REMOTE_ActiveError(worker_id)->errorMsg = "not enough space to generate indices";
       Yap_FreeCodeSpace((void *)i);
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return NULL;
     }
     memset(base, 0, dsz);
@@ -532,11 +532,11 @@ Yap_ExoLookup(PredEntry *ap USES_REGS)
     Term t = Deref(XREGS[j+1]);
     if (!IsVarTerm(t)) {
       bmap += bit;
-      LOCAL_ibnds[j] = TRUE;
+      REMOTE_ibnds(worker_id)[j] = TRUE;
       if (!count) j0= j;
       count++;
     } else {
-      LOCAL_ibnds[j] = FALSE;
+      REMOTE_ibnds(worker_id)[j] = FALSE;
     }
     XREGS[j+1] = t;
   }
@@ -555,7 +555,7 @@ Yap_ExoLookup(PredEntry *ap USES_REGS)
     i = add_index(ip, bmap, ap, count);
   }
   if (count) {
-    yamop *code = LOOKUP(i, arity, j0, LOCAL_ibnds);
+    yamop *code = LOOKUP(i, arity, j0, REMOTE_ibnds(worker_id));
     if (code == FAILCODE)
       return code;
     if (i->is_udi)

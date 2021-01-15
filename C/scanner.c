@@ -79,16 +79,16 @@ static void Yap_setCurrentSourceLocation(struct stream_desc *s) {
   CACHE_REGS
 #if HAVE_SOCKET
   if (s->status & Socket_Stream_f)
-    LOCAL_SourceFileName = AtomSocket;
+    REMOTE_SourceFileName(worker_id) = AtomSocket;
   else
 #endif
       if (s->status & Pipe_Stream_f)
-    LOCAL_SourceFileName = AtomPipe;
+    REMOTE_SourceFileName(worker_id) = AtomPipe;
   else if (s->status & InMemory_Stream_f)
-    LOCAL_SourceFileName = s->name;
+    REMOTE_SourceFileName(worker_id) = s->name;
   else
-    LOCAL_SourceFileName = s->name;
-  LOCAL_SourceFileLineno = s->linecount;
+    REMOTE_SourceFileName(worker_id) = s->name;
+  REMOTE_SourceFileLineno(worker_id) = s->linecount;
 }
 
 /* token table with some help from Richard O'Keefe's PD scanner */
@@ -194,8 +194,8 @@ typedef struct scanner_extra_alloc {
 #define CodeSpaceError(t, p, l) CodeSpaceError__(t, p, l PASS_REGS)
 static TokEntry *CodeSpaceError__(TokEntry *t, TokEntry *p,
                                   TokEntry *l USES_REGS) {
-  LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;
-  LOCAL_ErrorMessage = "Code Space Overflow";
+  REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_HEAP;
+  REMOTE_ActiveError(worker_id)->errorMsg = "Code Space Overflow";
   if (t) {
     t->Tok = eot_tok;
     t->TokInfo = TermOutOfHeapError;
@@ -206,8 +206,8 @@ static TokEntry *CodeSpaceError__(TokEntry *t, TokEntry *p,
 
 #define TrailSpaceError(t, l) TrailSpaceError__(t, l PASS_REGS)
 static TokEntry *TrailSpaceError__(TokEntry *t, TokEntry *l USES_REGS) {
-  LOCAL_ErrorMessage = "Trail Overflow";
-  LOCAL_Error_TYPE = RESOURCE_ERROR_TRAIL;
+  REMOTE_ActiveError(worker_id)->errorMsg = "Trail Overflow";
+  REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_TRAIL;
   if (t) {
     t->Tok = eot_tok;
     t->TokInfo = TermOutOfTrailError;
@@ -222,14 +222,14 @@ static Term float_send(char *s, int sign) {
   if (trueGlobalPrologFlag(ISO_FLAG)) { /* iso */
     if (!isfinite(f)) {
       CACHE_REGS
-      LOCAL_ErrorMessage = "Float overflow while scanning";
+      REMOTE_ActiveError(worker_id)->errorMsg = "Float overflow while scanning";
       return (MkEvalFl(f));
     }
   }
 #elif HAVE_FINITE
   if (trueGlobalPrologFlag(ISO_FLAG)) { /* iso */
     if (!finite(f)) {
-      LOCAL_ErrorMessage = "Float overflow while scanning";
+      REMOTE_ActiveError(worker_id)->errorMsg = "Float overflow while scanning";
       return (MkEvalFl(f));
     }
   }
@@ -262,7 +262,7 @@ static Term read_int_overflow(const char *s, Int base, Int val, int sign) {
 
 static int send_error_message(char s[]) {
   CACHE_REGS
-  LOCAL_ErrorMessage = s;
+  REMOTE_ActiveError(worker_id)->errorMsg = s;
   return 0;
 }
 
@@ -442,7 +442,7 @@ do_switch:
 
 static int num_send_error_message(char s[]) {
   CACHE_REGS
-  LOCAL_ErrorMessage = s;
+  REMOTE_ActiveError(worker_id)->errorMsg = s;
   return MkStringTerm(s);
 }
 
@@ -450,7 +450,7 @@ static int num_send_error_message(char s[]) {
   {                                                                            \
     imgsz = Yap_Min(imgsz * 2, imgsz);                              \
     char *nbuf;                                                                \
-      nbuf = Realloc(buf, imgsz);                                                left = imgsz - max_size;                                                   \
+      nbuf = Realloc(buf, imgsz PASS_REGS);                                                left = imgsz - max_size;                                                   \
       max_size = imgsz;                                                          \
       buf = nbuf;                                                              \
   }
@@ -459,6 +459,7 @@ static int num_send_error_message(char s[]) {
 
 static Term get_num(int *chp, int *chbuffp, StreamDesc *st, int sign, char **bufp, size_t *szp)
 {
+  CACHE_REGS
     int ch = *chp;
   Int val = 0L, base = ch - '0';
   int might_be_float = TRUE, has_overflow = FALSE;
@@ -529,8 +530,8 @@ static Term get_num(int *chp, int *chbuffp, StreamDesc *st, int sign, char **buf
     *sp++ = ch;
     ch = getchr(st);
     if (!my_isxdigit(ch, 'F', 'f'))  {
-        Term t = ( Yap_local.ActiveError->errorRawTerm ?  Yap_local.ActiveError->errorRawTerm : MkIntegerTerm(ch) );
-        Yap_local.ActiveError->errorRawTerm = 0;
+        Term t = ( REMOTE_ActiveError(worker_id)->errorRawTerm ?  REMOTE_ActiveError(worker_id)->errorRawTerm : MkIntegerTerm(ch) );
+        REMOTE_ActiveError(worker_id)->errorRawTerm = 0;
       Yap_ThrowError(SYNTAX_ERROR, t, "invalid hexadecimal digit 0x%C",ch)   ;
       return 0;
     }
@@ -554,8 +555,8 @@ static Term get_num(int *chp, int *chbuffp, StreamDesc *st, int sign, char **buf
     base = 8;
     ch = getchr(st);
       if (ch < '0' || ch > '7') {
-          Term t = ( Yap_local.ActiveError->errorRawTerm ?  Yap_local.ActiveError->errorRawTerm : MkIntegerTerm(ch) );
-          Yap_local.ActiveError->errorRawTerm = 0;
+          Term t = ( REMOTE_ActiveError(worker_id)->errorRawTerm ?  REMOTE_ActiveError(worker_id)->errorRawTerm : MkIntegerTerm(ch) );
+          REMOTE_ActiveError(worker_id)->errorRawTerm = 0;
           Yap_ThrowError(SYNTAX_ERROR, t, "invalid octal digit 0x%C",ch)   ;
         return 0;
       }
@@ -564,8 +565,8 @@ static Term get_num(int *chp, int *chbuffp, StreamDesc *st, int sign, char **buf
     base = 2;
     ch = getchr(st);
     if (ch < '0' || ch > '1') {
-        Term t = ( Yap_local.ActiveError->errorRawTerm ?  Yap_local.ActiveError->errorRawTerm : MkIntegerTerm(ch) );
-        Yap_local.ActiveError->errorRawTerm = 0;
+        Term t = ( REMOTE_ActiveError(worker_id)->errorRawTerm ?  REMOTE_ActiveError(worker_id)->errorRawTerm : MkIntegerTerm(ch) );
+        REMOTE_ActiveError(worker_id)->errorRawTerm = 0;
         Yap_ThrowError(SYNTAX_ERROR, t, "invalid binary digit 0x%C",ch)   ;
       return 0;
     }
@@ -697,11 +698,11 @@ Term Yap_scan_num(StreamDesc *inp, bool error_on) {
   char *ptr;
   int lvl = push_text_stack();
 
-    LOCAL_VarTable = LOCAL_AnonVarTable = NULL;
-    LOCAL_VarList = LOCAL_VarTail = NULL;
-  if (!(ptr = Malloc(4096))) {
-    LOCAL_ErrorMessage = "Trail Overflow";
-    LOCAL_Error_TYPE = RESOURCE_ERROR_TRAIL;
+    REMOTE_VarTable(worker_id) = REMOTE_AnonVarTable(worker_id) = NULL;
+    REMOTE_VarList(worker_id) = REMOTE_VarTail(worker_id) = NULL;
+  if (!(ptr = Malloc(4096 PASS_REGS))) {
+    REMOTE_ActiveError(worker_id)->errorMsg = "Trail Overflow";
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_TRAIL;
     return 0;
   }
 #if HAVE_ISWSPACE
@@ -711,7 +712,7 @@ Term Yap_scan_num(StreamDesc *inp, bool error_on) {
   while (isspace(ch = getchr(inp)))
     ;
 #endif
-  TokEntry *tokptr = Malloc(sizeof(TokEntry));
+  TokEntry *tokptr = Malloc(sizeof(TokEntry) PASS_REGS);
   tokptr->TokLine = GetCurInpLine(inp);
   tokptr->TokPos = GetCurInpPos(inp);
   if (ch == '-') {
@@ -724,13 +725,13 @@ Term Yap_scan_num(StreamDesc *inp, bool error_on) {
     cherr = '\0';
     if (ASP - HR < 1024) {
       Yap_clean_tokenizer();
-      LOCAL_ErrorMessage = "Stack Overflow";
-      LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;
+      REMOTE_ActiveError(worker_id)->errorMsg = "Stack Overflow";
+      REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;
       pop_text_stack(lvl);
       return 0;
     }
     size_t sz = 1024;
-    char *buf = Malloc(sz);
+    char *buf = Malloc(sz PASS_REGS);
     out = get_num(&ch, &cherr, inp, sign, &buf, &sz); /*  */
   } else {
     out = 0;
@@ -750,9 +751,9 @@ Term Yap_scan_num(StreamDesc *inp, bool error_on) {
 
 #define CHECK_SPACE()                                                          \
   if (ASP - HR < 1024) {                                                       \
-    LOCAL_ErrorMessage = "Stack Overflow";                                     \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;                                   \
-    LOCAL_Error_Size = 0L;                                                     \
+    REMOTE_ActiveError(worker_id)->errorMsg = "Stack Overflow";                                     \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;                                   \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = 0L;                                                     \
     if (p) {                                                                   \
       p->Tok = Ord(kind = eot_tok);                                            \
       p->TokInfo = TermOutOfStackError;                                        \
@@ -826,16 +827,16 @@ const char *Yap_tokText(void *tokptre) {
     return "<QQ>";
   case Number_tok:
     if (IsIntegerTerm(info)) {
-      char *s = Malloc(36);
+      char *s = Malloc(36 PASS_REGS);
       snprintf(s, 35, Int_FORMAT, IntegerOfTerm(info));
       return s;
     } else if (IsFloatTerm(info)) {
-      char *s = Malloc(64);
+      char *s = Malloc(64 PASS_REGS);
       snprintf(s, 63, "%6g", FloatOfTerm(info));
       return s;
     } else {
       size_t len = Yap_gmp_to_size(info, 10);
-      char *s = Malloc(len + 2);
+      char *s = Malloc(len + 2 PASS_REGS);
       return Yap_gmp_to_string(info, s, len + 1, 10);
     }
     break;
@@ -852,41 +853,41 @@ static void open_comment(int ch, StreamDesc *st USES_REGS) {
   HR += 5;
   h0[0] = AbsAppl(h0 + 2);
   h0[1] = TermNil;
-  if (!LOCAL_CommentsTail) {
+  if (!REMOTE_CommentsTail(worker_id)) {
     /* first comment */
-    LOCAL_Comments = AbsPair(h0);
+    REMOTE_Comments(worker_id) = AbsPair(h0);
   } else {
     /* extra comment */
-    *LOCAL_CommentsTail = AbsPair(h0);
+    *REMOTE_CommentsTail(worker_id) = AbsPair(h0);
   }
-  LOCAL_CommentsTail = h0 + 1;
+  REMOTE_CommentsTail(worker_id) = h0 + 1;
   h0 += 2;
   h0[0] = (CELL)FunctorMinus;
   h0[1] = Yap_StreamPosition(st - GLOBAL_Stream);
   h0[2] = TermNil;
-  LOCAL_CommentsNextChar = h0 + 2;
-  LOCAL_CommentsBuff = (wchar_t *)Malloc(1024 * sizeof(wchar_t));
-  LOCAL_CommentsBuffLim = 1024;
-  LOCAL_CommentsBuff[0] = ch;
-  LOCAL_CommentsBuffPos = 1;
+  REMOTE_CommentsNextChar(worker_id) = h0 + 2;
+  REMOTE_CommentsBuff(worker_id) = (wchar_t *)Malloc(1024 * sizeof(wchar_t) PASS_REGS);
+  REMOTE_CommentsBuffLim(worker_id) = 1024;
+  REMOTE_CommentsBuff(worker_id)[0] = ch;
+  REMOTE_CommentsBuffPos(worker_id) = 1;
 }
 
 static void extend_comment(int ch USES_REGS) {
-  LOCAL_CommentsBuff[LOCAL_CommentsBuffPos] = ch;
-  LOCAL_CommentsBuffPos++;
-  if (LOCAL_CommentsBuffPos == LOCAL_CommentsBuffLim - 1) {
-    LOCAL_CommentsBuff = (wchar_t *)realloc(
-        LOCAL_CommentsBuff, sizeof(wchar_t) * (LOCAL_CommentsBuffLim + 4096));
-    LOCAL_CommentsBuffLim += 4096;
+  REMOTE_CommentsBuff(worker_id)[REMOTE_CommentsBuffPos(worker_id)] = ch;
+  REMOTE_CommentsBuffPos(worker_id)++;
+  if (REMOTE_CommentsBuffPos(worker_id) == REMOTE_CommentsBuffLim(worker_id) - 1) {
+    REMOTE_CommentsBuff(worker_id) = (wchar_t *)realloc(
+        REMOTE_CommentsBuff(worker_id), sizeof(wchar_t) * (REMOTE_CommentsBuffLim(worker_id) + 4096));
+    REMOTE_CommentsBuffLim(worker_id) += 4096;
   }
 }
 
 static void close_comment(USES_REGS1) {
-  LOCAL_CommentsBuff[LOCAL_CommentsBuffPos] = '\0';
-  *LOCAL_CommentsNextChar = Yap_WCharsToString(LOCAL_CommentsBuff PASS_REGS);
-  Free(LOCAL_CommentsBuff);
-  LOCAL_CommentsBuff = NULL;
-  LOCAL_CommentsBuffLim = 0;
+  REMOTE_CommentsBuff(worker_id)[REMOTE_CommentsBuffPos(worker_id)] = '\0';
+  *REMOTE_CommentsNextChar(worker_id) = Yap_WCharsToString(REMOTE_CommentsBuff(worker_id) PASS_REGS);
+  Free(REMOTE_CommentsBuff(worker_id) PASS_REGS);
+  REMOTE_CommentsBuff(worker_id) = NULL;
+  REMOTE_CommentsBuffLim(worker_id) = 0;
 }
 
 // mark that we reached EOF,
@@ -912,8 +913,8 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
   char *TokImage = Malloc(imgsz PASS_REGS);
   bool store_comments = params->store_comments;
 
-    LOCAL_VarTable = NULL;
-  LOCAL_AnonVarTable = NULL;
+    REMOTE_VarTable(worker_id) = NULL;
+  REMOTE_AnonVarTable(worker_id) = NULL;
   l = NULL;
   p = NULL; /* Just to make lint happy */
   ch = getchr(st);
@@ -923,14 +924,14 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
   }
   params->tposOUTPUT = Yap_StreamPosition(st - GLOBAL_Stream);
   Yap_setCurrentSourceLocation(st);
-  LOCAL_StartLineCount = st->linecount;
-  LOCAL_StartLinePos = st->linepos;
+  REMOTE_StartLineCount(worker_id) = st->linecount;
+  REMOTE_StartLinePos(worker_id) = st->linepos;
   do {
     int quote, isvar;
     unsigned char *charp, *mp;
     size_t len;
 
-    t = Malloc(sizeof(TokEntry));
+    t = Malloc(sizeof(TokEntry) PASS_REGS);
     t->TokNext = NULL;
     if (t == NULL) {
       return CodeSpaceError(t, p, l);
@@ -1001,7 +1002,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
         if (charp == (unsigned char *)TokImage + (imgsz - 1)) {
           unsigned char *p0 = (unsigned char *)TokImage;
           imgsz = Yap_Min(imgsz * 2, imgsz + MBYTE);
-          TokImage = Realloc(p0, imgsz);
+          TokImage = Realloc(p0, imgsz PASS_REGS);
           if (TokImage == NULL) {
               return CodeSpaceError(t, p, l);
           }
@@ -1064,7 +1065,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
         t->Tok = Number_tok;
         t->TokPos = GetCurInpPos(st);
         t->TokLine = GetCurInpLine(st);
-        e = Malloc(sizeof(TokEntry));
+        e = Malloc(sizeof(TokEntry) PASS_REGS);
         if (e == NULL) {
             return TrailSpaceError(p, l);
 
@@ -1090,7 +1091,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
             t->TokInfo = (Term)Yap_LookupVar("E");
             t->TokPos = GetCurInpPos(st);
             t->TokLine = GetCurInpLine(st);
-            e2 = Malloc(sizeof(TokEntry));
+            e2 = Malloc(sizeof(TokEntry) PASS_REGS);
             if (e2 == NULL) {
                 return TrailSpaceError(p, l);
             } else {
@@ -1124,7 +1125,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
             t->TokInfo = MkAtomTerm(AtomE);
             t->TokLine = GetCurInpLine(st);
             t->TokPos = GetCurInpPos(st);
-            e2 = Malloc(sizeof(TokEntry));
+            e2 = Malloc(sizeof(TokEntry) PASS_REGS);
             if (e2 == NULL) {
                 return TrailSpaceError(p, l);
             } else {
@@ -1154,7 +1155,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
       while (TRUE) {
         if (charp > (unsigned char *)TokImage + (imgsz - 1)) {
 	  size_t sz = charp-(unsigned char *)TokImage;
-          TokImage = Realloc(TokImage, (imgsz = Yap_Min(imgsz * 2, imgsz + MBYTE)));
+          TokImage = Realloc(TokImage, (imgsz = Yap_Min(imgsz * 2, imgsz + MBYTE)) PASS_REGS);
           if (TokImage == NULL) {
               return CodeSpaceError(t, p, l);
           }
@@ -1164,7 +1165,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
         if (ch == 10 && (trueGlobalPrologFlag(ISO_FLAG) ||
 			 falseLocalPrologFlag(MULTILINE_QUOTED_TEXT_FLAG))) {
           /* in ISO a new line terminates a string */
-          LOCAL_ErrorMessage = "layout character \n inside quotes";
+          REMOTE_ActiveError(worker_id)->errorMsg = "layout character \n inside quotes";
           break;
         }
         if (ch == EOFCHAR) {
@@ -1194,14 +1195,14 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
       *charp = '\0';
       if (quote == '"') {
         t->TokInfo = Yap_CharsToTDQ((char *)TokImage, CurrentModule,
-                                    LOCAL_encoding PASS_REGS);
+                                    REMOTE_encoding(worker_id) PASS_REGS);
         if (!(t->TokInfo)) {
 	  return CodeSpaceError(t, p, l);
         }
         t->Tok = Ord(kind = String_tok);
       } else if (quote == '`') {
         t->TokInfo = Yap_CharsToTBQ((char *)TokImage, CurrentModule,
-                                    LOCAL_encoding PASS_REGS);
+                                    REMOTE_encoding(worker_id) PASS_REGS);
         if (!(t->TokInfo)) {
 	  return CodeSpaceError(t, p, l);
         }
@@ -1335,7 +1336,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
           if (charp >= (unsigned char *)TokImage + (imgsz - 10)) {
 	    size_t sz = charp - (unsigned char *)TokImage;
             imgsz = Yap_Min(imgsz * 2, imgsz + MBYTE);
-            TokImage = Realloc(TokImage, imgsz);
+            TokImage = Realloc(TokImage, imgsz PASS_REGS);
             if (!TokImage) {
 	      return CodeSpaceError(t, p, l);
             }
@@ -1410,13 +1411,13 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
         if (ch == '|') {
           qq_t *qq = (qq_t *)calloc(sizeof(qq_t), 1);
           if (!qq) {
-            LOCAL_ErrorMessage = "not enough heap space to read in quasi quote";
+            REMOTE_ActiveError(worker_id)->errorMsg = "not enough heap space to read in quasi quote";
             t->Tok = Ord(kind = eot_tok);
             t->TokInfo = TermOutOfHeapError;
 	    return l;
           }
           if (cur_qq) {
-            LOCAL_ErrorMessage = "quasi quote in quasi quote";
+            REMOTE_ActiveError(worker_id)->errorMsg = "quasi quote in quasi quote";
 	    //                      Yap_ReleasePreAllocCodeSpace((CODEADDR)TokImage);
             t->Tok = Ord(kind = eot_tok);
             t->TokInfo = TermOutOfHeapError;
@@ -1451,7 +1452,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
       } else if (och == '|' && ch == '|') {
         qq_t *qq = cur_qq;
         if (!qq) {
-          LOCAL_ErrorMessage = "quasi quoted's || without {|";
+          REMOTE_ActiveError(worker_id)->errorMsg = "quasi quoted's || without {|";
 	  //          Yap_ReleasePreAllocCodeSpace((CODEADDR)TokImage);
           cur_qq = NULL;
           t->Tok = Ord(kind = eot_tok);
@@ -1498,7 +1499,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
         len = charp - (unsigned char *)TokImage;
         mp = malloc(len + 1);
         if (mp == NULL) {
-          LOCAL_ErrorMessage = "not enough heap space to read in quasi quote";
+          REMOTE_ActiveError(worker_id)->errorMsg = "not enough heap space to read in quasi quote";
           t->Tok = Ord(kind = eot_tok);
           t->TokInfo = TermOutOfHeapError;
             return l;
@@ -1538,19 +1539,19 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
       t->Tok = Ord(kind = eot_tok);
       t->TokInfo = TermEof;
     }
-    if (LOCAL_ErrorMessage) {
+    if (REMOTE_ActiveError(worker_id)->errorMsg) {
       /* insert an error token to inform the system of what happened */
-      TokEntry *e = Malloc(sizeof(TokEntry));
+      TokEntry *e = Malloc(sizeof(TokEntry) PASS_REGS);
       if (e == NULL) {
           return TrailSpaceError(p, l);
       }
       p->TokNext = e;
       e->Tok = Error_tok;
-      e->TokInfo = MkAtomTerm(Yap_LookupAtom(LOCAL_ErrorMessage));
+      e->TokInfo = MkAtomTerm(Yap_LookupAtom(REMOTE_ActiveError(worker_id)->errorMsg));
       e->TokPos = GetCurInpPos(st);
       e->TokLine = GetCurInpLine(st);
       e->TokNext = NULL;
-      LOCAL_ErrorMessage = NULL;
+      REMOTE_ActiveError(worker_id)->errorMsg = NULL;
       p = e;
     }
   } while (kind != eot_tok);
@@ -1560,12 +1561,12 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
 
 void Yap_clean_tokenizer(void) {
   CACHE_REGS
-  LOCAL_Comments = TermNil;
-  LOCAL_CommentsNextChar = LOCAL_CommentsTail = NULL;
-  if (LOCAL_CommentsBuff) {
-    LOCAL_CommentsBuff = NULL;
+  REMOTE_Comments(worker_id) = TermNil;
+  REMOTE_CommentsNextChar(worker_id) = REMOTE_CommentsTail(worker_id) = NULL;
+  if (REMOTE_CommentsBuff(worker_id)) {
+    REMOTE_CommentsBuff(worker_id) = NULL;
   }
-  LOCAL_CommentsBuffLim = 0;
+  REMOTE_CommentsBuffLim(worker_id) = 0;
 }
 
 /// @}

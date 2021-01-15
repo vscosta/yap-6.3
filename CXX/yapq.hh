@@ -47,8 +47,9 @@ class X_API YAPQuery : public YAPPredicate {
   // temporaries
   YAPError *e;
 
-  inline void setNext() { // oq = LOCAL_execution;
-    //  LOCAL_execution = this;
+  inline void setNext() { // oq = REMOTE_execution(worker_id);
+    CACHE_REGS
+    //  REMOTE_execution(worker_id) = this;
     q_open = true;
     q_state = 0;
     q_flags = true; // PL_Q_PASS_EXCEPTION;
@@ -56,7 +57,7 @@ class X_API YAPQuery : public YAPPredicate {
     q_h.p = P;
     q_h.cp = CP;
     // make sure this is safe
-    q_h.CurSlot = LOCAL_CurSlot;
+    q_h.CurSlot = REMOTE_CurSlot(worker_id);
   };
 
   void openQuery();
@@ -64,6 +65,7 @@ class X_API YAPQuery : public YAPPredicate {
   PredEntry *rewriteUndefQuery();
 
 public:
+  CACHE_REGS
   YAPQuery() {
     goal = TermTrue;
     openQuery();
@@ -98,7 +100,7 @@ public:
   /// goal.
   inline YAPQuery(const char *s) : YAPPredicate(s, goal, names, (nts = &ARG1)) {
     __android_log_print(ANDROID_LOG_INFO, "YAPDroid", "got game %ld",
-                        LOCAL_CurSlot);
+                        REMOTE_CurSlot(worker_id));
 
     openQuery();
   };
@@ -360,7 +362,10 @@ public:
   void close() { Yap_exit(0); }
 
   /// execute the callback with a text argument.
-  bool hasError() { return LOCAL_Error_TYPE != YAP_NO_ERROR; }
+  bool hasError() {
+    CACHE_REGS
+    return REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR;
+  }
   /// build a query on the engine
   YAPQuery *query(const char *s) { return new YAPQuery(s); };
   /// build a query from a term
@@ -368,7 +373,7 @@ public:
   /// build a query from a Prolog term (internal)
   YAPQuery *qt(Term t) { return new YAPQuery(YAPTerm(t)); };
   /// current module for the engine
-  Term Yap_CurrentModule() { return CurrentModule; }
+  Term Yap_CurrentModule__(USES_REGS1) { return CurrentModule; }
   /// given a handle, fetch a term from the engine
   inline YAPTerm getTerm(yhandle_t h) { return YAPTerm(h); }
   /// current directory for the engine
@@ -387,6 +392,7 @@ public:
 
     bool goal(YAPTerm t, bool release = false) { return goal(t.term(), release); }
     bool goal(Term t, bool release = false) {
+    CACHE_REGS
     return mgoal(t, Yap_CurrentModule(), release);
   }
   /// reset Prolog state

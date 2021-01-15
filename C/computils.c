@@ -106,27 +106,27 @@ AllocCMem (UInt size, struct intermediates *cip)
       blksz = CMEM_BLK_SIZE;
     if (!cip->blks) {
       CACHE_REGS
-      if (LOCAL_CMemFirstBlock) {
-	p = LOCAL_CMemFirstBlock;
-	blksz = LOCAL_CMemFirstBlockSz;
+      if (REMOTE_CMemFirstBlock(worker_id)) {
+	p = REMOTE_CMemFirstBlock(worker_id);
+	blksz = REMOTE_CMemFirstBlockSz(worker_id);
 	p->ublock.next = NULL;
       } else {
 	if (blksz < FIRST_CMEM_BLK_SIZE)
 	  blksz = FIRST_CMEM_BLK_SIZE;
 	p = (struct mem_blk *)Yap_AllocCodeSpace(blksz);
 	if (!p) {
-	  LOCAL_Error_Size = size;
+	  REMOTE_ActiveError(worker_id)->errorMsgLen = size;
 	  save_machine_regs();
 	  siglongjmp(cip->CompilerBotch, OUT_OF_HEAP_BOTCH);
 	}
-	LOCAL_CMemFirstBlock = p;
-	LOCAL_CMemFirstBlockSz = blksz;
+	REMOTE_CMemFirstBlock(worker_id) = p;
+	REMOTE_CMemFirstBlockSz(worker_id) = blksz;
       }
     } else {
       p = (struct mem_blk *)Yap_AllocCodeSpace(blksz);
       if (!p) {
 	CACHE_REGS
-	LOCAL_Error_Size = size;
+	REMOTE_ActiveError(worker_id)->errorMsgLen = size;
 	save_machine_regs();
 	siglongjmp(cip->CompilerBotch, OUT_OF_HEAP_BOTCH);
       }
@@ -145,7 +145,7 @@ AllocCMem (UInt size, struct intermediates *cip)
   char *p;
   if (ASP <= CellPtr (cip->freep) + 256) {
     CACHE_REGS
-    LOCAL_Error_Size = 256+((char *)cip->freep - (char *)HR);
+    REMOTE_ActiveError(worker_id)->errorMsgLen = 256+((char *)cip->freep - (char *)HR);
     save_machine_regs();
     siglongjmp(cip->CompilerBotch, OUT_OF_STACK_BOTCH);
   }
@@ -163,13 +163,13 @@ Yap_ReleaseCMem (struct intermediates *cip)
   struct mem_blk *p = cip->blks;
   while (p) {
     struct mem_blk *nextp = p->ublock.next;
-    if (p != LOCAL_CMemFirstBlock)
+    if (p != REMOTE_CMemFirstBlock(worker_id))
       Yap_FreeCodeSpace((ADDR)p);
     p = nextp;
   }
   cip->blks = NULL;
   if (cip->label_offset &&
-      cip->label_offset != LOCAL_LabelFirstArray) {
+      cip->label_offset != REMOTE_LabelFirstArray(worker_id)) {
     Yap_FreeCodeSpace((ADDR)cip->label_offset);
   }
 #endif

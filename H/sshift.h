@@ -129,7 +129,7 @@ INLINE_ONLY int
 IsHeapP__ (CELL * ptr USES_REGS)
 {
 #if USE_SYSTEM_MALLOC
-  return (int) ((ptr < (CELL *) LOCAL_GlobalBase || ptr > (CELL *) LOCAL_TrailTop));
+  return (int) ((ptr < (CELL *) REMOTE_GlobalBase(worker_id) || ptr > (CELL *) REMOTE_TrailTop(worker_id)));
 #else
   return (int) ((ptr >= (CELL *) Yap_HeapBase && ptr <= (CELL *) HeapTop));
 #endif
@@ -145,13 +145,13 @@ INLINE_ONLY CELL *PtoGloAdjust__ (CELL * CACHE_TYPE);
 INLINE_ONLY CELL *
 PtoGloAdjust__ (CELL * ptr USES_REGS)
 {
-  if (ptr < LOCAL_GSplit) {
-    if (ptr < LOCAL_OldH0)
-      return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_DelayDiff)));
+  if (ptr < REMOTE_GSplit(worker_id)) {
+    if (ptr < REMOTE_OldH0(worker_id))
+      return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_DelayDiff(worker_id))));
     else
-      return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_GDiff0)));
+      return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_GDiff0(worker_id))));
   } else {
-    return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_GDiff)));
+    return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_GDiff(worker_id))));
   }
 }
 
@@ -162,10 +162,10 @@ INLINE_ONLY CELL *PtoDelayAdjust__ (CELL * CACHE_TYPE);
 INLINE_ONLY CELL *
 PtoDelayAdjust__ (CELL * ptr USES_REGS)
 {
-  if (!LOCAL_GSplit || ptr < LOCAL_GSplit)
-    return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_DelayDiff)));
+  if (!REMOTE_GSplit(worker_id) || ptr < REMOTE_GSplit(worker_id))
+    return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_DelayDiff(worker_id))));
   else
-    return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_GDiff0)));
+    return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_GDiff0(worker_id))));
 }
 
 INLINE_ONLY CELL *PtoBaseAdjust__ (CELL * CACHE_TYPE);
@@ -173,7 +173,7 @@ INLINE_ONLY CELL *PtoBaseAdjust__ (CELL * CACHE_TYPE);
 INLINE_ONLY CELL *
 PtoBaseAdjust__ (CELL * ptr USES_REGS)
 {
-    return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_BaseDiff)));
+    return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_BaseDiff(worker_id))));
 }
 
 
@@ -183,7 +183,7 @@ INLINE_ONLY tr_fr_ptr PtoTRAdjust__ (tr_fr_ptr CACHE_TYPE);
 INLINE_ONLY tr_fr_ptr
 PtoTRAdjust__ (tr_fr_ptr ptr USES_REGS)
 {
-  return (tr_fr_ptr) (((tr_fr_ptr) (CharP (ptr) + LOCAL_TrDiff)));
+  return (tr_fr_ptr) (((tr_fr_ptr) (CharP (ptr) + REMOTE_TrDiff(worker_id))));
 }
 
 
@@ -193,7 +193,7 @@ INLINE_ONLY CELL *CellPtoTRAdjust__ (CELL * CACHE_TYPE);
 INLINE_ONLY CELL *
 CellPtoTRAdjust__ (CELL * ptr USES_REGS)
 {
-  return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_TrDiff)));
+  return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_TrDiff(worker_id))));
 }
 
 
@@ -203,7 +203,7 @@ INLINE_ONLY CELL *PtoLocAdjust__ (CELL * CACHE_TYPE);
 INLINE_ONLY CELL *
 PtoLocAdjust__ (CELL * ptr USES_REGS)
 {
-  return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_LDiff)));
+  return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_LDiff(worker_id))));
 }
 
 
@@ -212,7 +212,7 @@ INLINE_ONLY struct cut_c_str *CutCAdjust__ (struct cut_c_str * CACHE_TYPE);
 INLINE_ONLY struct cut_c_str *
 CutCAdjust__ (struct  cut_c_str * ptr USES_REGS)
 {
-  return (struct cut_c_str *) (CharP (ptr) + LOCAL_LDiff);
+  return (struct cut_c_str *) (CharP (ptr) + REMOTE_LDiff(worker_id));
 }
 
 
@@ -222,7 +222,7 @@ INLINE_ONLY choiceptr ChoicePtrAdjust__ (choiceptr CACHE_TYPE);
 INLINE_ONLY choiceptr
 ChoicePtrAdjust__ (choiceptr ptr USES_REGS)
 {
-  return (choiceptr) (((choiceptr) (CharP (ptr) + LOCAL_LDiff)));
+  return (choiceptr) (((choiceptr) (CharP (ptr) + REMOTE_LDiff(worker_id))));
 }
 
 
@@ -233,7 +233,7 @@ INLINE_ONLY choiceptr ConsumerChoicePtrAdjust__ (choiceptr CACHE_TYPE);
 INLINE_ONLY choiceptr
 ConsumerChoicePtrAdjust__ (choiceptr ptr USES_REGS)
 {
-  return (choiceptr) (((choiceptr) (CharP (ptr) + LOCAL_LDiff)));
+  return (choiceptr) (((choiceptr) (CharP (ptr) + REMOTE_LDiff(worker_id))));
 }
 
 
@@ -243,7 +243,7 @@ INLINE_ONLY choiceptr GeneratorChoicePtrAdjust__ (choiceptr CACHE_TYPE);
 INLINE_ONLY choiceptr
 GeneratorChoicePtrAdjust__ (choiceptr ptr USES_REGS)
 {
-  return (choiceptr) (((choiceptr) (CharP (ptr) + LOCAL_LDiff)));
+  return (choiceptr) (((choiceptr) (CharP (ptr) + REMOTE_LDiff(worker_id))));
 }
 
 
@@ -255,13 +255,13 @@ INLINE_ONLY CELL GlobalAdjust__ (CELL CACHE_TYPE);
 INLINE_ONLY CELL
 GlobalAdjust__ (CELL val USES_REGS)
 {
-  if ((CELL *)val < LOCAL_GSplit) {
+  if ((CELL *)val < REMOTE_GSplit(worker_id)) {
     if ((CELL *)val < H0) 
-      return (CELL) (val + LOCAL_DelayDiff);
+      return (CELL) (val + REMOTE_DelayDiff(worker_id));
     else
-      return (CELL) (val + LOCAL_GDiff0);
+      return (CELL) (val + REMOTE_GDiff0(worker_id));
   } else {
-    return (CELL) (val + LOCAL_GDiff);
+    return (CELL) (val + REMOTE_GDiff(worker_id));
   }
 }
 
@@ -272,10 +272,10 @@ INLINE_ONLY CELL DelayAdjust__ (CELL CACHE_TYPE);
 INLINE_ONLY CELL
 DelayAdjust__ (CELL val USES_REGS)
 {
-  if (!LOCAL_GSplit || (CELL *)val < LOCAL_GSplit)
-    return (CELL) (val + LOCAL_DelayDiff);
+  if (!REMOTE_GSplit(worker_id) || (CELL *)val < REMOTE_GSplit(worker_id))
+    return (CELL) (val + REMOTE_DelayDiff(worker_id));
   else
-    return (CELL) (val + LOCAL_GDiff0);
+    return (CELL) (val + REMOTE_GDiff0(worker_id));
 }
 
 
@@ -284,13 +284,13 @@ INLINE_ONLY ADDR GlobalAddrAdjust__ (ADDR CACHE_TYPE);
 INLINE_ONLY ADDR
 GlobalAddrAdjust__ (ADDR ptr USES_REGS)
 {
-  if ((CELL *)ptr < LOCAL_GSplit) {
+  if ((CELL *)ptr < REMOTE_GSplit(worker_id)) {
     if ((CELL *)ptr < H0) 
-      return (ADDR) (ptr + LOCAL_DelayDiff);
+      return (ADDR) (ptr + REMOTE_DelayDiff(worker_id));
     else
-      return (ADDR) ((ptr + LOCAL_GDiff0));
+      return (ADDR) ((ptr + REMOTE_GDiff0(worker_id)));
   } else {
-    return (ADDR) ((ptr + LOCAL_GDiff));
+    return (ADDR) ((ptr + REMOTE_GDiff(worker_id)));
   }
 }
 
@@ -302,10 +302,10 @@ INLINE_ONLY ADDR DelayAddrAdjust__ (ADDR CACHE_TYPE);
 INLINE_ONLY ADDR
 DelayAddrAdjust__ (ADDR ptr USES_REGS)
 {
-  if (!LOCAL_GSplit || (CELL *)ptr < LOCAL_GSplit)
-    return (ADDR) ((ptr + LOCAL_DelayDiff));
+  if (!REMOTE_GSplit(worker_id) || (CELL *)ptr < REMOTE_GSplit(worker_id))
+    return (ADDR) ((ptr + REMOTE_DelayDiff(worker_id)));
   else
-    return (ADDR) ((ptr + LOCAL_GDiff0));
+    return (ADDR) ((ptr + REMOTE_GDiff0(worker_id)));
 }
 
 
@@ -314,7 +314,7 @@ INLINE_ONLY ADDR BaseAddrAdjust__ (ADDR CACHE_TYPE);
 INLINE_ONLY ADDR
 BaseAddrAdjust__ (ADDR ptr USES_REGS)
 {
-  return (ADDR) ((ptr + LOCAL_BaseDiff));
+  return (ADDR) ((ptr + REMOTE_BaseDiff(worker_id)));
 }
 
 
@@ -324,7 +324,7 @@ INLINE_ONLY CELL LocalAdjust__ (CELL CACHE_TYPE);
 INLINE_ONLY CELL
 LocalAdjust__ (CELL val USES_REGS)
 {
-  return (CELL) ((val + LOCAL_LDiff));
+  return (CELL) ((val + REMOTE_LDiff(worker_id)));
 }
 
 
@@ -334,7 +334,7 @@ INLINE_ONLY ADDR LocalAddrAdjust__ (ADDR CACHE_TYPE);
 INLINE_ONLY ADDR
 LocalAddrAdjust__ (ADDR ptr USES_REGS)
 {
-  return (ADDR) ((ptr + LOCAL_LDiff));
+  return (ADDR) ((ptr + REMOTE_LDiff(worker_id)));
 }
 
 
@@ -344,7 +344,7 @@ INLINE_ONLY CELL TrailAdjust__ (CELL CACHE_TYPE);
 INLINE_ONLY CELL
 TrailAdjust__ (CELL val USES_REGS)
 {
-  return (CELL) ((val + LOCAL_TrDiff));
+  return (CELL) ((val + REMOTE_TrDiff(worker_id)));
 }
 
 
@@ -354,7 +354,7 @@ INLINE_ONLY ADDR TrailAddrAdjust__ (ADDR CACHE_TYPE);
 INLINE_ONLY ADDR
 TrailAddrAdjust__ (ADDR ptr USES_REGS)
 {
-  return (ADDR) ((ptr + LOCAL_TrDiff));
+  return (ADDR) ((ptr + REMOTE_TrDiff(worker_id)));
 }
 
 
@@ -364,7 +364,7 @@ INLINE_ONLY TokEntry *TokEntryAdjust__ (TokEntry * CACHE_TYPE);
 INLINE_ONLY TokEntry *
 TokEntryAdjust__ (TokEntry * ptr USES_REGS)
 {
-  return (TokEntry *) (((CELL) ptr + LOCAL_TrDiff));
+  return (TokEntry *) (((CELL) ptr + REMOTE_TrDiff(worker_id)));
 }
 
 
@@ -374,7 +374,7 @@ INLINE_ONLY VarEntry *VarEntryAdjust__ (VarEntry * CACHE_TYPE);
 INLINE_ONLY VarEntry *
 VarEntryAdjust__ (VarEntry * ptr USES_REGS)
 {
-  return (VarEntry *) (((CELL) ptr + LOCAL_TrDiff));
+  return (VarEntry *) (((CELL) ptr + REMOTE_TrDiff(worker_id)));
 }
 
 
@@ -386,7 +386,7 @@ INLINE_ONLY Functor
 FuncAdjust__ (Functor f USES_REGS)
 {
   if (!IsExtensionFunctor(f)) 
-    return (Functor) ((CharP (f) + LOCAL_HDiff));
+    return (Functor) ((CharP (f) + REMOTE_HDiff(worker_id)));
   return f;
 }
 
@@ -397,7 +397,7 @@ CellPtoHeapAdjust__ (CELL * ptr USES_REGS)
 {
   if (!ptr)
     return ptr;
-  return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_HDiff)));
+  return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY HoldEntry *HoldEntryAdjust__ (HoldEntry * CACHE_TYPE);
@@ -405,7 +405,7 @@ INLINE_ONLY HoldEntry *HoldEntryAdjust__ (HoldEntry * CACHE_TYPE);
 INLINE_ONLY HoldEntry *
 HoldEntryAdjust__ (HoldEntry * ptr USES_REGS)
 {
-  return (HoldEntry *) (((HoldEntry *) (CharP (ptr) + LOCAL_HDiff)));
+  return (HoldEntry *) (((HoldEntry *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY struct record_list *DBRecordAdjust__ (struct record_list * CACHE_TYPE);
@@ -415,7 +415,7 @@ DBRecordAdjust__ (struct record_list * ptr USES_REGS)
 {
   if (!ptr)
     return ptr;
-  return (struct record_list *) (CharP (ptr) + LOCAL_HDiff);
+  return (struct record_list *) (CharP (ptr) + REMOTE_HDiff(worker_id));
 }
 
 
@@ -454,7 +454,7 @@ INLINE_ONLY Atom AtomAdjust__ (Atom CACHE_TYPE);
 INLINE_ONLY Atom
 AtomAdjust__ (Atom at USES_REGS)
 {
-  return (Atom) ((at == NULL ? (at) : (Atom) (CharP (at) + LOCAL_HDiff)));
+  return (Atom) ((at == NULL ? (at) : (Atom) (CharP (at) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY Atom NoAGCAtomAdjust__ (Atom CACHE_TYPE);
@@ -462,7 +462,7 @@ INLINE_ONLY Atom NoAGCAtomAdjust__ (Atom CACHE_TYPE);
 INLINE_ONLY Atom
 NoAGCAtomAdjust__ (Atom at USES_REGS)
 {
-  return (Atom) ((at == NULL ? (at) : (Atom) (CharP (at) + LOCAL_HDiff)));
+  return (Atom) ((at == NULL ? (at) : (Atom) (CharP (at) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY Prop PropAdjust__ (Prop CACHE_TYPE);
@@ -470,7 +470,7 @@ INLINE_ONLY Prop PropAdjust__ (Prop CACHE_TYPE);
 INLINE_ONLY Prop
 PropAdjust__ (Prop p USES_REGS)
 {
-  return (Prop) ((p == NULL ? (p) : (Prop) (CharP (p) + LOCAL_HDiff)));
+  return (Prop) ((p == NULL ? (p) : (Prop) (CharP (p) + REMOTE_HDiff(worker_id))));
 }
 
 
@@ -481,7 +481,7 @@ INLINE_ONLY YAP_blob_t *BlobTypeAdjust__ (YAP_blob_t *CACHE_TYPE);
 INLINE_ONLY YAP_blob_t *
 BlobTypeAdjust__ ( YAP_blob_t *at USES_REGS)
 {
-  return ( YAP_blob_t *) ((at == NULL ? (at) : ( YAP_blob_t *) (CharP (at) + LOCAL_HDiff)));
+  return ( YAP_blob_t *) ((at == NULL ? (at) : ( YAP_blob_t *) (CharP (at) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY PredEntry *PredEntryAdjust__ (PredEntry * CACHE_TYPE);
@@ -489,7 +489,7 @@ INLINE_ONLY PredEntry *PredEntryAdjust__ (PredEntry * CACHE_TYPE);
 INLINE_ONLY PredEntry *
 PredEntryAdjust__ (PredEntry *p USES_REGS)
 {
-  return (PredEntry *) ((p == NULL ? (p) : (PredEntry *) (CharP (p) + LOCAL_HDiff)));
+  return (PredEntry *) ((p == NULL ? (p) : (PredEntry *) (CharP (p) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY struct mod_entry *ModEntryPtrAdjust__ (struct mod_entry * CACHE_TYPE);
@@ -497,7 +497,7 @@ INLINE_ONLY struct mod_entry *ModEntryPtrAdjust__ (struct mod_entry * CACHE_TYPE
 INLINE_ONLY struct mod_entry *
 ModEntryPtrAdjust__ (struct mod_entry *p USES_REGS)
 {
-  return (struct mod_entry *) ((p == NULL ? (p) : (struct mod_entry *) (CharP (p) + LOCAL_HDiff)));
+  return (struct mod_entry *) ((p == NULL ? (p) : (struct mod_entry *) (CharP (p) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY COUNT ConstantAdjust__ (COUNT CACHE_TYPE);
@@ -539,7 +539,7 @@ AtomTermAdjust__ (Term at USES_REGS)
 {
   if (at == 0L)
     return at;
-  return (Term)(CharP(at) + LOCAL_HDiff);
+  return (Term)(CharP(at) + REMOTE_HDiff(worker_id));
 }
 
 INLINE_ONLY Term ModuleAdjust__ (Term CACHE_TYPE);
@@ -557,7 +557,7 @@ CodeVarAdjust__ (Term var USES_REGS)
 {
   if (var == 0L)
     return var;
-  return (Term)(CharP(var) + LOCAL_HDiff);
+  return (Term)(CharP(var) + REMOTE_HDiff(worker_id));
 }
 
 
@@ -568,7 +568,7 @@ INLINE_ONLY Term BlobTermInCodeAdjust__ (Term CACHE_TYPE);
 INLINE_ONLY Term
 BlobTermInCodeAdjust__ (Term t USES_REGS)
 {
-  return (Term) (CharP(t) - LOCAL_HDiff);
+  return (Term) (CharP(t) - REMOTE_HDiff(worker_id));
 }
 
 
@@ -577,7 +577,7 @@ INLINE_ONLY Term CodeComposedTermAdjust__ (Term CACHE_TYPE);
 INLINE_ONLY Term
 CodeComposedTermAdjust__ (Term t USES_REGS)
 {
-  return (Term) (CharP(t) - LOCAL_HDiff);
+  return (Term) (CharP(t) - REMOTE_HDiff(worker_id));
 }
 
 
@@ -588,7 +588,7 @@ INLINE_ONLY Term BlobTermInCodeAdjust__ (Term CACHE_TYPE);
 INLINE_ONLY Term
 BlobTermInCodeAdjust__ (Term t USES_REGS)
 {
-  return (Term) (CharP(t) + LOCAL_HDiff);
+  return (Term) (CharP(t) + REMOTE_HDiff(worker_id));
 }
 
 INLINE_ONLY Term CodeComposedTermAdjust__ (Term CACHE_TYPE);
@@ -596,7 +596,7 @@ INLINE_ONLY Term CodeComposedTermAdjust__ (Term CACHE_TYPE);
 INLINE_ONLY Term
 CodeComposedTermAdjust__ (Term t USES_REGS)
 {
-  return (Term) (CharP(t) + LOCAL_HDiff);
+  return (Term) (CharP(t) + REMOTE_HDiff(worker_id));
 }
 
 
@@ -607,7 +607,7 @@ INLINE_ONLY AtomEntry *AtomEntryAdjust__ (AtomEntry * CACHE_TYPE);
 INLINE_ONLY AtomEntry *
 AtomEntryAdjust__ (AtomEntry * at USES_REGS)
 {
-  return (AtomEntry *) ((AtomEntry *) (CharP (at) + LOCAL_HDiff));
+  return (AtomEntry *) ((AtomEntry *) (CharP (at) + REMOTE_HDiff(worker_id)));
 }
 
 INLINE_ONLY GlobalEntry *GlobalEntryAdjust__ (GlobalEntry * CACHE_TYPE);
@@ -615,7 +615,7 @@ INLINE_ONLY GlobalEntry *GlobalEntryAdjust__ (GlobalEntry * CACHE_TYPE);
 INLINE_ONLY GlobalEntry *
 GlobalEntryAdjust__ (GlobalEntry * at USES_REGS)
 {
-  return (GlobalEntry *) ((GlobalEntry *) (CharP (at) + LOCAL_HDiff));
+  return (GlobalEntry *) ((GlobalEntry *) (CharP (at) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -625,7 +625,7 @@ INLINE_ONLY union CONSULT_OBJ *ConsultObjAdjust__ (union CONSULT_OBJ * CACHE_TYP
 INLINE_ONLY union CONSULT_OBJ *
 ConsultObjAdjust__ (union CONSULT_OBJ *co USES_REGS)
 {
-  return (union CONSULT_OBJ *) ((union CONSULT_OBJ *) (CharP (co) + LOCAL_HDiff));
+  return (union CONSULT_OBJ *) ((union CONSULT_OBJ *) (CharP (co) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -635,7 +635,7 @@ INLINE_ONLY DBRef DBRefAdjust__ (DBRef CACHE_TYPE);
 INLINE_ONLY DBRef
 DBRefAdjust__ (DBRef dbr USES_REGS)
 {
-  return (DBRef) ((DBRef) (CharP (dbr) + LOCAL_HDiff));
+  return (DBRef) ((DBRef) (CharP (dbr) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -645,7 +645,7 @@ INLINE_ONLY DBRef *DBRefPAdjust__ (DBRef * CACHE_TYPE);
 INLINE_ONLY DBRef *
 DBRefPAdjust__ (DBRef * dbrp USES_REGS)
 {
-  return (DBRef *) ((DBRef *) (CharP (dbrp) + LOCAL_HDiff));
+  return (DBRef *) ((DBRef *) (CharP (dbrp) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -655,7 +655,7 @@ INLINE_ONLY DBTerm *DBTermAdjust__ (DBTerm * CACHE_TYPE);
 INLINE_ONLY DBTerm *
 DBTermAdjust__ (DBTerm * dbtp USES_REGS)
 {
-  return (DBTerm *) ((DBTerm *) (CharP (dbtp) + LOCAL_HDiff));
+  return (DBTerm *) ((DBTerm *) (CharP (dbtp) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -666,7 +666,7 @@ INLINE_ONLY struct static_index *
 SIndexAdjust__ (struct static_index *si USES_REGS)
 {
   return (struct static_index
-	  *) ((struct static_index *) (CharP (si) + LOCAL_HDiff));
+	  *) ((struct static_index *) (CharP (si) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -679,7 +679,7 @@ INLINE_ONLY struct logic_upd_index *
 LUIndexAdjust__ (struct logic_upd_index *lui USES_REGS)
 {
   return (struct logic_upd_index
-	  *) ((struct logic_upd_index *) (CharP (lui) + LOCAL_HDiff));
+	  *) ((struct logic_upd_index *) (CharP (lui) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -689,7 +689,7 @@ INLINE_ONLY Term CodeAdjust__ (Term CACHE_TYPE);
 INLINE_ONLY Term
 CodeAdjust__ (Term dbr USES_REGS)
 {
-  return (Term) (CharP(dbr) + LOCAL_HDiff);
+  return (Term) (CharP(dbr) + REMOTE_HDiff(worker_id));
 }
 
 
@@ -699,7 +699,7 @@ INLINE_ONLY ADDR AddrAdjust__ (ADDR CACHE_TYPE);
 INLINE_ONLY ADDR
 AddrAdjust__ (ADDR addr USES_REGS)
 {
-  return (ADDR) ((ADDR) (CharP (addr) + LOCAL_HDiff));
+  return (ADDR) ((ADDR) (CharP (addr) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -709,7 +709,7 @@ INLINE_ONLY CODEADDR CodeAddrAdjust__ (CODEADDR CACHE_TYPE);
 INLINE_ONLY CODEADDR
 CodeAddrAdjust__ (CODEADDR addr USES_REGS)
 {
-  return (CODEADDR) ((CODEADDR) (CharP (addr) + LOCAL_HDiff));
+  return (CODEADDR) ((CODEADDR) (CharP (addr) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -720,7 +720,7 @@ CodeCharPAdjust__ (char * addr USES_REGS)
 {
   if (!addr)
     return NULL;
-  return addr + LOCAL_HDiff;
+  return addr + REMOTE_HDiff(worker_id);
 }
 
 INLINE_ONLY const char * CodeConstCharPAdjust__ (const char * CACHE_TYPE);
@@ -730,7 +730,7 @@ CodeConstCharPAdjust__ (const char * addr USES_REGS)
 {
   if (!addr)
     return NULL;
-  return addr + LOCAL_HDiff;
+  return addr + REMOTE_HDiff(worker_id);
 }
 
 INLINE_ONLY void * CodeVoidPAdjust__ (void * CACHE_TYPE);
@@ -740,7 +740,7 @@ CodeVoidPAdjust__ (void * addr USES_REGS)
 {
   if (!addr)
     return NULL;
-  return (void *)((char *)addr + LOCAL_HDiff);
+  return (void *)((char *)addr + REMOTE_HDiff(worker_id));
 }
 
 INLINE_ONLY struct halt_hook *HaltHookAdjust__ (struct halt_hook * CACHE_TYPE);
@@ -750,7 +750,7 @@ HaltHookAdjust__ (struct halt_hook * addr USES_REGS)
 {
   if (!addr)
     return NULL;
-  return  (struct halt_hook *) (CharP (addr) + LOCAL_HDiff);
+  return  (struct halt_hook *) (CharP (addr) + REMOTE_HDiff(worker_id));
 }
 
 INLINE_ONLY BlockHeader *BlockAdjust__ (BlockHeader * CACHE_TYPE);
@@ -758,7 +758,7 @@ INLINE_ONLY BlockHeader *BlockAdjust__ (BlockHeader * CACHE_TYPE);
 INLINE_ONLY BlockHeader *
 BlockAdjust__ (BlockHeader * addr USES_REGS)
 {
-  return (BlockHeader *) ((BlockHeader *) (CharP (addr) + LOCAL_HDiff));
+  return (BlockHeader *) ((BlockHeader *) (CharP (addr) + REMOTE_HDiff(worker_id)));
 }
 
 INLINE_ONLY yamop *PtoOpAdjust__ (yamop * CACHE_TYPE);
@@ -767,7 +767,7 @@ INLINE_ONLY yamop *
 PtoOpAdjust__ (yamop * ptr USES_REGS)
 {
   if (ptr)
-    return (yamop *) (CharP (ptr) + LOCAL_HDiff);
+    return (yamop *) (CharP (ptr) + REMOTE_HDiff(worker_id));
   return ptr;
 }
 
@@ -778,7 +778,7 @@ OpListAdjust__ (struct operator_entry * ptr USES_REGS)
 {
   if (!ptr)
     return ptr;
-  return (struct operator_entry *) (CharP (ptr) + LOCAL_HDiff);
+  return (struct operator_entry *) (CharP (ptr) + REMOTE_HDiff(worker_id));
 }
 
 
@@ -787,7 +787,7 @@ INLINE_ONLY struct logic_upd_clause *PtoLUClauseAdjust__ (struct logic_upd_claus
 INLINE_ONLY struct logic_upd_clause *
 PtoLUClauseAdjust__ (struct logic_upd_clause * ptr USES_REGS)
 {
-  return (struct logic_upd_clause *) (CharP (ptr) + LOCAL_HDiff);
+  return (struct logic_upd_clause *) (CharP (ptr) + REMOTE_HDiff(worker_id));
 }
 
 INLINE_ONLY struct logic_upd_index *PtoLUIndexAdjust__ (struct logic_upd_index * CACHE_TYPE);
@@ -795,7 +795,7 @@ INLINE_ONLY struct logic_upd_index *PtoLUIndexAdjust__ (struct logic_upd_index *
 INLINE_ONLY struct logic_upd_index *
 PtoLUIndexAdjust__ (struct logic_upd_index * ptr USES_REGS)
 {
-  return (struct logic_upd_index *) (CharP (ptr) + LOCAL_HDiff);
+  return (struct logic_upd_index *) (CharP (ptr) + REMOTE_HDiff(worker_id));
 }
 
 
@@ -805,7 +805,7 @@ INLINE_ONLY CELL *PtoHeapCellAdjust__ (CELL * CACHE_TYPE);
 INLINE_ONLY CELL *
 PtoHeapCellAdjust__ (CELL * ptr USES_REGS)
 {
-  return (CELL *) (((CELL *) (CharP (ptr) + LOCAL_HDiff)));
+  return (CELL *) (((CELL *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY AtomHashEntry *PtoAtomHashEntryAdjust__ (AtomHashEntry * CACHE_TYPE);
@@ -813,7 +813,7 @@ INLINE_ONLY AtomHashEntry *PtoAtomHashEntryAdjust__ (AtomHashEntry * CACHE_TYPE)
 INLINE_ONLY AtomHashEntry *
 PtoAtomHashEntryAdjust__ (AtomHashEntry * ptr USES_REGS)
 {
-  return (AtomHashEntry *) (((AtomHashEntry *) (CharP (ptr) + LOCAL_HDiff)));
+  return (AtomHashEntry *) (((AtomHashEntry *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY Term TermToGlobalAdjust__ (Term CACHE_TYPE);
@@ -849,7 +849,7 @@ INLINE_ONLY op_entry *OpRTableAdjust__ (op_entry * CACHE_TYPE);
 INLINE_ONLY op_entry *
 OpRTableAdjust__ (op_entry * ptr USES_REGS)
 {
-  return (op_entry *) (((op_entry *) (CharP (ptr) + LOCAL_HDiff)));
+  return (op_entry *) (((op_entry *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 #endif // USE_THREADED_CODE
@@ -859,7 +859,7 @@ INLINE_ONLY OpEntry *OpEntryAdjust__ (OpEntry * CACHE_TYPE);
 INLINE_ONLY OpEntry *
 OpEntryAdjust__ (OpEntry * ptr USES_REGS)
 {
-  return (OpEntry *) (((OpEntry *) (CharP (ptr) + LOCAL_HDiff)));
+  return (OpEntry *) (((OpEntry *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY PredEntry *PtoPredAdjust__ (PredEntry * CACHE_TYPE);
@@ -867,7 +867,7 @@ INLINE_ONLY PredEntry *PtoPredAdjust__ (PredEntry * CACHE_TYPE);
 INLINE_ONLY PredEntry *
 PtoPredAdjust__ (PredEntry * ptr USES_REGS)
 {
-  return (PredEntry *) (((PredEntry *) (CharP (ptr) + LOCAL_HDiff)));
+  return (PredEntry *) (((PredEntry *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 INLINE_ONLY PredEntry **PtoPtoPredAdjust__ (PredEntry ** CACHE_TYPE);
@@ -877,7 +877,7 @@ PtoPtoPredAdjust__ (PredEntry **ptr USES_REGS)
 {
   if (!ptr)
     return NULL;
-  return (PredEntry **) (((PredEntry **) (CharP (ptr) + LOCAL_HDiff)));
+  return (PredEntry **) (((PredEntry **) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 
@@ -889,7 +889,7 @@ PtoArrayEAdjust__ (ArrayEntry * ptr USES_REGS)
 {
   if (!ptr)
     return NULL;
-  return (ArrayEntry *) (((ArrayEntry *) (CharP (ptr) + LOCAL_HDiff)));
+  return (ArrayEntry *) (((ArrayEntry *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 
@@ -900,7 +900,7 @@ PtoGlobalEAdjust__ (GlobalEntry * ptr USES_REGS)
 {
   if (!ptr)
     return NULL;
-  return (GlobalEntry *) (((GlobalEntry *) (CharP (ptr) + LOCAL_HDiff)));
+  return (GlobalEntry *) (((GlobalEntry *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 
@@ -911,7 +911,7 @@ PtoArraySAdjust__ (StaticArrayEntry * ptr USES_REGS)
 {
   if (!ptr)
     return NULL;
-  return (StaticArrayEntry *) (((StaticArrayEntry *) (CharP (ptr) + LOCAL_HDiff)));
+  return (StaticArrayEntry *) (((StaticArrayEntry *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 
@@ -922,7 +922,7 @@ INLINE_ONLY struct logic_upd_clause *
 PtoLUCAdjust__ (struct logic_upd_clause *ptr USES_REGS)
 {
   return (struct logic_upd_clause
-	  *) (((struct logic_upd_clause *) (CharP (ptr) + LOCAL_HDiff)));
+	  *) (((struct logic_upd_clause *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 
@@ -933,7 +933,7 @@ INLINE_ONLY struct static_clause *
 PtoStCAdjust__ (struct static_clause *ptr USES_REGS)
 {
   return (struct static_clause
-	  *) (((struct static_upd_clause *) (CharP (ptr) + LOCAL_HDiff)));
+	  *) (((struct static_upd_clause *) (CharP (ptr) + REMOTE_HDiff(worker_id))));
 }
 
 
@@ -942,7 +942,7 @@ INLINE_ONLY struct dbterm_list *PtoDBTLAdjust__ (struct dbterm_list * CACHE_TYPE
 INLINE_ONLY struct dbterm_list *
 PtoDBTLAdjust__ (struct dbterm_list * addr USES_REGS)
 {
-  return (struct dbterm_list *) ((ADDR) (CharP (addr) + LOCAL_HDiff));
+  return (struct dbterm_list *) ((ADDR) (CharP (addr) + REMOTE_HDiff(worker_id)));
 }
 
 
@@ -953,7 +953,7 @@ INLINE_ONLY wamreg XAdjust__ (wamreg CACHE_TYPE);
 INLINE_ONLY wamreg
 XAdjust__ (wamreg reg USES_REGS)
 {
-  return (wamreg) ((wamreg) ((reg) + LOCAL_XDiff));
+  return (wamreg) ((wamreg) ((reg) + REMOTE_XDiff(worker_id)));
 }
 
 
@@ -985,7 +985,7 @@ INLINE_ONLY int IsOldLocal__ (CELL CACHE_TYPE);
 INLINE_ONLY int
 IsOldLocal__ (CELL reg USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldASP, reg, LOCAL_OldLCL0));
+  return (int) (IN_BETWEEN (REMOTE_OldASP(worker_id), reg, REMOTE_OldLCL0(worker_id)));
 }
 
 
@@ -995,7 +995,7 @@ INLINE_ONLY int IsOldLocalPtr__ (CELL * CACHE_TYPE);
 INLINE_ONLY int
 IsOldLocalPtr__ (CELL * ptr USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldASP, ptr, LOCAL_OldLCL0));
+  return (int) (IN_BETWEEN (REMOTE_OldASP(worker_id), ptr, REMOTE_OldLCL0(worker_id)));
 }
 
 
@@ -1007,7 +1007,7 @@ INLINE_ONLY int IsOldLocalInTR__ (CELL CACHE_TYPE);
 INLINE_ONLY int
 IsOldLocalInTR__ (CELL reg USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldH, reg, LOCAL_OldLCL0));
+  return (int) (IN_BETWEEN (REMOTE_OldH(worker_id), reg, REMOTE_OldLCL0(worker_id)));
 }
 
 
@@ -1017,7 +1017,7 @@ INLINE_ONLY int IsOldLocalInTRPtr__ (CELL * CACHE_TYPE);
 INLINE_ONLY int
 IsOldLocalInTRPtr__ (CELL * ptr USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldH, ptr, LOCAL_OldLCL0));
+  return (int) (IN_BETWEEN (REMOTE_OldH(worker_id), ptr, REMOTE_OldLCL0(worker_id)));
 }
 
 
@@ -1028,7 +1028,7 @@ INLINE_ONLY int IsOldH__ (CELL CACHE_TYPE);
 INLINE_ONLY int
 IsOldH__ (CELL reg USES_REGS)
 {
-  return (int) ((CharP (reg) == CharP (LOCAL_OldH)));
+  return (int) ((CharP (reg) == CharP (REMOTE_OldH(worker_id))));
 }
 
 
@@ -1040,7 +1040,7 @@ INLINE_ONLY int IsOldGlobal__ (CELL CACHE_TYPE);
 INLINE_ONLY int
 IsOldGlobal__ (CELL reg USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldGlobalBase, reg, LOCAL_OldH));
+  return (int) (IN_BETWEEN (REMOTE_OldGlobalBase(worker_id), reg, REMOTE_OldH(worker_id)));
 }
 
 
@@ -1049,7 +1049,7 @@ INLINE_ONLY int IsOldDelay__ (CELL CACHE_TYPE);
 INLINE_ONLY int
 IsOldDelay__ (CELL reg USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldGlobalBase, reg, LOCAL_OldH0));
+  return (int) (IN_BETWEEN (REMOTE_OldGlobalBase(worker_id), reg, REMOTE_OldH0(worker_id)));
 }
 
 
@@ -1059,7 +1059,7 @@ INLINE_ONLY int IsOldGlobalPtr__ (CELL * CACHE_TYPE);
 INLINE_ONLY int
 IsOldGlobalPtr__ (CELL * ptr USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldGlobalBase, ptr, LOCAL_OldH));
+  return (int) (IN_BETWEEN (REMOTE_OldGlobalBase(worker_id), ptr, REMOTE_OldH(worker_id)));
 }
 
 
@@ -1069,7 +1069,7 @@ INLINE_ONLY int IsOldTrail__ (CELL CACHE_TYPE);
 INLINE_ONLY int
 IsOldTrail__ (CELL reg USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldTrailBase, reg, LOCAL_OldTR));
+  return (int) (IN_BETWEEN (REMOTE_OldTrailBase(worker_id), reg, REMOTE_OldTR(worker_id)));
 }
 
 
@@ -1079,7 +1079,7 @@ INLINE_ONLY int IsOldTrailPtr__ (CELL * CACHE_TYPE);
 INLINE_ONLY int
 IsOldTrailPtr__ (CELL * ptr USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldTrailBase, ptr, LOCAL_OldTR));
+  return (int) (IN_BETWEEN (REMOTE_OldTrailBase(worker_id), ptr, REMOTE_OldTR(worker_id)));
 }
 
 
@@ -1089,7 +1089,7 @@ INLINE_ONLY int IsOldVarTableTrailPtr__ (struct VARSTRUCT * CACHE_TYPE);
 INLINE_ONLY int
 IsOldVarTableTrailPtr__ (struct VARSTRUCT *ptr USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldTrailBase, ptr, LOCAL_OldTR));
+  return (int) (IN_BETWEEN (REMOTE_OldTrailBase(worker_id), ptr, REMOTE_OldTR(worker_id)));
 }
 
 
@@ -1099,7 +1099,7 @@ INLINE_ONLY int IsOldTokenTrailPtr__ (struct TOKEN * CACHE_TYPE);
 INLINE_ONLY int
 IsOldTokenTrailPtr__ (struct TOKEN *ptr USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldTrailBase, ptr, LOCAL_OldTR));
+  return (int) (IN_BETWEEN (REMOTE_OldTrailBase(worker_id), ptr, REMOTE_OldTR(worker_id)));
 }
 
 
@@ -1110,9 +1110,9 @@ INLINE_ONLY int
 IsOldCode__ (CELL reg USES_REGS)
 {
 #if USE_SYSTEM_MALLOC
-  return reg < (CELL)LOCAL_OldGlobalBase || reg > (CELL)LOCAL_OldTrailTop;
+  return reg < (CELL)REMOTE_OldGlobalBase(worker_id) || reg > (CELL)REMOTE_OldTrailTop(worker_id);
 #else 
-  return (int) (IN_BETWEEN (LOCAL_OldHeapBase, reg, LOCAL_OldHeapTop));
+  return (int) (IN_BETWEEN (REMOTE_OldHeapBase(worker_id), reg, REMOTE_OldHeapTop(worker_id)));
 #endif
 }
 
@@ -1123,7 +1123,7 @@ INLINE_ONLY int IsOldCodeCellPtr__ (CELL * CACHE_TYPE);
 INLINE_ONLY int
 IsOldCodeCellPtr__ (CELL * ptr USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_OldHeapBase, ptr, LOCAL_OldHeapTop));
+  return (int) (IN_BETWEEN (REMOTE_OldHeapBase(worker_id), ptr, REMOTE_OldHeapTop(worker_id)));
 }
 
 
@@ -1133,7 +1133,7 @@ INLINE_ONLY int IsGlobal__ (CELL CACHE_TYPE);
 INLINE_ONLY int
 IsGlobal__ (CELL reg USES_REGS)
 {
-  return (int) (IN_BETWEEN (LOCAL_GlobalBase, reg, HR));
+  return (int) (IN_BETWEEN (REMOTE_GlobalBase(worker_id), reg, HR));
 }
 
 

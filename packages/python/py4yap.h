@@ -1,12 +1,12 @@
 
-#undef PASS_REGS
-#undef USES_REGS
+//#undef PASS_REGS
+//#undef USES_REGS
 
 #ifndef PY4YAP_H
 #define PY4YAP_H 1
 
-#define PASS_REGS
-#define USES_REGS
+//#define PASS_REGS
+//#define USES_REGS
 
 #include "Yap.h"
 
@@ -136,6 +136,7 @@ static inline int proper_ascii_string(const char *s) {
 }
 
 static inline PyObject *atom_to_python_string(term_t t) {
+  CACHE_REGS
   // Yap_DebugPlWrite(YAP_GetFromSlot(t));        fprintf(stderr, " here I
   // am\n");
   const char *s = NULL;

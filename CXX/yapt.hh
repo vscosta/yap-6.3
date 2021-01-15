@@ -54,8 +54,8 @@ protected:
 public:
   Term gt() {
     CACHE_REGS
-    // fprintf(stderr,"?%d,%lx,%p\n",t,LOCAL_HandleBase[t], HR);
-    // Yap_DebugPlWriteln(LOCAL_HandleBase[t]);
+    // fprintf(stderr,"?%d,%lx,%p\n",t,REMOTE_HandleBase(worker_id)[t], HR);
+    // Yap_DebugPlWriteln(REMOTE_HandleBase(worker_id)[t]);
     return Yap_GetFromSlot(t);
   };
 
@@ -65,6 +65,7 @@ public:
   };
 
   void put(Term t0) {
+    CACHE_REGS
     Yap_PutInHandle(t, t0);
     // fprintf(stderr,"+%d,%lx,%p,%p",t,t0,HR,ASP); Yap_DebugPlWriteln(t0);
   };
@@ -92,13 +93,13 @@ public:
 #if 1
   /// Term destructor, tries to recover slot
   virtual ~YAPTerm(){
-      //  fprintf(stderr,"-%d,%lx,%p ",t,LOCAL_HandleBase[t] ,HR);
+      //  fprintf(stderr,"-%d,%lx,%p ",t,REMOTE_HandleBase(worker_id)[t] ,HR);
       /*    if (!t)
             return;
-          //          Yap_DebugPlWriteln(LOCAL_HandleBase[t]);
-          LOCAL_HandleBase[t] = TermFreeTerm;
-          while (LOCAL_HandleBase[LOCAL_CurSlot - 1] == TermFreeTerm) {
-            LOCAL_CurSlot--;
+          //          Yap_DebugPlWriteln(REMOTE_HandleBase(worker_id)[t]);
+          REMOTE_HandleBase(worker_id)[t] = TermFreeTerm;
+          while (REMOTE_HandleBase(worker_id)[REMOTE_CurSlot(worker_id) - 1] == TermFreeTerm) {
+            REMOTE_CurSlot(worker_id)--;
           }
           */
   };
@@ -132,8 +133,14 @@ public:
     return tf;
   };
 
-  inline void bind(Term b) { LOCAL_HandleBase[t] = b; }
-  inline void bind(YAPTerm *b) { LOCAL_HandleBase[t] = b->term(); }
+  inline void bind(Term b) {
+    CACHE_REGS
+    REMOTE_HandleBase(worker_id)[t] = b;
+  }
+  inline void bind(YAPTerm *b) {
+    CACHE_REGS
+    REMOTE_HandleBase(worker_id)[t] = b->term();
+  }
   /// from YAPTerm to Term (internal YAP representation)
   /// fetch a sub-term
   Term &operator[](arity_t n);
@@ -356,7 +363,10 @@ public:
 
 class X_API YAPFloatTerm : public YAPNumberTerm {
 public:
-  YAPFloatTerm(double dbl) { mk(MkFloatTerm(dbl)); };
+  YAPFloatTerm(double dbl) {
+    CACHE_REGS
+    mk(MkFloatTerm(dbl));
+  };
 
   double getFl() { return FloatOfTerm(gt()); };
 };
@@ -473,7 +483,10 @@ class X_API YAPVarTerm : public YAPTerm {
 
 public:
   /// constructor
-  YAPVarTerm() { mk(MkVarTerm()); };
+  YAPVarTerm() {
+    CACHE_REGS
+    mk(MkVarTerm());
+  };
   /// get the internal representation
   CELL *getVar() { return VarOfTerm(gt()); }
   /// is the variable bound to another one

@@ -1300,7 +1300,7 @@
       }
     }
       if (d0 == 0L) {
-        Yap_AsmError(LOCAL_Error_TYPE,d0);
+        Yap_AsmError(REMOTE_ActiveError(worker_id)->errorNo,d0);
         FAIL();
       }
       BEGP(pt0);

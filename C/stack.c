@@ -1006,9 +1006,9 @@ static Term all_envs(CELL *env_ptr USES_REGS) {
         bp[0] = MkIntegerTerm(LCL0 - env_ptr);
         if (HR >= ASP - 1024) {
             HR = start;
-            LOCAL_Error_Size = (ASP - 1024) - HR;
+            REMOTE_ActiveError(worker_id)->errorMsgLen = (ASP - 1024) - HR;
             while (env_ptr) {
-                LOCAL_Error_Size += 2;
+                REMOTE_ActiveError(worker_id)->errorMsgLen += 2;
                 env_ptr = (CELL *) (env_ptr[E_E]);
             }
             return 0L;
@@ -1033,9 +1033,9 @@ static Term all_cps(choiceptr b_ptr USES_REGS) {
         bp[0] = MkIntegerTerm((Int) (LCL0 - (CELL *) b_ptr));
         if (HR >= ASP - 1024) {
             HR = start;
-            LOCAL_Error_Size = (ASP - 1024) - HR;
+            REMOTE_ActiveError(worker_id)->errorMsgLen = (ASP - 1024) - HR;
             while (b_ptr) {
-                LOCAL_Error_Size += 2;
+                REMOTE_ActiveError(worker_id)->errorMsgLen += 2;
                 b_ptr = b_ptr->cp_b;
             }
             return 0L;
@@ -1056,7 +1056,7 @@ static Term all_cps(choiceptr b_ptr USES_REGS) {
 static Int p_all_choicepoints(USES_REGS1) {
     Term t;
     while ((t = all_cps(B PASS_REGS)) == 0L) {
-        if (!Yap_gcl(LOCAL_Error_Size, 1, ENV, gc_P(P, CP))) {
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 1, ENV, gc_P(P, CP))) {
             Yap_Error(RESOURCE_ERROR_STACK, TermNil, "while dumping choicepoints");
             return FALSE;
         }
@@ -1067,7 +1067,7 @@ static Int p_all_choicepoints(USES_REGS1) {
 static Int p_all_envs(USES_REGS1) {
     Term t;
     while ((t = all_envs(ENV PASS_REGS)) == 0L) {
-        if (!Yap_gcl(LOCAL_Error_Size, 1, ENV, gc_P(P, CP))) {
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 1, ENV, gc_P(P, CP))) {
             Yap_Error(RESOURCE_ERROR_STACK, TermNil, "while dumping environments");
             return FALSE;
         }
@@ -1103,7 +1103,6 @@ static Term clause_info(yamop *codeptr, PredEntry *pp) {
 
 yap_error_descriptor_t *set_clause_info(yap_error_descriptor_t *t,
                                         yamop *codeptr, PredEntry *pp) {
-    CACHE_REGS
 
     void *begin;
     if (pp->ArityOfPE == 0) {
@@ -1160,7 +1159,8 @@ static Term error_culprit(bool internal USES_REGS) {
 }
 
 yap_error_descriptor_t *
-Yap_prolog_add_culprit(yap_error_descriptor_t *t PASS_REGS) {
+Yap_prolog_add_culprit(yap_error_descriptor_t *t) {
+    CACHE_REGS
     PredEntry *pe;
     void *startp, *endp;
     // case number 1: Yap_Error called from built-in.
@@ -1240,7 +1240,7 @@ Term Yap_all_calls(void) {
 static Int current_stack(USES_REGS1) {
     Term t;
     while ((t = all_calls(false PASS_REGS)) == 0L) {
-        if (!Yap_gcl(LOCAL_Error_Size, 1, ENV, gc_P(P, CP))) {
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 1, ENV, gc_P(P, CP))) {
             Yap_Error(RESOURCE_ERROR_STACK, TermNil, "while dumping stack");
             return FALSE;
         }
@@ -1486,6 +1486,7 @@ static Int p_cpc_info(USES_REGS1) {
 }
 
 static PredEntry *choicepoint_owner(choiceptr cptr, Term *tp, yamop **nclp) {
+    CACHE_REGS
     PredEntry *pe =
             NULL;
     int go_on = TRUE;
@@ -1702,7 +1703,7 @@ static int hidden(Atom);
 static int legal_env(CELL *CACHE_TYPE);
 
 #define ONLOCAL(ptr)                            \
-  (CellPtr(ptr) > CellPtr(HR) && CellPtr(ptr) < CellPtr(LOCAL_LocalBase))
+  (CellPtr(ptr) > CellPtr(HR) && CellPtr(ptr) < CellPtr(REMOTE_LocalBase(worker_id)))
 
 static int hidden(Atom at) {
     AtomEntry *chain;
@@ -1782,7 +1783,7 @@ typedef struct buf_struct_t {
     lbufsz -= sz;                    \
     break;                        \
       }                            \
-      char *nbuf = Realloc(buf, bufsize += 1024);    \
+      char *nbuf = Realloc(buf, bufsize += 1024 PASS_REGS);    \
       lbuf = nbuf + (lbuf-buf);                \
       buf  = nbuf;                    \
       lbufsz += 1024;                    \
@@ -1791,6 +1792,7 @@ typedef struct buf_struct_t {
 
 
 static char *ADDSTR(const char *STR, struct buf_struct_t *bufp) {
+    CACHE_REGS \
     \
     while (true) {
         \
@@ -1804,7 +1806,7 @@ static char *ADDSTR(const char *STR, struct buf_struct_t *bufp) {
 
         } \
 
-        char *nbuf = Realloc(buf, bufsize += 1024);    \
+        char *nbuf = Realloc(buf, bufsize += 1024 PASS_REGS);    \
       lbuf = nbuf + (lbuf - buf);                \
       buf = nbuf;                    \
       lbufsz += 1024;                    \
@@ -1860,7 +1862,7 @@ const char *Yap_dump_stack(void) {
     CACHE_REGS
     int lvl = push_text_stack();
     struct buf_struct_t b, *bufp = &b;
-    buf = Malloc(4096);
+    buf = Malloc(4096 PASS_REGS);
     lbuf = buf;
     bufsize = 4096;
     lbufsz = bufsize - 256;
@@ -1875,52 +1877,52 @@ const char *Yap_dump_stack(void) {
     ADDSTR("%% \n%%  =====================================\n%%\n", bufp);
     ADDSTR("%% \n%%  YAP Status:\n", bufp);
     ADDSTR("%% \n%%  -------------------------------------\n%%\n", bufp);
-    yap_error_number errnbr = LOCAL_Error_TYPE;
+    yap_error_number errnbr = REMOTE_ActiveError(worker_id)->errorNo;
     yap_error_class_number classno = Yap_errorClass(errnbr);
 
     ADDBUF(snprintf(lbuf, lbufsz, "%% Error STATUS: %s/%s\n\n", Yap_errorName(errnbr),
                     Yap_errorClassName(classno)));
 
     ADDSTR("%% Execution mode\n", bufp);
-    if (LOCAL_PrologMode & BootMode)
+    if (REMOTE_PrologMode(worker_id) & BootMode)
         ADDSTR("%%         Bootstrap\n", bufp);
-    if (LOCAL_PrologMode & UserMode)
+    if (REMOTE_PrologMode(worker_id) & UserMode)
         ADDSTR("%%         User Prologg\n", bufp);
-    if (LOCAL_PrologMode & CritMode)
+    if (REMOTE_PrologMode(worker_id) & CritMode)
         ADDSTR("%%         Exclusive Access Mode\n", bufp);
-    if (LOCAL_PrologMode & AbortMode)
+    if (REMOTE_PrologMode(worker_id) & AbortMode)
         ADDSTR("%%         Abort\n", bufp);
-    if (LOCAL_PrologMode & InterruptMode)
+    if (REMOTE_PrologMode(worker_id) & InterruptMode)
         ADDSTR("%%         Interrupt\n", bufp);
-    if (LOCAL_PrologMode & InErrorMode)
+    if (REMOTE_PrologMode(worker_id) & InErrorMode)
         ADDSTR("%%         Error\n", bufp);
-    if (LOCAL_PrologMode & ConsoleGetcMode)
+    if (REMOTE_PrologMode(worker_id) & ConsoleGetcMode)
         ADDSTR("%%         Prompt Console\n", bufp);
-    if (LOCAL_PrologMode & ExtendStackMode)
+    if (REMOTE_PrologMode(worker_id) & ExtendStackMode)
         ADDSTR("%%         Stack expansion \n", bufp);
-    if (LOCAL_PrologMode & GrowHeapMode)
+    if (REMOTE_PrologMode(worker_id) & GrowHeapMode)
         ADDSTR("%%         Data Base Expansion\n", bufp);
-    if (LOCAL_PrologMode & GrowStackMode)
+    if (REMOTE_PrologMode(worker_id) & GrowStackMode)
         ADDSTR("%%         User Prolog\n", bufp);
-    if (LOCAL_PrologMode & GCMode)
+    if (REMOTE_PrologMode(worker_id) & GCMode)
         ADDSTR("%%         Garbage Collection\n", bufp);
-    if (LOCAL_PrologMode & ErrorHandlingMode)
+    if (REMOTE_PrologMode(worker_id) & ErrorHandlingMode)
         ADDSTR("%%         Error handler\n", bufp);
-    if (LOCAL_PrologMode & CCallMode)
+    if (REMOTE_PrologMode(worker_id) & CCallMode)
         ADDSTR("%%         System Foreign Code\n", bufp);
-    if (LOCAL_PrologMode & UnifyMode)
+    if (REMOTE_PrologMode(worker_id) & UnifyMode)
         ADDSTR("%%         Off-line Foreign Code\n", bufp);
-    if (LOCAL_PrologMode & UserCCallMode)
+    if (REMOTE_PrologMode(worker_id) & UserCCallMode)
         ADDSTR("%%         User Foreig C\n", bufp);
-    if (LOCAL_PrologMode & MallocMode)
+    if (REMOTE_PrologMode(worker_id) & MallocMode)
         ADDSTR("%%         Heap Allocaror\n", bufp);
-    if (LOCAL_PrologMode & SystemMode)
+    if (REMOTE_PrologMode(worker_id) & SystemMode)
         ADDSTR("%%         Prolog Internals\n", bufp);
-    if (LOCAL_PrologMode & AsyncIntMode)
+    if (REMOTE_PrologMode(worker_id) & AsyncIntMode)
         ADDSTR("%%         Async Interruot mode\n", bufp);
-    if (LOCAL_PrologMode & InReadlineMode)
+    if (REMOTE_PrologMode(worker_id) & InReadlineMode)
         ADDSTR("%%         Readline Console\n", bufp);
-    if (LOCAL_PrologMode & TopGoalMode)
+    if (REMOTE_PrologMode(worker_id) & TopGoalMode)
         ADDSTR("%%         Creating new query\n", bufp);
 #endif
     ADDSTR("%% \n%%  -------------------------------------\n%%\n", bufp);
@@ -1940,10 +1942,10 @@ const char *Yap_dump_stack(void) {
     if (HR > ASP || HR > LCL0) {
         ADDBUF(snprintf(lbuf, lbufsz, "%% YAP ERROR: Global Collided against Local (%p--%p)\n",
                         HR, ASP));
-    } else if (HeapTop > (ADDR) LOCAL_GlobalBase) {
+    } else if (HeapTop > (ADDR) REMOTE_GlobalBase(worker_id)) {
         ADDBUF(snprintf(lbuf, lbufsz,
                         "%% YAP ERROR: Code Space Collided against Global (%p--%p)\n",
-                        HeapTop, LOCAL_GlobalBase));
+                        HeapTop, REMOTE_GlobalBase(worker_id)));
     } else {
 #if !USE_SYSTEM_MALLOC
         ADDBUF(snprintf(lbuf, lbufsz , "%%ldKB of Code Space (%p--%p)\n",
@@ -1964,10 +1966,10 @@ const char *Yap_dump_stack(void) {
         ADDBUF(snprintf(lbuf, lbufsz, "%%    %luKB of Local Stack (%p--%p)\n",
                         (unsigned long int) (sizeof(CELL) * (LCL0 - ASP)) / 1024, ASP, LCL0));
         ADDBUF(snprintf(lbuf, lbufsz, "%%    %luKB of Trail (%p--%p)\n",
-                        (unsigned long int) ((ADDR) TR - LOCAL_TrailBase) / 1024,
-                        LOCAL_TrailBase, TR));
+                        (unsigned long int) ((ADDR) TR - REMOTE_TrailBase(worker_id)) / 1024,
+                        REMOTE_TrailBase(worker_id), TR));
         ADDBUF(snprintf(lbuf, lbufsz, "%%    Performed %ld garbage collections\n",
-                        (unsigned long int) LOCAL_GcCalls));
+                        (unsigned long int) REMOTE_GcCalls(worker_id)));
 #if LOW_LEVEL_TRACER
         {
             extern long long vsc_count;
@@ -1993,6 +1995,7 @@ const char *Yap_dump_stack(void) {
 
 
 static bool outputep(CELL *ep, struct buf_struct_t *bufp) {
+    CACHE_REGS
     PredEntry *pe = EnvPreg((yamop *) ep);
     if (!ONLOCAL(ep) || (Unsigned(ep) & (sizeof(CELL) - 1)))
         return false;
@@ -2023,6 +2026,7 @@ static bool outputep(CELL *ep, struct buf_struct_t *bufp) {
 }
 
 static bool outputcp(choiceptr cp, struct buf_struct_t *bufp) {
+    CACHE_REGS
     choiceptr b_ptr = cp;
     PredEntry *pe = Yap_PredForChoicePt(b_ptr, NULL);
     ADDBUF(snprintf(lbuf, lbufsz, "%% %p ", cp));
@@ -2113,7 +2117,7 @@ char *DumpActiveGoals(USES_REGS1) {
     int lvl = push_text_stack();
     struct buf_struct_t buf0, *bufp = &buf0;
 
-    buf = Malloc(4096);
+    buf = Malloc(4096 PASS_REGS);
     lbuf = buf;
     bufsize = 4096;
     lbufsz = bufsize - 256;
@@ -2158,12 +2162,14 @@ char *DumpActiveGoals(USES_REGS1) {
  *
  */
 char *Yap_output_bug_location(yamop *yap_pc, int where_from, int psize) {
+    CACHE_REGS
+
     Atom pred_name;
     UInt pred_arity;
     Term pred_module;
     Int cl;
 
-    char *o = Malloc(256);
+    char *o = Malloc(256 PASS_REGS);
     if ((cl = Yap_PredForCode(yap_pc, where_from, &pred_name, &pred_arity,
                               &pred_module)) == 0) {
         /* system predicate */
@@ -2185,7 +2191,6 @@ char *Yap_output_bug_location(yamop *yap_pc, int where_from, int psize) {
 
 static yap_error_descriptor_t *add_bug_location(yap_error_descriptor_t *p,
                                                 yamop *codeptr, PredEntry *pe) {
-    CACHE_REGS
     if (pe->ModuleOfPred == PROLOG_MODULE)
         p->prologPredModule = AtomName(AtomProlog);
     else
@@ -2336,6 +2341,7 @@ static Int ancestor_location(USES_REGS1) {
 static int Yap_DebugDepthMax = 4;
 
 void ShowTerm(Term *tp, int depth) {
+    CACHE_REGS
     if (depth == Yap_DebugDepthMax) return;
     Term t = *tp;
     if (IsVarTerm(t)) {
@@ -2377,6 +2383,7 @@ void ShowTerm(Term *tp, int depth) {
 
 
 void Yap_ShowTerm(Term t) {
+    CACHE_REGS
     *HR++ = t;
     ShowTerm(HR - 1, 0);
 }
@@ -2385,6 +2392,7 @@ void Yap_ShowTerm(Term t) {
  extern void pp(Term, int);
 
 void pp(Term t, int lvl) {
+  CACHE_REGS
   int i;
   if (lvl>6)
     return;

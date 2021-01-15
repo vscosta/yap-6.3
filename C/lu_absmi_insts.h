@@ -258,15 +258,15 @@
     }
     restore_yaam_regs(PREG->y_u.OtaLl.n);
     restore_args(PREG->y_u.OtaLl.s);
-    LOCAL_RetriesCounter--;
-    if (LOCAL_RetriesCounter == 0) {
+    REMOTE_RetriesCounter(worker_id)--;
+    if (REMOTE_RetriesCounter(worker_id) == 0) {
       saveregs();
       Yap_NilError(RETRY_COUNTER_UNDERFLOW_EVENT,"");
       setregs();
       JMPNext();
     }
-    LOCAL_PredEntriesCounter--;
-    if (LOCAL_PredEntriesCounter == 0) {
+    REMOTE_PredEntriesCounter(worker_id)--;
+    if (REMOTE_PredEntriesCounter(worker_id) == 0) {
       saveregs();
       Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT,"");
       setregs();
@@ -310,15 +310,15 @@
       /* jump to next alternative */
       PREG = FAILCODE;
     } else {
-      LOCAL_RetriesCounter--;
-      if (LOCAL_RetriesCounter == 0) {
+      REMOTE_RetriesCounter(worker_id)--;
+      if (REMOTE_RetriesCounter(worker_id) == 0) {
         saveregs();
         Yap_NilError(RETRY_COUNTER_UNDERFLOW_EVENT,"");
         setregs();
         JMPNext();
       }
-      LOCAL_PredEntriesCounter--;
-      if (LOCAL_PredEntriesCounter == 0) {
+      REMOTE_PredEntriesCounter(worker_id)--;
+      if (REMOTE_PredEntriesCounter(worker_id) == 0) {
         saveregs();
         Yap_NilError(PRED_ENTRY_COUNTER_UNDERFLOW_EVENT,"");
         setregs();
@@ -657,16 +657,16 @@
 #if defined(YAPOR) || defined(THREADS)
       PP = NULL;
 #endif
-      if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-	LOCAL_Error_TYPE = YAP_NO_ERROR;
+      if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+	REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
 	if (!Yap_growglobal(NULL)) {
-	  Yap_NilError(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, LOCAL_ErrorMessage);
+	  Yap_NilError(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, REMOTE_ActiveError(worker_id)->errorMsg);
 	  FAIL();
 	}
       } else {
-	LOCAL_Error_TYPE = YAP_NO_ERROR;
+	REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
 	if (!Yap_gcl(0,3, ENV, CP)) {
-	  Yap_NilError(RESOURCE_ERROR_STACK, LOCAL_ErrorMessage);
+	  Yap_NilError(RESOURCE_ERROR_STACK, REMOTE_ActiveError(worker_id)->errorMsg);
 	  FAIL();
 	}
       }

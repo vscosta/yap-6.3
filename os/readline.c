@@ -81,7 +81,7 @@ static char *atom_enumerate(const char *prefix, int state) {
     catom = NIL;
   } else {
     CACHE_REGS
-    index = LOCAL_search_atoms;
+    index = REMOTE_search_atoms(worker_id);
     catom = index->atom;
     i = index->pos;
   }
@@ -103,7 +103,7 @@ static char *atom_enumerate(const char *prefix, int state) {
       if (strstr((char *)ap->StrOfAE, prefix) == (char *)ap->StrOfAE) {
         index->pos = i;
         index->atom = ap->NextOfAE;
-        LOCAL_search_atoms = index;
+        REMOTE_search_atoms(worker_id) = index;
         READ_UNLOCK(ap->ARWLock);
         return ap->StrOfAE;
       }
@@ -111,7 +111,7 @@ static char *atom_enumerate(const char *prefix, int state) {
       READ_UNLOCK(ap->ARWLock);
     }
   }
-  LOCAL_search_atoms = NULL;
+  REMOTE_search_atoms(worker_id) = NULL;
   free(index);
   return NULL;
 }
@@ -149,7 +149,7 @@ static char *predicate_enumerate(const char *prefix, int state) {
       mod = mod->NextME;
   } else {
     Term cmod;
-    p = LOCAL_SearchPreds;
+    p = REMOTE_SearchPreds(worker_id);
     cmod = (p->ModuleOfPred != PROLOG_MODULE ? p->ModuleOfPred : TermProlog);
     mod = Yap_GetModuleEntry(cmod);
   }
@@ -161,7 +161,7 @@ static char *predicate_enumerate(const char *prefix, int state) {
       mod = mod->NextME;
       if (!mod) {
         // done
-        LOCAL_SearchPreds = NULL;
+        REMOTE_SearchPreds(worker_id) = NULL;
         return NULL;
       }
       if (mod->AtomOfME == AtomIDB)
@@ -171,18 +171,18 @@ static char *predicate_enumerate(const char *prefix, int state) {
     char *c = RepAtom(ap = NameOfPred(p))->StrOfAE;
     if (strlen(c) > strlen(prefix) && strstr(c, prefix) == c &&
         !(p->PredFlags & HiddenPredFlag)) {
-      LOCAL_SearchPreds = p;
+      REMOTE_SearchPreds(worker_id) = p;
       arity_t ar = p->ArityOfPE;
       int l, r;
       if (Yap_IsPrefixOp(AbsAtom(ap), &l, &r) && ar == 1) {
         return c;
       }
-      strncpy(LOCAL_FileNameBuf, c, YAP_FILENAME_MAX);
-      strncat(LOCAL_FileNameBuf, "(", YAP_FILENAME_MAX);
-      return LOCAL_FileNameBuf;
+      strncpy(REMOTE_FileNameBuf(worker_id), c, YAP_FILENAME_MAX);
+      strncat(REMOTE_FileNameBuf(worker_id), "(", YAP_FILENAME_MAX);
+      return REMOTE_FileNameBuf(worker_id);
     }
   }
-  LOCAL_SearchPreds = NULL;
+  REMOTE_SearchPreds(worker_id) = NULL;
   return NULL;
 }
 
@@ -325,10 +325,10 @@ static bool getLine(int inp) {
   bool shouldPrompt = Yap_DoPrompt(s);
 
   /* window of vulnerability opened */
-  LOCAL_PrologMode |= ConsoleGetcMode;
+  REMOTE_PrologMode(worker_id) |= ConsoleGetcMode;
   if (true || shouldPrompt) { // no output so far
     rl_set_signals();
-    myrl_line = (unsigned char *)readline(LOCAL_Prompt);
+    myrl_line = (unsigned char *)readline(REMOTE_Prompt(worker_id));
     rl_clear_signals();
   } else {
     rl_set_signals();
@@ -336,18 +336,18 @@ static bool getLine(int inp) {
     rl_clear_signals();
   }
   /* Do it the gnu way */
-  LOCAL_PrologMode &= ~ConsoleGetcMode;
+  REMOTE_PrologMode(worker_id) &= ~ConsoleGetcMode;
 #if HAVE_RL_PENDING_SIGNAL
   if (rl_pending_signal()) {
-    LOCAL_PrologMode |= InterruptMode;
+    REMOTE_PrologMode(worker_id) |= InterruptMode;
   }
 #endif
-  if (LOCAL_PrologMode & InterruptMode) {
+  if (REMOTE_PrologMode(worker_id) & InterruptMode) {
     Yap_HandleSIGINT();
   } else {
-    LOCAL_newline = true;
+    REMOTE_newline(worker_id) = true;
   }
-  strncpy(LOCAL_Prompt, RepAtom(LOCAL_AtPrompt)->StrOfAE, MAX_PROMPT);
+  strncpy(REMOTE_Prompt(worker_id), RepAtom(REMOTE_AtPrompt(worker_id))->StrOfAE, MAX_PROMPT);
   /* window of vulnerability closed */
   if (myrl_line == NULL)
     return false;
@@ -413,9 +413,9 @@ int Yap_ReadlinePeekChar(int sno) {
       ch = '\n';
     }
     if (ch == '\n') {
-      LOCAL_newline = true;
+      REMOTE_newline(worker_id) = true;
     } else {
-      LOCAL_newline = false;
+      REMOTE_newline(worker_id) = false;
     }
   } else {
     return EOF;
@@ -428,7 +428,7 @@ int Yap_ReadlineForSIGINT(void) {
   int ch;
   StreamDesc *s = &GLOBAL_Stream[StdInStream];
   const unsigned char *myrl_line = s->u.irl.buf;
-  if ((LOCAL_PrologMode & ConsoleGetcMode) && myrl_line != NULL) {
+  if ((REMOTE_PrologMode(worker_id) & ConsoleGetcMode) && myrl_line != NULL) {
     ch = myrl_line[0];
     free((void *)myrl_line);
     myrl_line = NULL;

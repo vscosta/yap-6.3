@@ -113,6 +113,7 @@ static int oops_c_from_w(int sno)
 }
 
 int Yap_peekWide(int sno) {
+  CACHE_REGS
   StreamDesc *s = GLOBAL_Stream + sno;
   int ch;
       Int pos = s->charcount;
@@ -133,7 +134,7 @@ int Yap_peekWide(int sno) {
      if (ch == EOF) {
           s->status &= ~Eof_Error_Stream_f;
       } else if (s->status & Seekable_Stream_f) {
-        Yap_SetCurInpPos(sno, pos);
+        Yap_SetCurInpPos(sno, pos PASS_REGS);
       } else {
         s->buf.on = true;
         s->buf.ch = ch;
@@ -257,7 +258,7 @@ static Int at_end_of_stream_0(USES_REGS1) { /* at_end_of_stream */
   /* the next character is a EOF */
   Int out;
 
-  int sno = LOCAL_c_input_stream;
+  int sno = REMOTE_c_input_stream(worker_id);
   out = GLOBAL_Stream[sno].status & Eof_Stream_f;
   if (!out) {
     out = (Yap_peek(sno) < 0);
@@ -361,7 +362,7 @@ been reached in the previous reading, this call will give an error message.
 
 */
 static Int get_1(USES_REGS1) { /* get_code1(Stream,-N)                     */
-  int sno = LOCAL_c_input_stream;
+  int sno = REMOTE_c_input_stream(worker_id);
   int ch;
   // Int status;
 
@@ -389,7 +390,7 @@ current stream and unify its code with  _C_.
 
 */
 static Int getcode_1(USES_REGS1) { /* get0(Stream,-N)                    */
-  int sno = LOCAL_c_input_stream;
+  int sno = REMOTE_c_input_stream(worker_id);
   // Int status;
   Int out;
 
@@ -416,7 +417,7 @@ current stream and unify its atom representation with  _C_.
 
 */
 static Int getchar_1(USES_REGS1) { /* get0(Stream,-N)                    */
-  int sno = LOCAL_c_input_stream;
+  int sno = REMOTE_c_input_stream(worker_id);
   // Int status;
   Int ch;
 
@@ -467,7 +468,7 @@ code with  _C_. A byte is represented as either a number between 1 and 255, or a
 
 
 */
-static Int get_byte(USES_REGS) { /* '$get_byte'(Stream,-N) */
+static Int get_byte(USES_REGS1) { /* '$get_byte'(Stream,-N) */
   Term out = Deref(ARG2);
 
   if (!IsVarTerm(out)) {
@@ -494,7 +495,7 @@ code with  _C_.
 
 */
 static Int get_byte_1(USES_REGS1) { /* '$get_byte'(Stream,-N) */
-  int sno = LOCAL_c_input_stream;
+  int sno = REMOTE_c_input_stream(worker_id);
   Int status;
   Term out = Deref(ARG1);
 
@@ -527,7 +528,7 @@ a code, or a list in which case only the first element is used.
 
 */
 static Int put_code_1(USES_REGS1) { /* '$put'(,N)                      */
-  int sno = LOCAL_c_output_stream, ch;
+  int sno = REMOTE_c_output_stream(worker_id), ch;
   Term t2;
 
   if (IsVarTerm(t2 = Deref(ARG1))) {
@@ -599,7 +600,7 @@ text stream.
 
 */
 static Int put_char_1(USES_REGS1) { /* '$put'(,N)                      */
-  int sno = LOCAL_c_output_stream;
+  int sno = REMOTE_c_output_stream(worker_id);
   Term t2;
   int ch;
 
@@ -671,7 +672,7 @@ static Int put_char(USES_REGS1) { /* '$put'(Stream,N)                      */
 Outputs  _N_ spaces to the current output stream.
 */
 static Int tab_1(USES_REGS1) { /* nl                      */
-  int sno = LOCAL_c_output_stream;
+  int sno = REMOTE_c_output_stream(worker_id);
   Term t1;
   Int tabs, i;
   if (IsVarTerm(t1 = Deref(ARG1))) {
@@ -747,7 +748,7 @@ static Int tab(USES_REGS1) { /* nl(Stream)                      */
 Outputs a new line to stream  _S_.
  */
 static Int nl_1(USES_REGS1) { /* nl                      */
-  int sno = LOCAL_c_output_stream;
+  int sno = REMOTE_c_output_stream(worker_id);
   LOCK(GLOBAL_Stream[sno].streamlock);
   if (GLOBAL_Stream[sno].status & Binary_Stream_f) {
     UNLOCK(GLOBAL_Stream[sno].streamlock);
@@ -832,7 +833,7 @@ Outputs to the current output stream the character whose code is
 static Int put_byte_1(USES_REGS1) { /* '$put_byte'(Stream,N)                 */
   Term t2;
   Int ch;
-  int sno = LOCAL_c_output_stream;
+  int sno = REMOTE_c_output_stream(worker_id);
   if (IsVarTerm(t2 = Deref(ARG1))) {
     Yap_Error(INSTANTIATION_ERROR, t2, "put_code/1");
     return FALSE;
@@ -868,7 +869,7 @@ as those for `put` (see 6.11).
 static Int skip_1(USES_REGS1) { /* 'skip'(N)                     */
   Int n;
   Term t1;
-  int sno = LOCAL_c_output_stream;
+  int sno = REMOTE_c_output_stream(worker_id);
   int ch;
 
   if (IsVarTerm(t1 = Deref(ARG1))) {
@@ -951,7 +952,7 @@ static Int flush_output(USES_REGS1) { /* flush_output(Stream)          */
  *
  */
 static Int flush_output0(USES_REGS1) { /* flush_output          */
-  yap_fflush(LOCAL_c_output_stream);
+  yap_fflush(REMOTE_c_output_stream(worker_id));
   return (TRUE);
 }
 
@@ -1006,7 +1007,7 @@ leaving the current stream position unaltered.
 */
 static Int peek_code_1(USES_REGS1) { /* at_end_of_stream */
   /* the next character is a EOF */
-  int sno = LOCAL_c_input_stream;
+  int sno = REMOTE_c_input_stream(worker_id);
   Int ch;
 
   LOCK(GLOBAL_Stream[sno].streamlock);
@@ -1063,7 +1064,7 @@ code with  _C_, while leaving the current stream position unaltered.
 */
 static Int peek_byte_1(USES_REGS1) { /* at_end_of_stream */
   /* the next character is a EOF */
-  int sno = LOCAL_c_input_stream;
+  int sno = REMOTE_c_input_stream(worker_id);
   Int ch;
 
   if (sno < 0)
@@ -1122,7 +1123,7 @@ atom with  _C_, while leaving the  stream position unaltered.
 */
 static Int peek_char_1(USES_REGS1) {
   /* the next character is a EOF */
-  int sno = LOCAL_c_input_stream;
+  int sno = REMOTE_c_input_stream(worker_id);
   unsigned char sinp[10];
   Int ch;
 

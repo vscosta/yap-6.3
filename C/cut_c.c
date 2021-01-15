@@ -11,7 +11,7 @@ void cut_c_initialize(int wid){
 void cut_c_pop(void){
   CACHE_REGS
   cut_c_str_ptr to_delete = NULL;
-  if (((CELL *)Yap_REGS.CUT_C_TOP) == ((CELL *)LOCAL_LocalBase))
+  if (((CELL *)Yap_REGS.CUT_C_TOP) == ((CELL *)REMOTE_LocalBase(worker_id)))
     {
       return;
     }

@@ -51,17 +51,18 @@ static Int execute(USES_REGS1);
 static Int execute0(USES_REGS1);
 
 static bool should_creep() {
+    CACHE_REGS
     return
-    !(LOCAL_PrologMode & (AbortMode | InterruptMode | SystemMode|BootMode))
+    !(REMOTE_PrologMode(worker_id) & (AbortMode | InterruptMode | SystemMode|BootMode))
     &&
-    LOCAL_debugger_state[DEBUG_DEBUG] == TermTrue
+    REMOTE_debugger_state(worker_id)[DEBUG_DEBUG] == TermTrue
     &&
       trueLocalPrologFlag(DEBUG_FLAG)
     &&
     (
-            (Yap_has_a_signal() && !LOCAL_InterruptsDisabled) ||
-            LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP] == TermUserCreep ||
-            LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP] == TermLeap);
+            (Yap_has_a_signal() && !REMOTE_InterruptsDisabled(worker_id)) ||
+            REMOTE_debugger_state(worker_id)[DEBUG_CREEP_LEAP_OR_ZIP] == TermUserCreep ||
+            REMOTE_debugger_state(worker_id)[DEBUG_CREEP_LEAP_OR_ZIP] == TermLeap);
 
 }
 
@@ -299,7 +300,7 @@ static Int parent_choice_point(USES_REGS1) {
     if (!IsVarTerm(t)) {
         Yap_ThrowError(INSTANTIATION_ERROR, t, "child choicr-point missing");
     }
-    choiceptr cp = cp_from_integer(t);
+    choiceptr cp = cp_from_integer(t PASS_REGS);
     if (cp == NULL || cp->cp_b == NULL)
         return false;
     td = cp_as_integer(cp->cp_b PASS_REGS);
@@ -382,6 +383,7 @@ static PredEntry *new_pred(Term t, Term tmod, char *pname) {
 }
 
 static bool CommaCall(Term t, Term mod) {
+    CACHE_REGS
     PredEntry *pen;
     arity_t i;
     if (IsVarTerm(t) || (pen = new_pred(t, mod, "_,_")))
@@ -432,7 +434,7 @@ inline static bool do_execute(Term t, Term mod USES_REGS) {
             t = t1;
             pen = new_pred(t, mod, "_,_");
             if (pen == NULL || (arity = pen->ArityOfPE) == 0) {
-                return do_execute(t, mod);
+                return do_execute(t, mod PASS_REGS);
             }
         } else if (IsExtensionFunctor(f)) {
             return CallError(TYPE_ERROR_CALLABLE, t0, mod0 PASS_REGS);
@@ -563,7 +565,7 @@ t = Yap_YapStripModule(t, &mod);
     if (IsExtensionFunctor(f)) {
         return CallError(TYPE_ERROR_CALLABLE, t0, mod0 PASS_REGS);
     }
-    if (Yap_has_a_signal() && !LOCAL_InterruptsDisabled) {
+    if (Yap_has_a_signal() && !REMOTE_InterruptsDisabled(worker_id)) {
         return EnterCreepMode(
                 copy_execn_to_heap(f, pt, n, arity, CurrentModule PASS_REGS),
                 mod PASS_REGS);
@@ -837,8 +839,8 @@ static Int execute_clause(USES_REGS1) { /* '$execute_clause'(Goal)	 */
 }
 
 static Int creep_clause(USES_REGS1) { /* '$execute_clause'(Goal)	 */
-  LOCAL_debugger_state[DEBUG_DEBUG] = TermTrue;
-  if (!LOCAL_InterruptsDisabled) {
+  REMOTE_debugger_state(worker_id)[DEBUG_DEBUG] = TermTrue;
+  if (!REMOTE_InterruptsDisabled(worker_id)) {
         Yap_signal(YAP_CREEP_SIGNAL);
     }
   Int rc = execute_clause(PASS_REGS1);
@@ -856,6 +858,7 @@ static Int execute_in_mod(USES_REGS1) { /* '$execute'(Goal)	 */
  */
 static void prune_inner_computation(choiceptr parent) {
     /* code */
+    CACHE_REGS
     choiceptr cut_pt;
 
     cut_pt = B;
@@ -868,7 +871,7 @@ static void prune_inner_computation(choiceptr parent) {
         CUT_prune_to(B);
 #endif
     Yap_TrimTrail();
-    LOCAL_AllowRestart = FALSE;
+    REMOTE_AllowRestart(worker_id) = FALSE;
 }
 
 /**
@@ -877,6 +880,7 @@ static void prune_inner_computation(choiceptr parent) {
  * @method complete_inner_computation
  */
 static void complete_inner_computation(choiceptr old_B) {
+    CACHE_REGS
     choiceptr myB = B;
     if (myB == NULL) {
         return;
@@ -907,7 +911,7 @@ static Int Yap_ignore(Term t, bool fail USES_REGS) {
     bool newxp = Yap_pushErrorContext(true, ctx);
     ARG1 = t;
     PredEntry *pe = Yap_get_pred(Yap_MkApplTerm(FunctorCall,1,&t),TermProlog,"ïgnore");
-    bool rc = Yap_execute_pred(pe, NULL, false);
+    bool rc = Yap_execute_pred(pe, NULL, false PASS_REGS);
     if (!rc) {
         complete_inner_computation((choiceptr) (LCL0 - oB));
         // We'll pass it through
@@ -927,6 +931,7 @@ static Int Yap_ignore(Term t, bool fail USES_REGS) {
 extern void *Yap_blob_info(Term t);
 
 static bool set_watch(Int Bv, Term task) {
+    CACHE_REGS
     CELL *pt;
     Term t = Yap_AllocExternalDataInStack((CELL) setup_call_catcher_cleanup_tag,
                                           sizeof(Int), &pt);
@@ -954,15 +959,15 @@ static bool watch_cut(Term ext USES_REGS) {
         return true;
     }
     // try to execute signals on the main loop.
-    LOCAL_Signals = 0;
+    REMOTE_Signals(worker_id) = 0;
     CalculateStackGap(PASS_REGS1);
-    LOCAL_PrologMode = UserMode;
+    REMOTE_PrologMode(worker_id) = UserMode;
 
     CELL *port_pt = pDerefa(RepAppl(task) + 2);
     CELL *completion_pt = pDerefa(RepAppl(task) + 4);
 
-    if (LOCAL_ActiveError && LOCAL_ActiveError->errorNo != YAP_NO_ERROR) {
-        e = MkErrorTerm(LOCAL_ActiveError);
+    if (REMOTE_ActiveError(worker_id) && REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+        e = MkErrorTerm(REMOTE_ActiveError(worker_id));
         Term t;
         if (active) {
             t = Yap_MkApplTerm(FunctorException, 1, &e);
@@ -974,7 +979,7 @@ static bool watch_cut(Term ext USES_REGS) {
     } else {
         completion_pt[0] = port_pt[0] = TermCut;
     }
-    Yap_ignore(cleanup, false);
+    Yap_ignore(cleanup, false PASS_REGS);
     CELL *complete_pt = deref_ptr(RepAppl(task) + 4);
     complete_pt[0] = TermTrue;
     if (ex_mode) {
@@ -1005,9 +1010,9 @@ static bool watch_retry(Term d0 USES_REGS) {
 
     if (complete)
         return true;
-    LOCAL_Signals = 0;
+    REMOTE_Signals(worker_id) = 0;
     CalculateStackGap(PASS_REGS1);
-    LOCAL_PrologMode = UserMode;
+    REMOTE_PrologMode(worker_id) = UserMode;
 
     CELL *port_pt = pDerefa(RepAppl(Deref(task)) + 2);
     CELL *complete_pt = pDerefa(RepAppl(Deref(task)) + 4);
@@ -1021,7 +1026,7 @@ static bool watch_retry(Term d0 USES_REGS) {
 	   )
         B = B->cp_b;
     if (!B || B->cp_ap == NULL || B->cp_ap->opc == 0) {
-      B = (choiceptr)(LCL0-(LOCAL_CBorder));
+      B = (choiceptr)(LCL0-(REMOTE_CBorder(worker_id)));
       B--;
     }
     ASP = (CELL *) PROTECT_FROZEN_B(B);
@@ -1030,8 +1035,8 @@ static bool watch_retry(Term d0 USES_REGS) {
       port_pt[0] = TermFail;
         return true;
     }
-    if (LOCAL_ActiveError && LOCAL_ActiveError->errorNo != YAP_NO_ERROR) {
-        e = MkErrorTerm(LOCAL_ActiveError);
+    if (REMOTE_ActiveError(worker_id) && REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+        e = MkErrorTerm(REMOTE_ActiveError(worker_id));
         if (active) {
             t = Yap_MkApplTerm(FunctorException, 1, &e);
         } else {
@@ -1047,7 +1052,7 @@ static bool watch_retry(Term d0 USES_REGS) {
         return true;
     }
     port_pt[0] = t;
-    Yap_ignore(cleanup, true);
+    Yap_ignore(cleanup, true PASS_REGS);
     if (ex_mode) {
         // Yap_PutException(e);
         return true;
@@ -1073,9 +1078,9 @@ static Int setup_call_catcher_cleanup(USES_REGS1) {
     Int oENV = LCL0 - ENV;
     Int oYENV = LCL0 - YENV;
     bool rc;
-    LOCAL_Signals = 0;
+    REMOTE_Signals(worker_id) = 0;
     CalculateStackGap(PASS_REGS1);
-    LOCAL_PrologMode = UserMode;
+    REMOTE_PrologMode(worker_id) = UserMode;
     Yap_DisableInterrupts(worker_id);
     rc = Yap_RunTopGoal(Setup, false);
     Yap_EnableInterrupts(worker_id);
@@ -1115,9 +1120,9 @@ static Int cleanup_on_exit(USES_REGS1) {
     bool box = ArgOfTerm(1, task) == TermTrue;
     Term cleanup = ArgOfTerm(3, task);
     Term complete = IsNonVarTerm(ArgOfTerm(4, task));
-    LOCAL_Signals = 0;
+    REMOTE_Signals(worker_id) = 0;
     CalculateStackGap(PASS_REGS1);
-    LOCAL_PrologMode = UserMode;
+    REMOTE_PrologMode(worker_id) = UserMode;
 
     while (B->cp_ap->opc == FAIL_OPCODE)
         B = B->cp_b;
@@ -1139,7 +1144,7 @@ static Int cleanup_on_exit(USES_REGS1) {
         catcher_pt[0] = TermExit;
         complete_pt[0] = TermExit;
     }
-    Yap_ignore(cleanup, false);
+    Yap_ignore(cleanup, false PASS_REGS);
     Yap_CloseSlots(sl);
     if (Yap_RaiseException()) {
         return false;
@@ -1322,7 +1327,7 @@ static Int execute0(USES_REGS1) { /* '$execute0'(Goal,Mod)	 */
     } else {
         //Yap_ThrowError(TYPE_ERROR_CALLABLE, t, "call/1");
         //return false;
-        return CallMetaCall(t, mod);
+        return CallMetaCall(t, mod PASS_REGS);
     }
     /*	N = arity; */
     /* call may not define new system predicates!! */
@@ -1381,7 +1386,7 @@ static Int creep_step(USES_REGS1) { /* '$execute_nonstop'(Goal,Mod)
 #endif
         }
     } else {
-        return CallMetaCall(t, mod);
+        return CallMetaCall(t, mod PASS_REGS);
     }
     /*	N = arity; */
     /* call may not define new system predicates!! */
@@ -1587,23 +1592,23 @@ static Int execute_depth_limit(USES_REGS1) {
 
 static bool exec_absmi(bool top, yap_reset_t reset_mode USES_REGS) {
     int lval = 0, out;
-    Int OldBorder = LOCAL_CBorder;
-    yhandle_t OldHandleBorder = LOCAL_HandleBorder;
-    //   yap_error_descriptor_t *err_info= LOCAL_ActiveError;
-    LOCAL_CBorder = LCL0 - ENV;
-    LOCAL_MallocDepth = AllocLevel();
-    LOCAL_HandleBorder = Yap_CurrentSlot();
+    Int OldBorder = REMOTE_CBorder(worker_id);
+    yhandle_t OldHandleBorder = REMOTE_HandleBorder(worker_id);
+    //   yap_error_descriptor_t *err_info= REMOTE_ActiveError(worker_id);
+    REMOTE_CBorder(worker_id) = LCL0 - ENV;
+    REMOTE_MallocDepth(worker_id) = AllocLevel();
+    REMOTE_HandleBorder(worker_id) = Yap_CurrentSlot();
 
-    sigjmp_buf signew, *sighold = LOCAL_RestartEnv;
-    LOCAL_RestartEnv = &signew;
+    sigjmp_buf signew, *sighold = REMOTE_RestartEnv(worker_id);
+    REMOTE_RestartEnv(worker_id) = &signew;
     volatile int i = AllocLevel();
     if /* top &&*/ ((lval = sigsetjmp(signew, 1)) != 0) {
         switch (lval) {
             case 1: { /* restart */
                 /* otherwise, SetDBForThrow will fail entering critical mode */
-                // LOCAL_ActiveError = err_info;
-                LOCAL_PrologMode = UserMode;
-                LOCAL_DoingUndefp = false;
+                // REMOTE_ActiveError(worker_id) = err_info;
+                REMOTE_PrologMode(worker_id) = UserMode;
+                REMOTE_DoingUndefp(worker_id) = false;
                 /* find out where to cut to */
                 /* siglongjmp resets the TR hardware register */
                 /* TR and B are crucial, they might have been changed, or not */
@@ -1614,15 +1619,15 @@ static bool exec_absmi(bool top, yap_reset_t reset_mode USES_REGS) {
                 /* set stack */
                 ASP = (CELL *) PROTECT_FROZEN_B(B);
                 /* forget any signals active, we're reborne */
-                LOCAL_Signals = 0;
+                REMOTE_Signals(worker_id) = 0;
                 CalculateStackGap(PASS_REGS1);
-                LOCAL_PrologMode = UserMode;
+                REMOTE_PrologMode(worker_id) = UserMode;
                 Yap_CloseSlots(OldHandleBorder);
                 P = (yamop *) FAILCODE;
             }
                 break;
             case 2: {
-                // LOCAL_ActiveError = err_info;
+                // REMOTE_ActiveError(worker_id) = err_info;
                 /* arithmetic exception */
                 /* must be done here, otherwise siglongjmp will clobber all the
                  * registers
@@ -1633,19 +1638,19 @@ static bool exec_absmi(bool top, yap_reset_t reset_mode USES_REGS) {
                 Yap_set_fpu_exceptions(
                         getAtomicGlobalPrologFlag(ARITHMETIC_EXCEPTIONS_FLAG));
                 P = (yamop *) FAILCODE;
-                LOCAL_PrologMode = UserMode;
-                LOCAL_DoingUndefp = false;
+                REMOTE_PrologMode(worker_id) = UserMode;
+                REMOTE_DoingUndefp(worker_id) = false;
                 Yap_CloseSlots(OldHandleBorder);
             }
                 break;
             case 3: { /* saved state */
-                // LOCAL_ActiveError = err_info;
+                // REMOTE_ActiveError(worker_id) = err_info;
                 pop_text_stack(i + 1);
-                LOCAL_CBorder = OldBorder;
-		LOCAL_HandleBorder = OldHandleBorder;
-		LOCAL_RestartEnv = sighold;
-                LOCAL_PrologMode = UserMode;
-                LOCAL_DoingUndefp = false;
+                REMOTE_CBorder(worker_id) = OldBorder;
+		REMOTE_HandleBorder(worker_id) = OldHandleBorder;
+		REMOTE_RestartEnv(worker_id) = sighold;
+                REMOTE_PrologMode(worker_id) = UserMode;
+                REMOTE_DoingUndefp(worker_id) = false;
                 Yap_CloseSlots(OldHandleBorder);
                 return false;
             }
@@ -1653,18 +1658,18 @@ static bool exec_absmi(bool top, yap_reset_t reset_mode USES_REGS) {
                 /* abort */
                 /* can be called from anywhere, must reset registers,
                  */
-                // LOCAL_ActiveError = err_info;
+                // REMOTE_ActiveError(worker_id) = err_info;
                 while (B) {
-                    LOCAL_ActiveError->errorNo = ABORT_EVENT;
+                    REMOTE_ActiveError(worker_id)->errorNo = ABORT_EVENT;
                     pop_text_stack(i + 1);
-                    Yap_CloseSlots(LOCAL_HandleBorder);
+                    Yap_CloseSlots(REMOTE_HandleBorder(worker_id));
                     Yap_JumpToEnv();
                 }
-                LOCAL_PrologMode = UserMode;
-                LOCAL_DoingUndefp = false;
+                REMOTE_PrologMode(worker_id) = UserMode;
+                REMOTE_DoingUndefp(worker_id) = false;
                 P = (yamop *) FAILCODE;
-		LOCAL_HandleBorder = OldHandleBorder;
-		LOCAL_RestartEnv = sighold;
+		REMOTE_HandleBorder(worker_id) = OldHandleBorder;
+		REMOTE_RestartEnv(worker_id) = sighold;
                 Yap_CloseSlots(OldHandleBorder);
                 pop_text_stack(i + 1);
                 return false;
@@ -1674,7 +1679,7 @@ static bool exec_absmi(bool top, yap_reset_t reset_mode USES_REGS) {
                 // but we should inform the caller on what happened.
 
                 //           Yap_regp = old_rs;
-                // LOCAL_ActiveError = err_info;
+                // REMOTE_ActiveError(worker_id) = err_info;
                 restore_TR();
                 restore_B();
                 /* H is not so important, because we're gonna backtrack */
@@ -1682,14 +1687,14 @@ static bool exec_absmi(bool top, yap_reset_t reset_mode USES_REGS) {
                 /* set stack */
                 Yap_JumpToEnv();
                 Yap_CloseTemporaryStreams();
-                Yap_CloseSlots(LOCAL_HandleBorder );
+                Yap_CloseSlots(REMOTE_HandleBorder(worker_id) );
                 ASP = (CELL *) PROTECT_FROZEN_B(B);
 
                 if (B == NULL || B->cp_b == NULL ||
-                    (CELL *) (B->cp_b) > LCL0 - LOCAL_CBorder) {
-		  LOCAL_HandleBorder = OldHandleBorder;
-		  LOCAL_RestartEnv = sighold;
-                    LOCAL_CBorder = OldBorder;
+                    (CELL *) (B->cp_b) > LCL0 - REMOTE_CBorder(worker_id)) {
+		  REMOTE_HandleBorder(worker_id) = OldHandleBorder;
+		  REMOTE_RestartEnv(worker_id) = sighold;
+                    REMOTE_CBorder(worker_id) = OldBorder;
                     pop_text_stack(i + 1);
                     return false;
                 }
@@ -1704,10 +1709,10 @@ static bool exec_absmi(bool top, yap_reset_t reset_mode USES_REGS) {
     Yap_get_signal(YAP_FAIL_SIGNAL);
     if (!Yap_has_a_signal())
         CalculateStackGap(PASS_REGS1);
-    LOCAL_CBorder = OldBorder;
-    LOCAL_RestartEnv = sighold;
+    REMOTE_CBorder(worker_id) = OldBorder;
+    REMOTE_RestartEnv(worker_id) = sighold;
     Yap_CloseSlots(OldHandleBorder);
-    LOCAL_HandleBorder = OldHandleBorder;
+    REMOTE_HandleBorder(worker_id) = OldHandleBorder;
     return out;
 }
 
@@ -1773,7 +1778,7 @@ static bool do_goal(yamop *CodeAdr, int arity, CELL *pt, bool top USES_REGS) {
     //    out = Yap_GetFromSlot(sl);
     //  }
     //  Yap_RecoverSlots(1);
-    LOCAL_PrologMode &= ~TopGoalMode;
+    REMOTE_PrologMode(worker_id) &= ~TopGoalMode;
     return out;
 }
 
@@ -1841,7 +1846,7 @@ bool Yap_execute_pred(PredEntry *ppe, CELL *pt, bool pass_ex USES_REGS) {
     saved_p = P;
     saved_cp = CP;
 
-    LOCAL_PrologMode |= TopGoalMode;
+    REMOTE_PrologMode(worker_id) |= TopGoalMode;
 
     PELOCK(81, ppe);
     CodeAdr = ppe->CodeOfPred;
@@ -1884,8 +1889,8 @@ bool Yap_execute_pred(PredEntry *ppe, CELL *pt, bool pass_ex USES_REGS) {
         // We'll pass it through
         if (Yap_HasException()) {
             if (pass_ex &&
-                ((LOCAL_PrologMode & BootMode) || !CurrentModule)) {
-                Yap_ResetException(LOCAL_ActiveError);
+                ((REMOTE_PrologMode(worker_id) & BootMode) || !CurrentModule)) {
+                Yap_ResetException(REMOTE_ActiveError(worker_id));
             } else {
                 Yap_RaiseException();
             }
@@ -1911,8 +1916,8 @@ bool Yap_execute_pred(PredEntry *ppe, CELL *pt, bool pass_ex USES_REGS) {
         // We'll pass it through
         if (Yap_HasException()) {
             if (pass_ex &&
-                ((LOCAL_PrologMode & BootMode) || !CurrentModule)) {
-                Yap_ResetException(LOCAL_ActiveError);
+                ((REMOTE_PrologMode(worker_id) & BootMode) || !CurrentModule)) {
+                Yap_ResetException(REMOTE_ActiveError(worker_id));
             } else {
                 Yap_RaiseException();
             }
@@ -1988,12 +1993,12 @@ Term Yap_RunTopGoal(Term t, bool handle_errors) {
     UInt arity;
     Term tmod = CurrentModule;
     Term goal_out = 0;
-    LOCAL_PrologMode |= TopGoalMode;
+    REMOTE_PrologMode(worker_id) |= TopGoalMode;
 
     t = Yap_YapStripModule(t, &tmod);
     if (IsVarTerm(t)) {
         Yap_ThrowError(INSTANTIATION_ERROR, t, "call/1");
-        LOCAL_PrologMode &= ~TopGoalMode;
+        REMOTE_PrologMode(worker_id) &= ~TopGoalMode;
         return (FALSE);
     }
     if (IsPairTerm(t)) {
@@ -2012,7 +2017,7 @@ Term Yap_RunTopGoal(Term t, bool handle_errors) {
 
         if (IsBlobFunctor(f)) {
             Yap_ThrowError(TYPE_ERROR_CALLABLE, t, "call/1");
-            LOCAL_PrologMode &= ~TopGoalMode;
+            REMOTE_PrologMode(worker_id) &= ~TopGoalMode;
             return (FALSE);
         }
         /* I cannot use the standard macro here because
@@ -2023,7 +2028,7 @@ Term Yap_RunTopGoal(Term t, bool handle_errors) {
         arity = ArityOfFunctor(f);
     } else {
         Yap_ThrowError(TYPE_ERROR_CALLABLE, Yap_TermToIndicator(t, tmod), "call/1");
-        LOCAL_PrologMode &= ~TopGoalMode;
+        REMOTE_PrologMode(worker_id) &= ~TopGoalMode;
         return (FALSE);
     }
     ppe = RepPredProp(pe);
@@ -2042,7 +2047,7 @@ Term Yap_RunTopGoal(Term t, bool handle_errors) {
     UNLOCK(ppe->PELock);
 
 #if !USE_SYSTEM_MALLOC
-    if (LOCAL_TrailTop - HeapTop < 2048) {
+    if (REMOTE_TrailTop(worker_id) - HeapTop < 2048) {
       Yap_ThrowError(RESOURCE_ERROR_TRAIL, TermNil,
                 "unable to boot because of too little Trail space");
     }
@@ -2253,24 +2258,24 @@ static Int JumpToEnv(USES_REGS1) {
     // DBTerm *dbt = Yap_RefToException();
     while (handler && handler->cp_ap &&
 	   Yap_PredForChoicePt(handler, NULL) != PredDollarCatch &&
-           LOCAL_CBorder < LCL0 - (CELL *) handler && handler->cp_ap != NOCODE &&
+           REMOTE_CBorder(worker_id) < LCL0 - (CELL *) handler && handler->cp_ap != NOCODE &&
            handler->cp_b != NULL) {
         handler->cp_ap = TRUSTFAILCODE;
         handler = handler->cp_b;
     }
-    if (LOCAL_PrologMode & AsyncIntMode) {
+    if (REMOTE_PrologMode(worker_id) & AsyncIntMode) {
         Yap_signal(YAP_FAIL_SIGNAL);
     }
 
     B = handler;
     P = FAILCODE;
-    LOCAL_DoingUndefp = false;
+    REMOTE_DoingUndefp(worker_id) = false;
     return true;
 }
 
 bool Yap_JumpToEnv(void) {
     CACHE_REGS
-    if (LOCAL_PrologMode & TopGoalMode)
+    if (REMOTE_PrologMode(worker_id) & TopGoalMode)
         return true;
     return JumpToEnv(PASS_REGS1);
 }
@@ -2287,24 +2292,24 @@ static Int jump_env(USES_REGS1) {
     //                             Quote_illegal_f | Ignore_ops_f |
     //                             Unfold_cyclics_f);
     //  __android_log_print(ANDROID_LOG_INFO, "YAPDroid ", " throw(%s)", buf);
-    LOCAL_ActiveError = Yap_UserError(t0, LOCAL_ActiveError);
+    REMOTE_ActiveError(worker_id) = Yap_UserError(t0, REMOTE_ActiveError(worker_id));
     bool out = JumpToEnv(PASS_REGS1);
-    if (LOCAL_ActiveError->errorNo == ABORT_EVENT) {
+    if (REMOTE_ActiveError(worker_id)->errorNo == ABORT_EVENT) {
     if (B != NULL && P == FAILCODE && B->cp_ap == NOCODE &&
-        LCL0 - (CELL *) B > LOCAL_CBorder) {
+        LCL0 - (CELL *) B > REMOTE_CBorder(worker_id)) {
         // we're failing up to the top layer
     }
     } else {
       if (B != NULL &&
-	  LCL0 - (CELL *) B > LOCAL_CBorder) {
+	  LCL0 - (CELL *) B > REMOTE_CBorder(worker_id)) {
         // we're failing up to the top layer
       }
     }
     if (B != NULL && P == FAILCODE && B->cp_ap == NOCODE &&
-        LCL0 - (CELL *) B > LOCAL_CBorder) {
+        LCL0 - (CELL *) B > REMOTE_CBorder(worker_id)) {
         // we're failing up to the top layer
     }
-    pop_text_stack(LOCAL_MallocDepth + 1);
+    pop_text_stack(REMOTE_MallocDepth(worker_id) + 1);
     return out;
 }
 
@@ -2335,7 +2340,7 @@ void Yap_InitYaamRegs(int myworker_id, bool full_reset) {
 #endif
 #endif /* PUSH_REGS */
     CACHE_REGS
-    Yap_ResetException(LOCAL_ActiveError);
+    Yap_ResetException(REMOTE_ActiveError(worker_id));
     Yap_PutValue(AtomBreak, MkIntTerm(0));
     TR = (tr_fr_ptr) REMOTE_TrailBase(myworker_id);
     HR = H0 = ((CELL *) REMOTE_GlobalBase(myworker_id)) +
@@ -2382,7 +2387,7 @@ void Yap_InitYaamRegs(int myworker_id, bool full_reset) {
     /* the first real choice-point will also have AP=FAIL */
     /* always have an empty slots for people to use */
 #if defined(YAPOR) || defined(THREADS)
-    LOCAL = REMOTE(myworker_id);
+    REMOTE(worker_id) = REMOTE(myworker_id);
     worker_id = myworker_id;
 #endif /* THREADS */
     Yap_RebootSlots(myworker_id);
@@ -2402,7 +2407,7 @@ void Yap_InitYaamRegs(int myworker_id, bool full_reset) {
 #endif /* FROZEN_STACKS */
     CalculateStackGap(PASS_REGS1);
 #ifdef TABLING
-    /* ensure that LOCAL_top_dep_fr is always valid */
+    /* ensure that REMOTE_top_dep_fr(worker_id) is always valid */
     if (REMOTE_top_dep_fr(myworker_id))
         DepFr_cons_cp(REMOTE_top_dep_fr(myworker_id)) = NORM_CP(B);
 #endif
@@ -2410,6 +2415,7 @@ void Yap_InitYaamRegs(int myworker_id, bool full_reset) {
 
 void Yap_track_cpred(void *v)
 {
+  CACHE_REGS
   gc_entry_info_t*i = v;
 
   if (!P) {
@@ -2459,19 +2465,19 @@ int Yap_dogc(arity_t args, Term *tp USES_REGS) {
 static Int get_debugger_state(USES_REGS1) {
     const char *s = RepAtom(AtomOfTerm(Deref(ARG1)))->StrOfAE;
     if (!strcmp(s, "creep")) {
-        return Yap_unify(ARG2, LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP]);
+        return Yap_unify(ARG2, REMOTE_debugger_state(worker_id)[DEBUG_CREEP_LEAP_OR_ZIP]);
     }
     if (!strcmp(s, "goal_number")) {
-        return Yap_unify(ARG2, LOCAL_debugger_state[DEBUG_GOAL_NUMBER]);
+        return Yap_unify(ARG2, REMOTE_debugger_state(worker_id)[DEBUG_GOAL_NUMBER]);
     }
     if (!strcmp(s, "spy")) {
-        return Yap_unify(ARG2, LOCAL_debugger_state[DEBUG_SPY]);
+        return Yap_unify(ARG2, REMOTE_debugger_state(worker_id)[DEBUG_SPY]);
     }
     if (!strcmp(s, "trace")) {
-        return Yap_unify(ARG2, LOCAL_debugger_state[DEBUG_TRACE]);
+        return Yap_unify(ARG2, REMOTE_debugger_state(worker_id)[DEBUG_TRACE]);
     }
     if (!strcmp(s, "debug")) {
-        return Yap_unify(ARG2, LOCAL_debugger_state[DEBUG_DEBUG]);
+        return Yap_unify(ARG2, REMOTE_debugger_state(worker_id)[DEBUG_DEBUG]);
     }
     return false;
 }
@@ -2479,23 +2485,23 @@ static Int get_debugger_state(USES_REGS1) {
 static Int set_debugger_state(USES_REGS1) {
     const char *s = RepAtom(AtomOfTerm(Deref(ARG1)))->StrOfAE;
     if (!strcmp(s, "creep")) {
-        LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP] = Deref(ARG2);
+        REMOTE_debugger_state(worker_id)[DEBUG_CREEP_LEAP_OR_ZIP] = Deref(ARG2);
         return true;
     }
     if (!strcmp(s, "goal_number")) {
-        LOCAL_debugger_state[DEBUG_GOAL_NUMBER] = Deref(ARG2);
+        REMOTE_debugger_state(worker_id)[DEBUG_GOAL_NUMBER] = Deref(ARG2);
         return true;
     }
     if (!strcmp(s, "spy")) {
-        LOCAL_debugger_state[DEBUG_SPY] = Deref(ARG2);
+        REMOTE_debugger_state(worker_id)[DEBUG_SPY] = Deref(ARG2);
         return true;
     }
     if (!strcmp(s, "trace")) {
-        LOCAL_debugger_state[DEBUG_TRACE] = Deref(ARG2);
+        REMOTE_debugger_state(worker_id)[DEBUG_TRACE] = Deref(ARG2);
         return true;
     }
     if (!strcmp(s, "debug")) {
-        LOCAL_debugger_state[DEBUG_DEBUG] = Deref(ARG2);
+        REMOTE_debugger_state(worker_id)[DEBUG_DEBUG] = Deref(ARG2);
         return true;
     }
     return false;
@@ -2505,11 +2511,12 @@ static Int set_debugger_state(USES_REGS1) {
 static void init_debugger_state(void)
     {
 
-        LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP] = TermCreep;
-        LOCAL_debugger_state[DEBUG_GOAL_NUMBER] = MkIntTerm(0);
-        LOCAL_debugger_state[DEBUG_SPY] = TermOff;
-        LOCAL_debugger_state[DEBUG_TRACE] = TermFalse;
-        LOCAL_debugger_state[DEBUG_DEBUG] = TermFalse;
+        CACHE_REGS
+        REMOTE_debugger_state(worker_id)[DEBUG_CREEP_LEAP_OR_ZIP] = TermCreep;
+        REMOTE_debugger_state(worker_id)[DEBUG_GOAL_NUMBER] = MkIntTerm(0);
+        REMOTE_debugger_state(worker_id)[DEBUG_SPY] = TermOff;
+        REMOTE_debugger_state(worker_id)[DEBUG_TRACE] = TermFalse;
+        REMOTE_debugger_state(worker_id)[DEBUG_DEBUG] = TermFalse;
     }
 
 
@@ -2517,23 +2524,23 @@ static Int set_debugger_state5(USES_REGS1) {
     Term t1 = Deref(ARG1);
     if (!IsVarTerm(t1)) {
 
-        LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP] = t1;
+        REMOTE_debugger_state(worker_id)[DEBUG_CREEP_LEAP_OR_ZIP] = t1;
     }
     t1 = Deref(ARG2);
     if (!IsVarTerm(t1)) {
-        LOCAL_debugger_state[DEBUG_GOAL_NUMBER] = t1;
+        REMOTE_debugger_state(worker_id)[DEBUG_GOAL_NUMBER] = t1;
     }
     t1 = Deref(ARG3);
     if (!IsVarTerm(t1)) {
-        LOCAL_debugger_state[DEBUG_SPY] = t1;
+        REMOTE_debugger_state(worker_id)[DEBUG_SPY] = t1;
     }
     t1 = Deref(ARG4);
     if (!IsVarTerm(t1)) {
-        LOCAL_debugger_state[DEBUG_TRACE] = t1;
+        REMOTE_debugger_state(worker_id)[DEBUG_TRACE] = t1;
     }
     t1 = Deref(ARG5);
     if (!IsVarTerm(t1)) {
-        LOCAL_debugger_state[DEBUG_DEBUG] = t1;
+        REMOTE_debugger_state(worker_id)[DEBUG_DEBUG] = t1;
     }
     return true;
 }
@@ -2541,19 +2548,19 @@ static Int set_debugger_state5(USES_REGS1) {
 
 static Int get_debugger_state5(USES_REGS1) {
     Term t1 = Deref(ARG1);
-        if (!Yap_unify(LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP], t1))
+        if (!Yap_unify(REMOTE_debugger_state(worker_id)[DEBUG_CREEP_LEAP_OR_ZIP], t1))
             return false;
     t1 = Deref(ARG2);
-        if (!Yap_unify(LOCAL_debugger_state[DEBUG_GOAL_NUMBER], t1))
+        if (!Yap_unify(REMOTE_debugger_state(worker_id)[DEBUG_GOAL_NUMBER], t1))
             return false;
     t1 = Deref(ARG3);
-        if (!Yap_unify(LOCAL_debugger_state[DEBUG_SPY], t1))
+        if (!Yap_unify(REMOTE_debugger_state(worker_id)[DEBUG_SPY], t1))
             return false;
     t1 = Deref(ARG4);
-        if (!Yap_unify(LOCAL_debugger_state[DEBUG_TRACE], t1))
+        if (!Yap_unify(REMOTE_debugger_state(worker_id)[DEBUG_TRACE], t1))
             return false;
     t1 = Deref(ARG5);
-        if (!Yap_unify(LOCAL_debugger_state[DEBUG_DEBUG], t1))
+        if (!Yap_unify(REMOTE_debugger_state(worker_id)[DEBUG_DEBUG], t1))
             return false;
     return true;
 }

@@ -139,6 +139,7 @@ the implementation section.
 	      /// top-level or other outer quqqery.
 X_API void YAP_StartSlots(void)
 {
+  CACHE_REGS
   Yap_RebootHandles(worker_id);
 }
 
@@ -146,6 +147,7 @@ X_API void YAP_StartSlots(void)
 /// StartSlots, but should be called when we're done.
 X_API void YAP_EndSlots(void)
 {
+  CACHE_REGS
   Yap_RebootHandles(worker_id);
 }
 
@@ -413,7 +415,7 @@ X_API Term YAP_MkBlobTerm(unsigned int sz) {
     if (!doexpand((sz + sizeof(MP_INT) / sizeof(CELL) + 2) * sizeof(CELL))) {
       Yap_Error(RESOURCE_ERROR_STACK, TermNil,
                 "YAP failed to grow the stack while constructing a blob: %s",
-                LOCAL_ErrorMessage);
+                REMOTE_ActiveError(worker_id)->errorMsg);
       return TermNil;
     }
   }
@@ -483,10 +485,11 @@ X_API const char *YAP_AtomName(YAP_Atom a) {
 }
 
 X_API const wchar_t *YAP_WideAtomName(YAP_Atom a) {
+  CACHE_REGS
   int32_t v;
   const unsigned char *s = RepAtom(a)->UStrOfAE;
   size_t n = strlen_utf8(s);
-  wchar_t *dest = Malloc((n + 1) * sizeof(wchar_t)), *o = dest;
+  wchar_t *dest = Malloc((n + 1) * sizeof(wchar_t) PASS_REGS), *o = dest;
   while (*s) {
     size_t n = get_utf8(s, 1, &v);
     if (n == 0)
@@ -506,7 +509,7 @@ X_API YAP_Atom YAP_LookupAtom(const char *c) {
     if (a == NIL || Yap_get_signal(YAP_CDOVF_SIGNAL)) {
       if (!Yap_locked_growheap(FALSE, 0, NULL)) {
         Yap_Error(RESOURCE_ERROR_HEAP, TermNil, "YAP failed to grow heap: %s",
-                  LOCAL_ErrorMessage);
+                  REMOTE_ActiveError(worker_id)->errorMsg);
       }
     } else {
       return a;
@@ -520,11 +523,11 @@ X_API YAP_Atom YAP_LookupWideAtom(const wchar_t *c) {
   Atom a;
 
   while (TRUE) {
-    a = Yap_NWCharsToAtom(c, -1 USES_REGS);
+    a = Yap_NWCharsToAtom(c, -1 PASS_REGS);
     if (a == NIL || Yap_get_signal(YAP_CDOVF_SIGNAL)) {
       if (!Yap_locked_growheap(FALSE, 0, NULL)) {
         Yap_Error(RESOURCE_ERROR_HEAP, TermNil, "YAP failed to grow heap: %s",
-                  LOCAL_ErrorMessage);
+                  REMOTE_ActiveError(worker_id)->errorMsg);
       }
     } else {
       return a;
@@ -542,7 +545,7 @@ X_API YAP_Atom YAP_FullLookupAtom(const char *c) {
     if (at == NIL || Yap_get_signal(YAP_CDOVF_SIGNAL)) {
       if (!Yap_locked_growheap(FALSE, 0, NULL)) {
         Yap_Error(RESOURCE_ERROR_HEAP, TermNil, "YAP failed to grow heap: %s",
-                  LOCAL_ErrorMessage);
+                  REMOTE_ActiveError(worker_id)->errorMsg);
       }
     } else {
       return at;
@@ -1345,7 +1348,7 @@ X_API void *YAP_ReallocSpaceFromYap(void *ptr, size_t size) {
   BACKUP_MACHINE_REGS();
   while ((new_ptr = Yap_ReallocCodeSpace(ptr, size)) == NULL) {
     if (!Yap_growheap(FALSE, size, NULL)) {
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return NULL;
     }
   }
@@ -1360,7 +1363,7 @@ X_API void *YAP_AllocSpaceFromYap(size_t size) {
 
   while ((ptr = Yap_AllocCodeSpace(size)) == NULL) {
     if (!Yap_growheap(FALSE, size, NULL)) {
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return NULL;
     }
   }
@@ -1490,28 +1493,28 @@ X_API Term YAP_ReadBuffer(const char *s, Term *tp) {
     tv = *tp;
   else
     tv = (Term)0;
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   while (!(t = Yap_BufferToTermWithPrioBindings(s, TermNil, tv, strlen(s) + 1,
                                                 GLOBAL_MaxPriority))) {
-    if (LOCAL_ErrorMessage) {
-      if (!strcmp(LOCAL_ErrorMessage, "Stack Overflow")) {
+    if (REMOTE_ActiveError(worker_id)->errorMsg) {
+      if (!strcmp(REMOTE_ActiveError(worker_id)->errorMsg, "Stack Overflow")) {
         if (!Yap_dogc(0, NULL PASS_REGS)) {
-          *tp = MkAtomTerm(Yap_LookupAtom(LOCAL_ErrorMessage));
-          LOCAL_ErrorMessage = NULL;
+          *tp = MkAtomTerm(Yap_LookupAtom(REMOTE_ActiveError(worker_id)->errorMsg));
+          REMOTE_ActiveError(worker_id)->errorMsg = NULL;
           RECOVER_H();
           return 0L;
         }
-      } else if (!strcmp(LOCAL_ErrorMessage, "Heap Overflow")) {
+      } else if (!strcmp(REMOTE_ActiveError(worker_id)->errorMsg, "Heap Overflow")) {
         if (!Yap_growheap(FALSE, 0, NULL)) {
-          *tp = MkAtomTerm(Yap_LookupAtom(LOCAL_ErrorMessage));
-          LOCAL_ErrorMessage = NULL;
+          *tp = MkAtomTerm(Yap_LookupAtom(REMOTE_ActiveError(worker_id)->errorMsg));
+          REMOTE_ActiveError(worker_id)->errorMsg = NULL;
           RECOVER_H();
           return 0L;
         }
-      } else if (!strcmp(LOCAL_ErrorMessage, "Trail Overflow")) {
+      } else if (!strcmp(REMOTE_ActiveError(worker_id)->errorMsg, "Trail Overflow")) {
         if (!Yap_growtrail(0, FALSE)) {
-          *tp = MkAtomTerm(Yap_LookupAtom(LOCAL_ErrorMessage));
-          LOCAL_ErrorMessage = NULL;
+          *tp = MkAtomTerm(Yap_LookupAtom(REMOTE_ActiveError(worker_id)->errorMsg));
+          REMOTE_ActiveError(worker_id)->errorMsg = NULL;
           RECOVER_H();
           return 0L;
         }
@@ -1519,7 +1522,7 @@ X_API Term YAP_ReadBuffer(const char *s, Term *tp) {
         RECOVER_H();
         return 0L;
       }
-      LOCAL_ErrorMessage = NULL;
+      REMOTE_ActiveError(worker_id)->errorMsg = NULL;
       RECOVER_H();
       return 0;
     } else {
@@ -1752,7 +1755,7 @@ static int run_emulator(USES_REGS1) {
   int out;
 
   out = Yap_absmi(0);
-  LOCAL_PrologMode |= UserCCallMode;
+  REMOTE_PrologMode(worker_id) |= UserCCallMode;
   return out;
 }
 */
@@ -1763,12 +1766,12 @@ X_API bool YAP_EnterGoal(YAP_PredEntryPtr ape, CELL *ptr, YAP_dogoalinfo *dgi) {
   bool out;
   //   fprintf(stderr,"1EnterGoal: H=%d ENV=%p B=%d TR=%d P=%p CP=%p
   //   Slots=%d\n",HR-H0,LCL0-ENV,LCL0-(CELL*)B,(CELL*)TR-LCL0, P, CP,
-  //   LOCAL_CurSlot);
+  //   REMOTE_CurSlot(worker_id));
 
   BACKUP_MACHINE_REGS();
   dgi->lvl = push_text_stack();
-  LOCAL_ActiveError->errorNo = YAP_NO_ERROR;
-  LOCAL_PrologMode = UserMode;
+  REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+  REMOTE_PrologMode(worker_id) = UserMode;
   dgi->p = P;
   dgi->cp = CP;
   dgi->b0 = LCL0 - (CELL *)B;
@@ -1779,22 +1782,22 @@ X_API bool YAP_EnterGoal(YAP_PredEntryPtr ape, CELL *ptr, YAP_dogoalinfo *dgi) {
   P = pe->CodeOfPred;
   // __android_log_print(ANDROID_LOG_INFO, "YAP ", "ap=%p %d %x %x args=%x,%x
   // slot=%d", pe, pe->CodeOfPred->opc, FAILCODE, Deref(ARG1), Deref(ARG2),
-  // LOCAL_CurSlot);
+  // REMOTE_CurSlot(worker_id));
   dgi->b_entry = LCL0 - (CELL *)B;
   dgi->h = HR - H0;
   dgi->tr = (CELL *)TR - LCL0;
   // fprintf(stderr,"PrepGoal: H=%d ENV=%p B=%d TR=%d P=%p CP=%p Slots=%d\n",
-  //  HR-H0,LCL0-ENV,LCL0-(CELL*)B,(CELL*)TR-LCL0, P, CP, LOCAL_CurSlot);
+  //  HR-H0,LCL0-ENV,LCL0-(CELL*)B,(CELL*)TR-LCL0, P, CP, REMOTE_CurSlot(worker_id));
   out = Yap_exec_absmi(true, false);
   //   fprintf(stderr,"EnterGoal success=%d: H=%d ENV=%p B=%d TR=%d P=%p CP=%p
   //   Slots=%d\n", out,HR-H0,LCL0-ENV,LCL0-(CELL*)B,(CELL*)TR-LCL0, P, CP,
-  //   LOCAL_CurSlot);
+  //   REMOTE_CurSlot(worker_id));
   dgi->b_exit = LCL0 - (CELL *)B;
   if (out) {
-    dgi->EndSlot = LOCAL_CurSlot;
+    dgi->EndSlot = REMOTE_CurSlot(worker_id);
     Yap_StartSlots();
   } else {
-    LOCAL_CurSlot =
+    REMOTE_CurSlot(worker_id) =
         dgi->CurSlot; // ignore any slots created within the called goal
   }
   pop_text_stack(dgi->lvl);
@@ -1821,18 +1824,18 @@ X_API bool YAP_RetryGoal(YAP_dogoalinfo *dgi) {
     B = myB;
   }
   // fprintf(stderr,"RetryGoal: H=%d ENV=%p B=%d TR=%d P=%p CP=%p Slots=%d\n",
-  //  HR-H0,LCL0-ENV,LCL0-(CELL*)B,(CELL*)TR-LCL0, P, CP, LOCAL_CurSlot);
+  //  HR-H0,LCL0-ENV,LCL0-(CELL*)B,(CELL*)TR-LCL0, P, CP, REMOTE_CurSlot(worker_id));
   P = FAILCODE;
   /* make sure we didn't leave live slots when we backtrack */
   ASP = (CELL *)B;
-  LOCAL_CurSlot = dgi->EndSlot;
+  REMOTE_CurSlot(worker_id) = dgi->EndSlot;
   out = Yap_exec_absmi(true, true   );
   if (out) {
-    dgi->EndSlot = LOCAL_CurSlot;
+    dgi->EndSlot = REMOTE_CurSlot(worker_id);
     dgi->b_exit = LCL0 - (CELL *)B;
   } else {
   printf("F %ld\n", dgi->CurSlot);
-    LOCAL_CurSlot =
+    REMOTE_CurSlot(worker_id) =
         dgi->CurSlot; // ignore any slots created within the called goal
   }
     pop_text_stack(dgi->lvl);
@@ -1846,7 +1849,7 @@ X_API bool YAP_LeaveGoal(bool successful, YAP_dogoalinfo *dgi) {
   //   fprintf(stderr,"LeaveGoal success=%d: H=%d ENV=%p B=%ld myB=%ld TR=%d
   //   P=%p CP=%p Slots=%d\n",
   //   successful,HR-H0,LCL0-ENV,LCL0-(CELL*)B,dgi->b0,(CELL*)TR-LCL0, P, CP,
-  //   LOCAL_CurSlot);
+  //   REMOTE_CurSlot(worker_id));
   BACKUP_MACHINE_REGS();
 
   dgi->lvl = push_text_stack();
@@ -1857,7 +1860,7 @@ X_API bool YAP_LeaveGoal(bool successful, YAP_dogoalinfo *dgi) {
       }
       Yap_TrimTrail();
       B = B->cp_b;
-    } else if (LOCAL_PrologMode & AsyncIntMode) {
+    } else if (REMOTE_PrologMode(worker_id) & AsyncIntMode) {
     Yap_signal(YAP_FAIL_SIGNAL);
   }
   B = (choiceptr)(LCL0 - dgi->b0);
@@ -1867,32 +1870,32 @@ X_API bool YAP_LeaveGoal(bool successful, YAP_dogoalinfo *dgi) {
   P = dgi->p;
   CP = dgi->cp;
   YENV = ENV = LCL0-dgi->env0;
-    LOCAL_CurSlot =
+    REMOTE_CurSlot(worker_id) =
         dgi->CurSlot; // ignore any slots created within the called goal
     pop_text_stack(dgi->lvl);
   RECOVER_MACHINE_REGS();
   // fprintf(stderr," LeftGoal success=%d: H=%d ENV=%p B=%d TR=%d P=%p CP=%p
   //  Slots=%d\n",    successful,HR-H0,LCL0-ENV,LCL0-(CELL*)B,(CELL*)TR-LCL0, P,
-  //  CP, LOCAL_CurSlot);
+  //  CP, REMOTE_CurSlot(worker_id));
   return TRUE;
 }
 
 X_API Int YAP_RunGoal(Term t) {
   CACHE_REGS
   Term out;
-  yhandle_t cslot = LOCAL_CurSlot;
+  yhandle_t cslot = REMOTE_CurSlot(worker_id);
   BACKUP_MACHINE_REGS();
 
 int lvl = push_text_stack();
 
-  LOCAL_AllowRestart = FALSE;
-  LOCAL_PrologMode = UserMode;
+  REMOTE_AllowRestart(worker_id) = FALSE;
+  REMOTE_PrologMode(worker_id) = UserMode;
   out = Yap_RunTopGoal(t, true);
-  LOCAL_PrologMode = UserCCallMode;
+  REMOTE_PrologMode(worker_id) = UserCCallMode;
   // should we catch the exception or pass it through?
   // We'll pass it through
   RECOVER_MACHINE_REGS();
-  LOCAL_CurSlot = cslot;
+  REMOTE_CurSlot(worker_id) = cslot;
     pop_text_stack(lvl);
   return out;
 }
@@ -1933,6 +1936,7 @@ X_API YAP_opaque_tag_t YAP_NewOpaqueType(struct YAP_opaque_handler_struct *f) {
 }
 
 X_API Term YAP_NewOpaqueObject(YAP_opaque_tag_t blob_tag, size_t bytes) {
+  CACHE_REGS
   CELL *pt;
   Term t = Yap_AllocExternalDataInStack((CELL)blob_tag, bytes, &pt);
   if (t == TermNil)
@@ -1968,21 +1972,21 @@ X_API Int YAP_RunGoalOnce(Term t) {
   CACHE_REGS
   Term out;
   yamop *old_CP = CP, *old_P = P;
-  Int oldPrologMode = LOCAL_PrologMode;
+  Int oldPrologMode = REMOTE_PrologMode(worker_id);
   yhandle_t CSlot;
 
   BACKUP_MACHINE_REGS();
   int lvl = push_text_stack();
   CSlot = Yap_StartSlots();
-  LOCAL_PrologMode = UserMode;
+  REMOTE_PrologMode(worker_id) = UserMode;
   //  Yap_heap_regs->yap_do_low_level_trace=true;
   out = Yap_RunTopGoal(t, true);
-  LOCAL_PrologMode = oldPrologMode;
+  REMOTE_PrologMode(worker_id) = oldPrologMode;
   //  Yap_CloseSlots(CSlot);
   if (!(oldPrologMode & UserCCallMode)) {
     /* called from top-level */
   pop_text_stack( lvl);
-    LOCAL_AllowRestart = FALSE;
+    REMOTE_AllowRestart(worker_id) = FALSE;
     RECOVER_MACHINE_REGS();
     return out;
   }
@@ -2021,7 +2025,7 @@ X_API Int YAP_RunGoalOnce(Term t) {
 #endif
  P = old_P;
   CP = old_CP;
-  LOCAL_AllowRestart = FALSE;
+  REMOTE_AllowRestart(worker_id) = FALSE;
   RECOVER_MACHINE_REGS();
   pop_text_stack( lvl);
   return out;
@@ -2031,15 +2035,15 @@ X_API bool YAP_RestartGoal(void) {
   CACHE_REGS
   BACKUP_MACHINE_REGS();
   bool out;
-  if (LOCAL_AllowRestart) {
+  if (REMOTE_AllowRestart(worker_id)) {
     P = (yamop *)FAILCODE;
-    LOCAL_PrologMode = UserMode;
+    REMOTE_PrologMode(worker_id) = UserMode;
     out = Yap_exec_absmi(TRUE, YAP_EXEC_ABSMI);
-    LOCAL_PrologMode = UserCCallMode;
+    REMOTE_PrologMode(worker_id) = UserCCallMode;
     if (out == FALSE) {
       /* cleanup */
       Yap_trust_last();
-      LOCAL_AllowRestart = FALSE;
+      REMOTE_AllowRestart(worker_id) = FALSE;
     }
   } else {
     out = FALSE;
@@ -2052,7 +2056,7 @@ X_API bool YAP_ShutdownGoal(int backtrack) {
   CACHE_REGS
   BACKUP_MACHINE_REGS();
 
-  if (LOCAL_AllowRestart) {
+  if (REMOTE_AllowRestart(worker_id)) {
     choiceptr cut_pt;
 
     cut_pt = B;
@@ -2083,7 +2087,7 @@ X_API bool YAP_ShutdownGoal(int backtrack) {
 #ifdef DEPTH_LIMIT
     DEPTH = ASP[E_DEPTH];
 #endif
-    LOCAL_AllowRestart = FALSE;
+    REMOTE_AllowRestart(worker_id) = FALSE;
   }
   RECOVER_MACHINE_REGS();
   return TRUE;
@@ -2094,9 +2098,9 @@ X_API bool YAP_ContinueGoal(void) {
   bool out;
   BACKUP_MACHINE_REGS();
 
-  LOCAL_PrologMode = UserMode;
+  REMOTE_PrologMode(worker_id) = UserMode;
   out = Yap_exec_absmi(TRUE, YAP_EXEC_ABSMI);
-  LOCAL_PrologMode = UserCCallMode;
+  REMOTE_PrologMode(worker_id) = UserCCallMode;
 
   RECOVER_MACHINE_REGS();
   return (out);
@@ -2125,7 +2129,7 @@ X_API void YAP_PruneGoal(YAP_dogoalinfo *gi) {
 X_API bool YAP_GoalHasException(Term *t) {
   CACHE_REGS
   BACKUP_MACHINE_REGS();
-  return LOCAL_ActiveError->errorNo != YAP_NO_ERROR;
+  return REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR;
 }
 
 X_API void YAP_ClearExceptions(void) {
@@ -2156,12 +2160,12 @@ int   lvl = push_text_stack();
   }
     __android_log_print(
             ANDROID_LOG_INFO, "YAPDroid", "done init_ consult %s ",fl);
-  char *d = Malloc(strlen(fl) + 1);
+  char *d = Malloc(strlen(fl) + 1 PASS_REGS);
   strcpy(d, fl);
   bool consulted = (mode == YAP_CONSULT_MODE);
   Term tat = MkAtomTerm(Yap_LookupAtom(d));
   sno = Yap_OpenStream(tat, "r", MkAtomTerm(Yap_LookupAtom(fname)),
-                       LOCAL_encoding);
+                       REMOTE_encoding(worker_id));
     __android_log_print(
             ANDROID_LOG_INFO, "YAPDroid", "OpenStream got %d ",sno);
     if (sno < 0 || !Yap_ChDir(dirname((char *)d))) {
@@ -2169,8 +2173,8 @@ int   lvl = push_text_stack();
     pop_text_stack(lvl);
     return -1;
   }
-  LOCAL_PrologMode = UserMode;
-*full = pop_output_text_stack__(lvl, fl);
+  REMOTE_PrologMode(worker_id) = UserMode;
+*full = pop_output_text_stack__(lvl, fl PASS_REGS);
   Yap_init_consult(consulted,*full);
   RECOVER_MACHINE_REGS();
   UNLOCK(GLOBAL_Stream[sno].streamlock);
@@ -2196,10 +2200,11 @@ X_API FILE *YAP_TermToStream(Term t) {
 }
 
 X_API void YAP_EndConsult(int sno, int *osnop, const char *full) {
+  CACHE_REGS
   BACKUP_MACHINE_REGS();
   Yap_CloseStream(sno);
   int lvl = push_text_stack();
-  char *d = Malloc(strlen(full) + 1);
+  char *d = Malloc(strlen(full) + 1 PASS_REGS);
   strcpy(d, full);
   Yap_ChDir(dirname(d));
   if (osnop >= 0)
@@ -2210,7 +2215,7 @@ X_API void YAP_EndConsult(int sno, int *osnop, const char *full) {
                           ? "prolog"
                           : RepAtom(AtomOfTerm(CurrentModule))->StrOfAE,
                       full, *osnop, sno);
-  // LOCAL_CurSlot);
+  // REMOTE_CurSlot(worker_id));
   pop_text_stack(lvl);
   RECOVER_MACHINE_REGS();
 }
@@ -2227,13 +2232,14 @@ X_API Term YAP_Read(FILE *f) {
 }
 
 X_API Term YAP_ReadFromStream(int sno) {
+  CACHE_REGS
   Term o;
 
   BACKUP_MACHINE_REGS();
   
   sigjmp_buf signew;
   if (sigsetjmp(signew, 0)) {
-    Yap_syntax_error(LOCAL_toktide, sno, "ReadFromStream");
+    Yap_syntax_error(REMOTE_toktide(worker_id), sno, "ReadFromStream");
   RECOVER_MACHINE_REGS();
   return 0;
   } else { 
@@ -2244,6 +2250,7 @@ X_API Term YAP_ReadFromStream(int sno) {
 }
 
 X_API Term YAP_ReadClauseFromStream(int sno, Term vs, Term pos) {
+  CACHE_REGS
 
   BACKUP_MACHINE_REGS();
   Term t = Yap_read_term(
@@ -2291,7 +2298,7 @@ X_API char *YAP_WriteBuffer(Term t, char *buf, size_t sze, int flags) {
   out.type = YAP_STRING_CHARS;
   out.val.c = NULL;
   out.max = sze - 1;
-  out.enc = LOCAL_encoding;
+  out.enc = REMOTE_encoding(worker_id);
   if (!Yap_CVT_Text(&inp, &out PASS_REGS)) {
     RECOVER_MACHINE_REGS();
     pop_text_stack(l);
@@ -2336,7 +2343,7 @@ X_API bool YAP_CompileClause(Term t) {
   BACKUP_MACHINE_REGS();
 
   /* allow expansion during stack initialization */
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   ARG1 = t;
   YAPEnterCriticalSection();
   codeaddr = Yap_cclause(t, 0, mod, t);
@@ -2354,7 +2361,7 @@ X_API bool YAP_CompileClause(Term t) {
   if (Yap_get_signal(YAP_CDOVF_SIGNAL)) {
     if (!Yap_locked_growheap(FALSE, 0, NULL)) {
       Yap_Error(RESOURCE_ERROR_HEAP, TermNil, "YAP failed to grow heap: %s",
-                LOCAL_ErrorMessage);
+                REMOTE_ActiveError(worker_id)->errorMsg);
       ok = false;
     }
   }
@@ -2417,9 +2424,10 @@ X_API void YAP_FlushAllStreams(void) {
 }
 
 X_API void YAP_Throw(Term t) {
+  CACHE_REGS
   BACKUP_MACHINE_REGS();
-  LOCAL_ActiveError->errorNo = THROW_EVENT;
-  LOCAL_ActiveError->errorGoal = Yap_TermToBuffer(t, 0);
+  REMOTE_ActiveError(worker_id)->errorNo = THROW_EVENT;
+  REMOTE_ActiveError(worker_id)->errorGoal = Yap_TermToBuffer(t, 0);
   Yap_JumpToEnv();
   RECOVER_MACHINE_REGS();
 }
@@ -2427,11 +2435,11 @@ X_API void YAP_Throw(Term t) {
 X_API void YAP_AsyncThrow(Term t) {
   CACHE_REGS
   BACKUP_MACHINE_REGS();
-  LOCAL_PrologMode |= AsyncIntMode;
-  LOCAL_ActiveError->errorNo = THROW_EVENT;
-  LOCAL_ActiveError->errorGoal = Yap_TermToBuffer(t, 0);
+  REMOTE_PrologMode(worker_id) |= AsyncIntMode;
+  REMOTE_ActiveError(worker_id)->errorNo = THROW_EVENT;
+  REMOTE_ActiveError(worker_id)->errorGoal = Yap_TermToBuffer(t, 0);
   Yap_JumpToEnv();
-  LOCAL_PrologMode &= ~AsyncIntMode;
+  REMOTE_PrologMode(worker_id) &= ~AsyncIntMode;
   RECOVER_MACHINE_REGS();
 }
 
@@ -2509,7 +2517,7 @@ X_API Term YAP_CurrentModule(void) {
 X_API Term YAP_SetCurrentModule(Term new) {
   CACHE_REGS
   Term omod = CurrentModule;
-  LOCAL_SourceModule = CurrentModule = new;
+  REMOTE_SourceModule(worker_id) = CurrentModule = new;
   return omod;
 }
 
@@ -2584,7 +2592,6 @@ X_API int YAP_HaltRegisterHook(HaltHookFunc hook, void *closure) {
 }
 
 X_API char *YAP_cwd(void) {
-  CACHE_REGS
   char *buf = Yap_AllocCodeSpace(FILENAME_MAX + 1);
   int len;
   if (!Yap_getcwd(buf, FILENAME_MAX))
@@ -2605,14 +2612,14 @@ X_API Term YAP_FloatsToList(double *dblp, size_t sz) {
   while (ASP - 1024 < HR + sz * (2 + 2 + SIZEOF_DOUBLE / SIZEOF_INT_P)) {
     if ((CELL *)dblp > H0 && (CELL *)dblp < HR) {
       /* we are in trouble */
-      LOCAL_OpenArray = (CELL *)dblp;
+      REMOTE_OpenArray(worker_id) = (CELL *)dblp;
     }
     if (!Yap_dogc(0, NULL PASS_REGS)) {
       RECOVER_H();
       return 0L;
     }
-    dblp = (double *)LOCAL_OpenArray;
-    LOCAL_OpenArray = NULL;
+    dblp = (double *)REMOTE_OpenArray(worker_id);
+    REMOTE_OpenArray(worker_id) = NULL;
   }
   t = AbsPair(HR);
   while (sz) {
@@ -2673,14 +2680,14 @@ X_API Term YAP_IntsToList(Int *dblp, size_t sz) {
   while (ASP - 1024 < HR + sz * 3) {
     if ((CELL *)dblp > H0 && (CELL *)dblp < HR) {
       /* we are in trouble */
-      LOCAL_OpenArray = (CELL *)dblp;
+      REMOTE_OpenArray(worker_id) = (CELL *)dblp;
     }
     if (!Yap_dogc(0, NULL PASS_REGS)) {
       RECOVER_H();
       return 0L;
     }
-    dblp = (Int *)LOCAL_OpenArray;
-    LOCAL_OpenArray = NULL;
+    dblp = (Int *)REMOTE_OpenArray(worker_id);
+    REMOTE_OpenArray(worker_id) = NULL;
   }
   t = AbsPair(HR);
   while (sz) {
@@ -2827,23 +2834,23 @@ X_API Term YAP_Recorded(void *handle) {
 
   BACKUP_MACHINE_REGS();
   do {
-    LOCAL_Error_TYPE = YAP_NO_ERROR;
+    REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
     t = Yap_FetchTermFromDB(dbterm);
-    if (LOCAL_Error_TYPE == YAP_NO_ERROR) {
+    if (REMOTE_ActiveError(worker_id)->errorNo == YAP_NO_ERROR) {
       RECOVER_MACHINE_REGS();
       return t;
-    } else if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+    } else if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       if (!Yap_growglobal(NULL)) {
         Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                  LOCAL_ErrorMessage);
+                  REMOTE_ActiveError(worker_id)->errorMsg);
         RECOVER_MACHINE_REGS();
         return FALSE;
       }
     } else {
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       if (!Yap_growstack(dbterm->NOfCells * CellSize)) {
-        Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         RECOVER_MACHINE_REGS();
         return FALSE;
       }
@@ -3091,7 +3098,8 @@ X_API Int YAP_ListLength(Term t) {
 }
 
 X_API Int YAP_NumberVars(Term t, Int nbv) {
-  return Yap_NumberVars(t, nbv, FALSE, NULL);
+  CACHE_REGS
+  return Yap_NumberVars(t, nbv, FALSE, NULL PASS_REGS);
 }
 
 X_API Term YAP_UnNumberVars(Term t) {

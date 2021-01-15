@@ -123,7 +123,7 @@ PipePutc (int sno, int ch)
 
 /*
   Basically, the same as console but also sends a prompt and takes care of
-  finding out whether we are at the start of a LOCAL_newline.
+  finding out whether we are at the start of a REMOTE_newline(worker_id).
 */
 static int
 ConsolePipeGetc(int sno)
@@ -139,19 +139,19 @@ ConsolePipeGetc(int sno)
 #endif
 
   /* send the prompt away */
-  if (LOCAL_newline) {
-    char *cptr = LOCAL_Prompt, ch;
+  if (REMOTE_newline(worker_id)) {
+    char *cptr = REMOTE_Prompt(worker_id), ch;
     /* use the default routine */
     while ((ch = *cptr++) != '\0') {
       GLOBAL_Stream[StdErrStream].stream_putc(StdErrStream, ch);
     }
-    strncpy(LOCAL_Prompt, RepAtom (LOCAL_AtPrompt)->StrOfAE, MAX_PROMPT);
-    LOCAL_newline = false;
+    strncpy(REMOTE_Prompt(worker_id), RepAtom (REMOTE_AtPrompt(worker_id))->StrOfAE, MAX_PROMPT);
+    REMOTE_newline(worker_id) = false;
   }
   /* should be able to use a buffer */
-  LOCAL_PrologMode |= ConsoleGetcMode;
+  REMOTE_PrologMode(worker_id) |= ConsoleGetcMode;
   count = read(s->u.pipe.fd, &c, sizeof(char));
-  LOCAL_PrologMode &= ~ConsoleGetcMode;
+  REMOTE_PrologMode(worker_id) &= ~ConsoleGetcMode;
   if (count == 0) {
     return console_post_process_eof(s);
   } else if (count > 0) {

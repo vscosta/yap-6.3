@@ -999,6 +999,7 @@ void Yap_InitCPredBack_(const char *Name, arity_t Arity, arity_t Extra,
 
 static void InitStdPreds(struct yap_boot_params *yapi)
 {
+  CACHE_REGS
   CurrentModule = PROLOG_MODULE;
   Yap_InitCPreds();
   Yap_InitBackCPreds();
@@ -1264,9 +1265,9 @@ static CELL *InitHandles(int wid) {
 
 void Yap_CloseScratchPad(void) {
   CACHE_REGS
-  Yap_FreeCodeSpace(LOCAL_ScratchPad.ptr);
-  LOCAL_ScratchPad.sz = SCRATCH_START_SIZE;
-  LOCAL_ScratchPad.msz = SCRATCH_START_SIZE;
+  Yap_FreeCodeSpace(REMOTE_ScratchPad(worker_id).ptr);
+  REMOTE_ScratchPad(worker_id).sz = SCRATCH_START_SIZE;
+  REMOTE_ScratchPad(worker_id).msz = SCRATCH_START_SIZE;
 }
 
 #include "iglobals.h"
@@ -1306,7 +1307,7 @@ static void InitCodes(struct yap_boot_params *yapi)
 #endif /* THREADS */
   Yap_InitFirstWorkerThreadHandle();
   /* make sure no one else can use these two atoms */
-  LOCAL_SourceModule = CurrentModule = 0;
+  REMOTE_SourceModule(worker_id) = CurrentModule = 0;
   Yap_ReleaseAtom(AtomOfTerm(TermRefoundVar));
   /* flags require atom table done, but must be done as soon as possible,
      definitely before any predicate initialization */
@@ -1361,10 +1362,10 @@ void Yap_InitWorkspace(struct yap_boot_params *yapi,
 
 #ifdef THREADS
   Yap_regp = ((REGSTORE *)pthread_getspecific(Yap_yaamregs_key));
-  LOCAL = REMOTE(0);
+  REMOTE(worker_id) = REMOTE(0);
 #endif /* THREADS */
 #if defined(YAPOR_COPY) || defined(YAPOR_COW) || defined(YAPOR_SBA)
-  LOCAL = REMOTE(0);
+  REMOTE(worker_id) = REMOTE(0);
 #endif /* YAPOR_COPY || YAPOR_COW || YAPOR_SBA */
   if (Heap < MinHeapSpace)
     Heap = MinHeapSpace;
@@ -1430,16 +1431,16 @@ void Yap_InitWorkspace(struct yap_boot_params *yapi,
     Trail = MinTrailSpace;
   if (Stack < MinStackSpace)
     Stack = MinStackSpace;
-  if (!(LOCAL_GlobalBase = (ADDR)malloc((Trail + Stack) * 1024))) {
+  if (!(REMOTE_GlobalBase(worker_id) = (ADDR)malloc((Trail + Stack) * 1024))) {
     Yap_Error(RESOURCE_ERROR_HEAP, 0,
               "could not allocate stack space for main thread");
     Yap_exit(1);
   }
 #if THREADS
   /* don't forget this is a thread */
-  LOCAL_ThreadHandle.stack_address = LOCAL_GlobalBase;
-  LOCAL_ThreadHandle.tsize = Trail;
-  LOCAL_ThreadHandle.ssize = Stack;
+  REMOTE_ThreadHandle(worker_id).stack_address = REMOTE_GlobalBase(worker_id);
+  REMOTE_ThreadHandle(worker_id).tsize = Trail;
+  REMOTE_ThreadHandle(worker_id).ssize = Stack;
 #endif
 #endif
   GLOBAL_AllowGlobalExpansion = true;
@@ -1482,7 +1483,7 @@ void Yap_exit(int value) {
   Yap_unmap_yapor_memory();
 #endif /* YAPOR_COPY || YAPOR_COW || YAPOR_SBA */
 
-  if (!(LOCAL_PrologMode & BootMode)) {
+  if (!(REMOTE_PrologMode(worker_id) & BootMode)) {
 #ifdef LOW_PROF
     remove("PROFPREDS");
     remove("PROFILING");

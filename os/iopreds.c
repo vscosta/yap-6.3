@@ -184,6 +184,7 @@ static int EOFGetc(int sno) {
 }
 
 static void unix_upd_stream_info(StreamDesc *s) {
+  CACHE_REGS
   if (s->status & InMemory_Stream_f) {
     s->status |= Seekable_Stream_f;
     return;
@@ -225,9 +226,9 @@ static void unix_upd_stream_info(StreamDesc *s) {
     filedes = fileno(s->file);
     if (isatty(filedes)) {
 #if HAVE_TTYNAME
-      int rc = ttyname_r(filedes, LOCAL_FileNameBuf, YAP_FILENAME_MAX - 1);
+      int rc = ttyname_r(filedes, REMOTE_FileNameBuf(worker_id), YAP_FILENAME_MAX - 1);
       if (rc == 0)
-        s->name = Yap_LookupAtom(LOCAL_FileNameBuf);
+        s->name = Yap_LookupAtom(REMOTE_FileNameBuf(worker_id));
       else
         s->name = AtomTtys;
 #else
@@ -261,7 +262,6 @@ static void default_peek(StreamDesc *st) {
 }
 
 void Yap_DefaultStreamOps(StreamDesc *st) {
-  CACHE_REGS
 
   st->stream_wputc = put_wchar;
   st->stream_wgetc = get_wchar;
@@ -319,7 +319,6 @@ void Yap_DefaultStreamOps(StreamDesc *st) {
 }
 
 static void InitFileIO(StreamDesc *s) {
-  CACHE_REGS
   Yap_DefaultStreamOps(s);
 }
 
@@ -385,7 +384,7 @@ Term Yap_StreamUserName(int sno) {
 
 static void InitStdStreams(void) {
   CACHE_REGS
-  if (LOCAL_sockets_io) {
+  if (REMOTE_sockets_io(worker_id)) {
     InitStdStream(StdInStream, Input_Stream_f, NULL, NULL);
     InitStdStream(StdOutStream, Output_Stream_f, NULL, NULL);
     InitStdStream(StdErrStream, Output_Stream_f, NULL, NULL);
@@ -404,15 +403,16 @@ static void InitStdStreams(void) {
     Yap_InitReadline(TermTrue);
   }
 #endif
-  LOCAL_c_input_stream = StdInStream;
-  LOCAL_c_output_stream = StdOutStream;
-  LOCAL_c_error_stream = StdErrStream;
+  REMOTE_c_input_stream(worker_id) = StdInStream;
+  REMOTE_c_output_stream(worker_id) = StdOutStream;
+  REMOTE_c_error_stream(worker_id) = StdErrStream;
 }
 
 void Yap_InitStdStreams(void) { InitStdStreams(); }
 
 Int PlIOError__(const char *file, const char *function, int lineno,
                 yap_error_number type, Term culprit, ...) {
+  CACHE_REGS
   if (trueLocalPrologFlag(FILEERRORS_FLAG) ||
       type == RESOURCE_ERROR_MAX_STREAMS /* do not catch resource errors */) {
     va_list args;
@@ -432,7 +432,7 @@ Int PlIOError__(const char *file, const char *function, int lineno,
     return false;
   } else {
     pop_text_stack(0);
-    memset(LOCAL_ActiveError, 0, sizeof(*LOCAL_ActiveError));
+    memset(REMOTE_ActiveError(worker_id), 0, sizeof(*REMOTE_ActiveError(worker_id)));
     return false;
   }
 }
@@ -440,10 +440,11 @@ Int PlIOError__(const char *file, const char *function, int lineno,
 bool
  UnixIOError__(const char *file, const char *function, int lineno,
                 int error, io_kind_t io_type, Term culprit, ...) {
+  CACHE_REGS
   if (trueLocalPrologFlag(FILEERRORS_FLAG) ) {
     va_list args;
     const char *format;
-    char *who = Malloc(1024);
+    char *who = Malloc(1024 PASS_REGS);
     yap_error_number e_type;
 
     va_start(args, culprit);
@@ -501,7 +502,7 @@ bool
     /* aRgrownd fail */  
   } else {
     pop_text_stack(0);
-    memset(LOCAL_ActiveError, 0, sizeof(*LOCAL_ActiveError));
+    memset(REMOTE_ActiveError(worker_id), 0, sizeof(*REMOTE_ActiveError(worker_id)));
     return false;
   }
 }
@@ -588,14 +589,14 @@ void Yap_DebugPlWriteln(Term t) {
   CACHE_REGS
   if (t == 0)
     fprintf(stderr, "NULL");
-  Yap_plwrite(t, GLOBAL_Stream+LOCAL_c_error_stream , 10, 0, NULL);
-  Yap_DebugPutc(GLOBAL_Stream[LOCAL_c_error_stream].file, '.');
-  Yap_DebugPutc(GLOBAL_Stream[LOCAL_c_error_stream].file, 10);
+  Yap_plwrite(t, GLOBAL_Stream+REMOTE_c_error_stream(worker_id) , 10, 0, NULL);
+  Yap_DebugPutc(GLOBAL_Stream[REMOTE_c_error_stream(worker_id)].file, '.');
+  Yap_DebugPutc(GLOBAL_Stream[REMOTE_c_error_stream(worker_id)].file, 10);
 }
 
 void Yap_DebugErrorPutc(int c) {
   CACHE_REGS
-  Yap_DebugPutc(GLOBAL_Stream[LOCAL_c_error_stream].file, c);
+  Yap_DebugPutc(GLOBAL_Stream[REMOTE_c_error_stream(worker_id)].file, c);
 }
 
 void Yap_DebugWriteIndicator(PredEntry *ap) {
@@ -669,7 +670,7 @@ static int NullPutc(int sno, int ch) {
   return ((int)ch);
 }
 
-/* check if we read a LOCAL_newline or an EOF */
+/* check if we read a REMOTE_newline(worker_id) or an EOF */
 int console_post_process_eof(StreamDesc *s) {
   CACHE_REGS
   if (!ResetEOF(s)) {
@@ -677,7 +678,7 @@ int console_post_process_eof(StreamDesc *s) {
     s->stream_getc = EOFGetc;
     s->stream_wgetc = EOFWGetc;
     s->stream_wgetc_for_read = EOFWGetc;
-    LOCAL_newline = true;
+    REMOTE_newline(worker_id) = true;
   }
   return EOFCHAR;
 }
@@ -911,18 +912,18 @@ int put_wchar(int sno, wchar_t ch) {
 int Yap_PlGetchar(void) {
   CACHE_REGS
   return (
-      GLOBAL_Stream[LOCAL_c_input_stream].stream_getc(LOCAL_c_input_stream));
+      GLOBAL_Stream[REMOTE_c_input_stream(worker_id)].stream_getc(REMOTE_c_input_stream(worker_id)));
 }
 
 int Yap_PlGetWchar(void) {
   CACHE_REGS
-  return get_wchar(LOCAL_c_input_stream);
+  return get_wchar(REMOTE_c_input_stream(worker_id));
 }
 
 /* avoid using a variable to call a function */
 int Yap_PlFGetchar(void) {
   CACHE_REGS
-  return (PlGetc(LOCAL_c_input_stream));
+  return (PlGetc(REMOTE_c_input_stream(worker_id)));
 }
 
 Term Yap_MkStream(int n) {
@@ -1127,6 +1128,7 @@ static int check_bom(int sno, StreamDesc *st) {
 bool Yap_initStream(int sno, FILE *fd, Atom name, const char *io_mode,
                     Term file_name, encoding_t encoding, stream_flags_t flags,
                     void *vfs) {
+  CACHE_REGS
   // fprintf(stderr,"+ %s --> %d\n", name, sno);
   StreamDesc *st = &GLOBAL_Stream[sno];
   __android_log_print(
@@ -1321,6 +1323,7 @@ static const param_t open_defs[] = {OPEN_DEFS()};
 
 static bool fill_stream(int sno, StreamDesc *st, Term tin, const char *io_mode,
                         Term user_name, encoding_t enc) {
+  CACHE_REGS
   struct vfs *vfsp = NULL;
   const char *fname;
 
@@ -1381,7 +1384,7 @@ return false;
                     }
                     buf = pop_output_text_stack(j, buf);
                     Atom nat = Yap_LookupAtom(Yap_StrPrefix(buf, 32));
-                    sno = Yap_open_buf_read_stream(buf, strlen(buf) + 1, &LOCAL_encoding,
+                    sno = Yap_open_buf_read_stream(buf, strlen(buf) + 1, &REMOTE_encoding(worker_id),
                                                    MEM_BUF_MALLOC, nat,
                                                    MkAtomTerm(NameOfFunctor(f)));
                     pop_text_stack(j);
@@ -1411,7 +1414,7 @@ return false;
     st->status |= Binary_Stream_f;
   }
   Yap_initStream(sno, st->file, Yap_LookupAtom(fname), io_mode, user_name,
-                 LOCAL_encoding, st->status, vfsp);
+                 REMOTE_encoding(worker_id), st->status, vfsp);
   return true;
 }
 
@@ -1428,7 +1431,7 @@ static Int do_open(Term file_name, Term t2, Term tlist USES_REGS) {
   memset(st, 0, sizeof(*st));
   // user requested encoding?
   // BOM mess
-  st->encoding = LOCAL_encoding;
+  st->encoding = REMOTE_encoding(worker_id);
   if (st->encoding == ENC_UTF16_BE || st->encoding == ENC_UTF16_LE ||
       st->encoding == ENC_UCS2_BE || st->encoding == ENC_UCS2_LE ||
       st->encoding == ENC_ISO_UTF32_BE || st->encoding == ENC_ISO_UTF32_LE) {
@@ -1459,8 +1462,8 @@ static Int do_open(Term file_name, Term t2, Term tlist USES_REGS) {
   xarg *args =
       Yap_ArgListToVector(tlist, open_defs, OPEN_END, DOMAIN_ERROR_OPEN_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
-      Yap_Error(LOCAL_Error_TYPE, tlist, "option handling in open/3");
+    if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, tlist, "option handling in open/3");
     }
     return false;
   }
@@ -1756,7 +1759,6 @@ static Int p_open_null_stream(USES_REGS1) {
 
 int Yap_OpenStream(Term tin, const char *io_mode, Term user_name,
                    encoding_t enc) {
-  CACHE_REGS
   int sno;
   StreamDesc *st;
 
@@ -1792,7 +1794,7 @@ int Yap_FileStream(FILE *fd, Atom name, Term file_name, int flags,
   } else {
     mode = "r";
   }
-  Yap_initStream(sno, fd, name, mode, file_name, LOCAL_encoding, flags, vfsp);
+  Yap_initStream(sno, fd, name, mode, file_name, REMOTE_encoding(worker_id), flags, vfsp);
   return sno;
 }
 
@@ -2022,8 +2024,8 @@ static Int close2(USES_REGS1) { /* '$close'(+GLOBAL_Stream) */
   xarg *args = Yap_ArgListToVector((tlist = Deref(ARG2)), close_defs, CLOSE_END,
                                    DOMAIN_ERROR_CLOSE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
-      Yap_Error(LOCAL_Error_TYPE, tlist, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, tlist, NULL);
     }
     return false;
   }

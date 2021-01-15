@@ -109,30 +109,30 @@ void private_completion(sg_fr_ptr sg_fr) {
   /* complete subgoals */
 #ifdef LIMIT_TABLING
   sg_fr_ptr aux_sg_fr;
-  while (LOCAL_top_sg_fr != sg_fr) {
-    aux_sg_fr = LOCAL_top_sg_fr;
-    LOCAL_top_sg_fr = SgFr_next(aux_sg_fr);
+  while (REMOTE_top_sg_fr(worker_id) != sg_fr) {
+    aux_sg_fr = REMOTE_top_sg_fr(worker_id);
+    REMOTE_top_sg_fr(worker_id) = SgFr_next(aux_sg_fr);
     mark_as_completed(aux_sg_fr);
     insert_into_global_sg_fr_list(aux_sg_fr);
   }
-  aux_sg_fr = LOCAL_top_sg_fr;
-  LOCAL_top_sg_fr = SgFr_next(aux_sg_fr);
+  aux_sg_fr = REMOTE_top_sg_fr(worker_id);
+  REMOTE_top_sg_fr(worker_id) = SgFr_next(aux_sg_fr);
   mark_as_completed(aux_sg_fr);
   insert_into_global_sg_fr_list(aux_sg_fr);
 #else
-  while (LOCAL_top_sg_fr != sg_fr) {
-    mark_as_completed(LOCAL_top_sg_fr);
-    LOCAL_top_sg_fr = SgFr_next(LOCAL_top_sg_fr);
+  while (REMOTE_top_sg_fr(worker_id) != sg_fr) {
+    mark_as_completed(REMOTE_top_sg_fr(worker_id));
+    REMOTE_top_sg_fr(worker_id) = SgFr_next(REMOTE_top_sg_fr(worker_id));
   }
-  mark_as_completed(LOCAL_top_sg_fr);
-  LOCAL_top_sg_fr = SgFr_next(LOCAL_top_sg_fr);
+  mark_as_completed(REMOTE_top_sg_fr(worker_id));
+  REMOTE_top_sg_fr(worker_id) = SgFr_next(REMOTE_top_sg_fr(worker_id));
 #endif /* LIMIT_TABLING */
 
   /* release dependency frames */
-  while (EQUAL_OR_YOUNGER_CP(DepFr_cons_cp(LOCAL_top_dep_fr), B)) {  /* never equal if batched scheduling */
-    dep_fr_ptr dep_fr = DepFr_next(LOCAL_top_dep_fr);
-    FREE_DEPENDENCY_FRAME(LOCAL_top_dep_fr);
-    LOCAL_top_dep_fr = dep_fr;
+  while (EQUAL_OR_YOUNGER_CP(DepFr_cons_cp(REMOTE_top_dep_fr(worker_id)), B)) {  /* never equal if batched scheduling */
+    dep_fr_ptr dep_fr = DepFr_next(REMOTE_top_dep_fr(worker_id));
+    FREE_DEPENDENCY_FRAME(REMOTE_top_dep_fr(worker_id));
+    REMOTE_top_dep_fr(worker_id) = dep_fr;
   }
 
   /* adjust freeze registers */
@@ -168,9 +168,9 @@ void public_completion(void) {
 #endif /* DETERMINISTIC_TABLING */
       top_sg_fr = SgFr_next(GEN_CP(Get_LOCAL_top_cp())->cp_sg_fr);
     do {
-      mark_as_completed(LOCAL_top_sg_fr);
-      LOCAL_top_sg_fr = SgFr_next(LOCAL_top_sg_fr);
-    } while (LOCAL_top_sg_fr != top_sg_fr);
+      mark_as_completed(REMOTE_top_sg_fr(worker_id));
+      REMOTE_top_sg_fr(worker_id) = SgFr_next(REMOTE_top_sg_fr(worker_id));
+    } while (REMOTE_top_sg_fr(worker_id) != top_sg_fr);
 
     /* no dependency frames to release */
     chain_dep_fr = NULL;
@@ -181,28 +181,28 @@ void public_completion(void) {
     ** nodes ---> we need to complete all dependent subgoals   */
 
     /* complete subgoals */
-    if (DepFr_leader_dep_is_on_stack(LOCAL_top_dep_fr)) {
-      while (LOCAL_top_sg_fr && 
-             EQUAL_OR_YOUNGER_CP(SgFr_gen_cp(LOCAL_top_sg_fr), Get_LOCAL_top_cp())) {
-        mark_as_completed(LOCAL_top_sg_fr);
-        LOCAL_top_sg_fr = SgFr_next(LOCAL_top_sg_fr);
+    if (DepFr_leader_dep_is_on_stack(REMOTE_top_dep_fr(worker_id))) {
+      while (REMOTE_top_sg_fr(worker_id) && 
+             EQUAL_OR_YOUNGER_CP(SgFr_gen_cp(REMOTE_top_sg_fr(worker_id)), Get_LOCAL_top_cp())) {
+        mark_as_completed(REMOTE_top_sg_fr(worker_id));
+        REMOTE_top_sg_fr(worker_id) = SgFr_next(REMOTE_top_sg_fr(worker_id));
       }
     } else {
-      while (LOCAL_top_sg_fr && 
-             YOUNGER_CP(SgFr_gen_cp(LOCAL_top_sg_fr), Get_LOCAL_top_cp())) {
-        mark_as_completed(LOCAL_top_sg_fr);
-        LOCAL_top_sg_fr = SgFr_next(LOCAL_top_sg_fr);
+      while (REMOTE_top_sg_fr(worker_id) && 
+             YOUNGER_CP(SgFr_gen_cp(REMOTE_top_sg_fr(worker_id)), Get_LOCAL_top_cp())) {
+        mark_as_completed(REMOTE_top_sg_fr(worker_id));
+        REMOTE_top_sg_fr(worker_id) = SgFr_next(REMOTE_top_sg_fr(worker_id));
       }
     }
 
     /* chain dependency frames to release */
     chain_dep_fr = NULL;
-    while (YOUNGER_CP(DepFr_cons_cp(LOCAL_top_dep_fr), Get_LOCAL_top_cp())) {
-      LOCK_DEP_FR(LOCAL_top_dep_fr);
-      next_dep_fr = DepFr_next(LOCAL_top_dep_fr);
-      DepFr_next(LOCAL_top_dep_fr) = chain_dep_fr;
-      chain_dep_fr = LOCAL_top_dep_fr;
-      LOCAL_top_dep_fr = next_dep_fr;
+    while (YOUNGER_CP(DepFr_cons_cp(REMOTE_top_dep_fr(worker_id)), Get_LOCAL_top_cp())) {
+      LOCK_DEP_FR(REMOTE_top_dep_fr(worker_id));
+      next_dep_fr = DepFr_next(REMOTE_top_dep_fr(worker_id));
+      DepFr_next(REMOTE_top_dep_fr(worker_id)) = chain_dep_fr;
+      chain_dep_fr = REMOTE_top_dep_fr(worker_id);
+      REMOTE_top_dep_fr(worker_id) = next_dep_fr;
     }
 
     /* adjust freeze registers */
@@ -212,7 +212,7 @@ void public_completion(void) {
   /* chain or-frames to release */
   chain_or_fr = NULL;
   top_or_fr = Get_LOCAL_top_cp_on_stack()->cp_or_fr;
-  while (top_or_fr != LOCAL_top_or_fr) {
+  while (top_or_fr != REMOTE_top_or_fr(worker_id)) {
     or_fr_ptr next_or_fr_on_stack;
     LOCK_OR_FRAME(top_or_fr);
     susp_fr = OrFr_suspensions(top_or_fr);
@@ -261,8 +261,8 @@ void public_completion(void) {
   }
   if (solutions) {
     CUT_join_answers_in_an_unique_frame(solutions);
-    SolFr_next(solutions) = OrFr_qg_solutions(LOCAL_top_or_fr);
-    OrFr_qg_solutions(LOCAL_top_or_fr) = solutions;
+    SolFr_next(solutions) = OrFr_qg_solutions(REMOTE_top_or_fr(worker_id));
+    OrFr_qg_solutions(REMOTE_top_or_fr(worker_id)) = solutions;
   }
 
   /* adjust top register */
@@ -319,7 +319,7 @@ void complete_suspension_frames(or_fr_ptr or_fr) {
   if (solutions) {
     CUT_join_answers_in_an_unique_frame(solutions);
     SolFr_next(solutions) = OrFr_qg_solutions(or_fr);
-    OrFr_qg_solutions(LOCAL_top_or_fr) = solutions;
+    OrFr_qg_solutions(REMOTE_top_or_fr(worker_id)) = solutions;
   }
 
   return;
@@ -333,12 +333,12 @@ void suspend_branch(void) {
   /* suspension only occurs in shared nodes that **
   **   are leaders with younger consumer nodes   */
 #ifdef DEBUG_OPTYAP
-  OPTYAP_ERROR_CHECKING(suspend_branch, Get_LOCAL_top_cp()->cp_or_fr != LOCAL_top_or_fr);
+  OPTYAP_ERROR_CHECKING(suspend_branch, Get_LOCAL_top_cp()->cp_or_fr != REMOTE_top_or_fr(worker_id));
   OPTYAP_ERROR_CHECKING(suspend_branch, B_FZ == Get_LOCAL_top_cp());
   OPTYAP_ERROR_CHECKING(suspend_branch, YOUNGER_CP(Get_LOCAL_top_cp(), Get_LOCAL_top_cp_on_stack()));
-  OPTYAP_ERROR_CHECKING(suspend_branch, Get_LOCAL_top_cp()->cp_or_fr != LOCAL_top_or_fr);
+  OPTYAP_ERROR_CHECKING(suspend_branch, Get_LOCAL_top_cp()->cp_or_fr != REMOTE_top_or_fr(worker_id));
   or_frame = Get_LOCAL_top_cp_on_stack()->cp_or_fr;
-  while (or_frame != LOCAL_top_or_fr) {
+  while (or_frame != REMOTE_top_or_fr(worker_id)) {
     OPTYAP_ERROR_CHECKING(suspend_branch, YOUNGER_CP(Get_LOCAL_top_cp(), GetOrFr_node(or_frame)));
     or_frame = OrFr_next_on_stack(or_frame);
   }
@@ -354,7 +354,7 @@ void suspend_branch(void) {
     OrFr_owners(or_frame)--;
     UNLOCK_OR_FRAME(or_frame);
     or_frame = OrFr_next_on_stack(or_frame);
-    while (or_frame != LOCAL_top_or_fr) {
+    while (or_frame != REMOTE_top_or_fr(worker_id)) {
       LOCK_OR_FRAME(or_frame);
       OrFr_owners(or_frame)--;
       UNLOCK_OR_FRAME(or_frame);
@@ -371,28 +371,28 @@ void suspend_branch(void) {
     h_size = (unsigned long) H_FZ - (unsigned long) Get_LOCAL_top_cp()->cp_h;
     b_size = (unsigned long) Get_LOCAL_top_cp() - (unsigned long) B_FZ;
     tr_size = (unsigned long) TR_FZ - (unsigned long) Get_LOCAL_top_cp()->cp_tr;
-    new_suspension_frame(new_susp_fr, Get_LOCAL_top_cp_on_stack()->cp_or_fr, LOCAL_top_dep_fr, LOCAL_top_sg_fr,
+    new_suspension_frame(new_susp_fr, Get_LOCAL_top_cp_on_stack()->cp_or_fr, REMOTE_top_dep_fr(worker_id), REMOTE_top_sg_fr(worker_id),
                          Get_LOCAL_top_cp()->cp_h, B_FZ, Get_LOCAL_top_cp()->cp_tr, h_size, b_size, tr_size);
 
     /* store suspension frame in current top or-frame */
-    LOCK_OR_FRAME(LOCAL_top_or_fr);
-    if (OrFr_nearest_suspnode(LOCAL_top_or_fr) == LOCAL_top_or_fr)
-      OrFr_nearest_suspnode(LOCAL_top_or_fr) = NULL;
-    SuspFr_next(new_susp_fr) = OrFr_suspensions(LOCAL_top_or_fr);
-    OrFr_suspensions(LOCAL_top_or_fr) = new_susp_fr;
-    UNLOCK_OR_FRAME(LOCAL_top_or_fr);
+    LOCK_OR_FRAME(REMOTE_top_or_fr(worker_id));
+    if (OrFr_nearest_suspnode(REMOTE_top_or_fr(worker_id)) == REMOTE_top_or_fr(worker_id))
+      OrFr_nearest_suspnode(REMOTE_top_or_fr(worker_id)) = NULL;
+    SuspFr_next(new_susp_fr) = OrFr_suspensions(REMOTE_top_or_fr(worker_id));
+    OrFr_suspensions(REMOTE_top_or_fr(worker_id)) = new_susp_fr;
+    UNLOCK_OR_FRAME(REMOTE_top_or_fr(worker_id));
   }
 
   /* adjust top pointers */
-  while (LOCAL_top_sg_fr && YOUNGER_CP(SgFr_gen_cp(LOCAL_top_sg_fr), Get_LOCAL_top_cp_on_stack())) {
-    SgFr_gen_worker(LOCAL_top_sg_fr) = MAX_WORKERS;
-    LOCAL_top_sg_fr = SgFr_next(LOCAL_top_sg_fr);
+  while (REMOTE_top_sg_fr(worker_id) && YOUNGER_CP(SgFr_gen_cp(REMOTE_top_sg_fr(worker_id)), Get_LOCAL_top_cp_on_stack())) {
+    SgFr_gen_worker(REMOTE_top_sg_fr(worker_id)) = MAX_WORKERS;
+    REMOTE_top_sg_fr(worker_id) = SgFr_next(REMOTE_top_sg_fr(worker_id));
   }
-  while (LOCAL_top_sg_fr && YOUNGER_CP(SgFr_gen_cp(LOCAL_top_sg_fr), Get_LOCAL_top_cp())) {
-    LOCAL_top_sg_fr = SgFr_next(LOCAL_top_sg_fr);
+  while (REMOTE_top_sg_fr(worker_id) && YOUNGER_CP(SgFr_gen_cp(REMOTE_top_sg_fr(worker_id)), Get_LOCAL_top_cp())) {
+    REMOTE_top_sg_fr(worker_id) = SgFr_next(REMOTE_top_sg_fr(worker_id));
   }
-  while (YOUNGER_CP(DepFr_cons_cp(LOCAL_top_dep_fr), Get_LOCAL_top_cp())) {
-    LOCAL_top_dep_fr = DepFr_next(LOCAL_top_dep_fr);
+  while (YOUNGER_CP(DepFr_cons_cp(REMOTE_top_dep_fr(worker_id)), Get_LOCAL_top_cp())) {
+    REMOTE_top_dep_fr(worker_id) = DepFr_next(REMOTE_top_dep_fr(worker_id));
   }
   Set_LOCAL_top_cp_on_stack( Get_LOCAL_top_cp() );
 
@@ -426,14 +426,14 @@ void resume_suspension_frame(susp_fr_ptr resume_fr, or_fr_ptr top_or_fr) {
 
   /* update shared nodes */
   or_frame = top_or_fr;
-  while (or_frame != LOCAL_top_or_fr) {
+  while (or_frame != REMOTE_top_or_fr(worker_id)) {
     LOCK_OR_FRAME(or_frame);
     OrFr_owners(or_frame)++;
     UNLOCK_OR_FRAME(or_frame);
     or_frame = OrFr_next_on_stack(or_frame);
   }  
   or_frame = top_or_fr;
-  while (or_frame != LOCAL_top_or_fr) {
+  while (or_frame != REMOTE_top_or_fr(worker_id)) {
     LOCK_OR_FRAME(or_frame);
     BITMAP_insert(OrFr_members(or_frame), worker_id);
     BRANCH(worker_id, OrFr_depth(or_frame)) = 1;
@@ -442,12 +442,12 @@ void resume_suspension_frame(susp_fr_ptr resume_fr, or_fr_ptr top_or_fr) {
   }
 
   /* adjust top pointers */
-  LOCAL_top_or_fr = top_or_fr;
+  REMOTE_top_or_fr(worker_id) = top_or_fr;
   SetOrFr_node(top_or_fr, Get_LOCAL_top_cp());
-  LOCAL_top_sg_fr = SuspFr_top_sg_fr(resume_fr);
-  LOCAL_top_dep_fr = SuspFr_top_dep_fr(resume_fr);
+  REMOTE_top_sg_fr(worker_id) = SuspFr_top_sg_fr(resume_fr);
+  REMOTE_top_dep_fr(worker_id) = SuspFr_top_dep_fr(resume_fr);
   Set_LOCAL_top_cp_on_stack( GetOrFr_node(SuspFr_top_or_fr_on_stack(resume_fr)) );
-  sg_frame = LOCAL_top_sg_fr;
+  sg_frame = REMOTE_top_sg_fr(worker_id);
   while (sg_frame && YOUNGER_CP(SgFr_gen_cp(sg_frame), Get_LOCAL_top_cp_on_stack())) {
     SgFr_gen_worker(sg_frame) = worker_id;
     sg_frame = SgFr_next(sg_frame);

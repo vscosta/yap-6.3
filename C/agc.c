@@ -211,8 +211,8 @@ static void RestoreFlags( UInt NFlags )
     for (i=0; i<GLOBAL_flagCount; i++) {
       AdjustTermFlag( tarr, i);
     }
-  tarr = LOCAL_Flags;
-  for (i=0; i<LOCAL_flagCount; i++) {
+  tarr = REMOTE_Flags(worker_id);
+  for (i=0; i<REMOTE_flagCount(worker_id); i++) {
     AdjustTermFlag( tarr, i);
   }
 }
@@ -227,16 +227,16 @@ RestoreHashPreds( USES_REGS1 )
 
 static void init_reg_copies(USES_REGS1)
 {
-  LOCAL_OldASP = ASP;
-  LOCAL_OldLCL0 = LCL0;
-  LOCAL_OldTR = TR;
-  LOCAL_OldGlobalBase = (CELL *)LOCAL_GlobalBase;
-  LOCAL_OldH = HR;
-  LOCAL_OldH0 = H0;
-  LOCAL_OldTrailBase = LOCAL_TrailBase;
-  LOCAL_OldTrailTop = LOCAL_TrailTop;
-  LOCAL_OldHeapBase = Yap_HeapBase;
-  LOCAL_OldHeapTop = HeapTop;
+  REMOTE_OldASP(worker_id) = ASP;
+  REMOTE_OldLCL0(worker_id) = LCL0;
+  REMOTE_OldTR(worker_id) = TR;
+  REMOTE_OldGlobalBase(worker_id) = (CELL *)REMOTE_GlobalBase(worker_id);
+  REMOTE_OldH(worker_id) = HR;
+  REMOTE_OldH0(worker_id) = H0;
+  REMOTE_OldTrailBase(worker_id) = REMOTE_TrailBase(worker_id);
+  REMOTE_OldTrailTop(worker_id) = REMOTE_TrailTop(worker_id);
+  REMOTE_OldHeapBase(worker_id) = Yap_HeapBase;
+  REMOTE_OldHeapTop(worker_id) = HeapTop;
 }
 
 
@@ -262,7 +262,7 @@ mark_trail(USES_REGS1)
 
   pt = TR;
   /* moving the trail is simple */
-  while (pt != (tr_fr_ptr)LOCAL_TrailBase) {
+  while (pt != (tr_fr_ptr)REMOTE_TrailBase(worker_id)) {
     CELL reg = TrailTerm(pt-1);
 
     if (!IsVarTerm(reg)) {

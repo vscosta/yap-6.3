@@ -73,7 +73,7 @@ void
 Yap_socketStream( StreamDesc *s )
 {
     CACHE_REGS
-  if (LOCAL_sockets_io &&
+  if (REMOTE_sockets_io(worker_id) &&
       s->file == NULL)
     {
       s->status |= Socket_Stream_f;
@@ -133,23 +133,23 @@ ConsoleSocketGetc(int sno)
   int count;
 
   /* send the prompt away */
-  if (LOCAL_newline) {
-    char *cptr = LOCAL_Prompt, ch;
+  if (REMOTE_newline(worker_id)) {
+    char *cptr = REMOTE_Prompt(worker_id), ch;
     /* use the default routine */
     while ((ch = *cptr++) != '\0') {
       GLOBAL_Stream[StdErrStream].stream_putc(StdErrStream, ch);
     }
-    strncpy(LOCAL_Prompt, RepAtom (LOCAL_AtPrompt)->StrOfAE, MAX_PROMPT);
-    LOCAL_newline = FALSE;
+    strncpy(REMOTE_Prompt(worker_id), RepAtom (REMOTE_AtPrompt(worker_id))->StrOfAE, MAX_PROMPT);
+    REMOTE_newline(worker_id) = FALSE;
   }
   /* should be able to use a buffer */
-  LOCAL_PrologMode |= ConsoleGetcMode;
+  REMOTE_PrologMode(worker_id) |= ConsoleGetcMode;
 #if _MSC_VER || defined(__MINGW32__)
   count = recv(s->u.socket.fd, (void *)&c, sizeof(char), 0);
 #else
   count = read(s->u.socket.fd, &c, sizeof(char));
 #endif
-  LOCAL_PrologMode &= ~ConsoleGetcMode;
+  REMOTE_PrologMode(worker_id) &= ~ConsoleGetcMode;
   if (count == 0) {
     return console_post_process_eof(s);
   } else if (count > 0) {

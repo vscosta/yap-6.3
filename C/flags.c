@@ -106,6 +106,7 @@ static Int set_prolog_flag(USES_REGS1);
 #include "YapLFlagInfo.h"
 
 static Term indexer(Term inp) {
+  CACHE_REGS
   if (IsStringTerm(inp)) {
     inp = MkStringTerm(RepAtom(AtomOfTerm(inp))->StrOfAE);
   }
@@ -270,6 +271,7 @@ static bool dollar_to_lc(Term inp) {
   }
 
 static Term isaccess(Term inp) {
+  CACHE_REGS
   if (inp == TermReadWrite || inp == TermReadOnly)
     return inp;
 
@@ -298,20 +300,23 @@ static Term stream(Term inp) {
 }
 
 static bool set_error_stream(Term inp) {
+  CACHE_REGS
   if (IsVarTerm(inp))
-    return Yap_unify(inp, Yap_StreamUserName(LOCAL_c_error_stream));
+    return Yap_unify(inp, Yap_StreamUserName(REMOTE_c_error_stream(worker_id)));
   return Yap_SetErrorStream(inp);
 }
 
 static bool set_input_stream(Term inp) {
+  CACHE_REGS
   if (IsVarTerm(inp))
-    return Yap_unify(inp, Yap_StreamUserName(LOCAL_c_input_stream));
+    return Yap_unify(inp, Yap_StreamUserName(REMOTE_c_input_stream(worker_id)));
   return Yap_SetInputStream(inp);
 }
 
 static bool set_output_stream(Term inp) {
+  CACHE_REGS
   if (IsVarTerm(inp))
-    return Yap_unify(inp, Yap_StreamUserName(LOCAL_c_output_stream));
+    return Yap_unify(inp, Yap_StreamUserName(REMOTE_c_output_stream(worker_id)));
   return Yap_SetOutputStream(inp);
 }
 
@@ -320,6 +325,7 @@ static Term isground(Term inp) {
 }
 
 static Term flagscope(Term inp) {
+  CACHE_REGS
   if (inp == TermGlobal || inp == TermThread || inp == TermModule)
     return inp;
 
@@ -339,7 +345,7 @@ static Term flagscope(Term inp) {
 static bool mkprompt(Term inp) {
   CACHE_REGS
   if (IsVarTerm(inp)) {
-    return Yap_unify(inp, MkAtomTerm(Yap_LookupAtom(LOCAL_Prompt)));
+    return Yap_unify(inp, MkAtomTerm(Yap_LookupAtom(REMOTE_Prompt(worker_id))));
   }
   if (IsStringTerm(inp)) {
     inp = MkStringTerm(RepAtom(AtomOfTerm(inp))->StrOfAE);
@@ -348,7 +354,7 @@ static bool mkprompt(Term inp) {
     Yap_ThrowError(TYPE_ERROR_ATOM, inp, "set_prolog_flag");
     return false;
   }
-  strncpy(LOCAL_Prompt, (const char *)RepAtom(AtomOfTerm(inp))->StrOfAE,
+  strncpy(REMOTE_Prompt(worker_id), (const char *)RepAtom(AtomOfTerm(inp))->StrOfAE,
           MAX_PROMPT);
   return true;
 }
@@ -362,14 +368,14 @@ static bool getenc(Term inp) {
     Yap_ThrowError(TYPE_ERROR_ATOM, inp, "get_encoding");
     return false;
   }
-  return Yap_unify(inp, MkAtomTerm(Yap_LookupAtom(enc_name(LOCAL_encoding))));
+  return Yap_unify(inp, MkAtomTerm(Yap_LookupAtom(enc_name(REMOTE_encoding(worker_id)))));
 }
 
 /*
 static bool enablerl( Term inp ) {
 CACHE_REGS
 if (IsVarTerm(inp)) {
-return Yap_unify( inp, MkAtomTerm( Yap_LookupAtom( enc_name(LOCAL_encoding)
+return Yap_unify( inp, MkAtomTerm( Yap_LookupAtom( enc_name(REMOTE_encoding(worker_id))
 )) );
 }
 if (!IsAtomTerm(inp) ) {
@@ -562,6 +568,7 @@ x                    static bool list_atom( Term inp ) {
 #endif
 
 static Term list_option(Term inp) {
+  CACHE_REGS
   if (IsVarTerm(inp)) {
     Yap_ThrowError(INSTANTIATION_ERROR, inp, "set_prolog_flag in \"...\"");
     return inp;
@@ -823,7 +830,7 @@ static bool setYapFlagInModule(Term tflag, Term t2, Term mod) {
       Term t;
       while ((t = Yap_PopTermFromDB(tarr[fv->FlagOfVE].DBT)) == 0) {
 	if (!Yap_gcl(0, 2, ENV, gc_P(P, CP))) {
-          Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return false;
         }
       }
@@ -932,7 +939,7 @@ static Term getYapFlagInModule(Term tflag, Term mod) {
 static Int cont_yap_flag(USES_REGS1) {
   int i = IntOfTerm(EXTRA_CBACK_ARG(2, 1));
   int gmax = GLOBAL_flagCount;
-  int lmax = LOCAL_flagCount;
+  int lmax = REMOTE_flagCount(worker_id);
   Term tflag = Deref(ARG1);
   EXTRA_CBACK_ARG(2, 1) = MkIntTerm(i + 1);
 
@@ -1017,9 +1024,9 @@ static Int yap_flag(USES_REGS1) {
 
 static Int cont_prolog_flag(USES_REGS1) {
   int i = IntOfTerm(EXTRA_CBACK_ARG(3, 1));
-  while (i < GLOBAL_flagCount + LOCAL_flagCount) {
+  while (i < GLOBAL_flagCount + REMOTE_flagCount(worker_id)) {
     int gmax = GLOBAL_flagCount;
-    int lmax = LOCAL_flagCount;
+    int lmax = REMOTE_flagCount(worker_id);
     Term flag, f;
 
     if (i >= gmax + lmax) {
@@ -1066,9 +1073,9 @@ static Int prolog_flag(USES_REGS1) {
 
 static Int cont_current_prolog_flag(USES_REGS1) {
   int i = IntOfTerm(EXTRA_CBACK_ARG(2, 1));
-  while (i < GLOBAL_flagCount + LOCAL_flagCount) {
+  while (i < GLOBAL_flagCount + REMOTE_flagCount(worker_id)) {
     int gmax = GLOBAL_flagCount;
-    int lmax = LOCAL_flagCount;
+    int lmax = REMOTE_flagCount(worker_id);
     Term flag, f;
 
     if (i >= gmax + lmax) {
@@ -1137,7 +1144,7 @@ static Int current_prolog_flag2(USES_REGS1) {
   if (fv->global)
     tarr = GLOBAL_Flags;
   else
-    tarr = LOCAL_Flags;
+    tarr = REMOTE_Flags(worker_id);
   tout = tarr[fv->FlagOfVE].at;
   if (tout == TermZERO) {
     //    Yap_DebugPlWriteln(tflag);
@@ -1146,18 +1153,18 @@ static Int current_prolog_flag2(USES_REGS1) {
   if (!IsAtomicTerm(tout)) {
       while ((tout = Yap_FetchTermFromDB(tarr[fv->FlagOfVE].DBT)) == 0) {
           /* oops, we are in trouble, not enough stack space */
-          if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-              LOCAL_Error_TYPE = YAP_NO_ERROR;
+          if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+              REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
               if (!Yap_growglobal(NULL)) {
                   Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                            LOCAL_ErrorMessage);
+                            REMOTE_ActiveError(worker_id)->errorMsg);
                   UNLOCK(ap->PELock);
                   return false;
               }
           } else {
-              LOCAL_Error_TYPE = YAP_NO_ERROR;
-              if (!Yap_gcl(LOCAL_Error_Size, 2, ENV, gc_P(P, CP))) {
-                  Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+              REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+              if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 2, ENV, gc_P(P, CP))) {
+                  Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
                   UNLOCK(ap->PELock);
                   return false;
               }
@@ -1187,6 +1194,7 @@ void Yap_setModuleFlags(ModEntry *new, ModEntry *cme) {
 }
 
 bool Yap_set_flag(Term tflag, Term t2) {
+  CACHE_REGS
   FlagEntry *fv;
   flag_term *tarr;
   if (IsVarTerm(tflag)) {
@@ -1239,8 +1247,7 @@ bool Yap_set_flag(Term tflag, Term t2) {
       tarr = GLOBAL_Flags;
     }
   } else {
-    CACHE_REGS
-    tarr = LOCAL_Flags;
+    tarr = REMOTE_Flags(worker_id);
   }
   if (!(t2 = fv->type(t2)))
     return false;
@@ -1272,6 +1279,7 @@ Term Yap_UnknownFlag(Term mod) {
 }
 
 Term getYapFlag(Term tflag) {
+   CACHE_REGS
   FlagEntry *fv;
    flag_term *tarr;
    tflag = Deref(tflag);
@@ -1324,7 +1332,7 @@ Term getYapFlag(Term tflag) {
     tarr = GLOBAL_Flags;
   else {
     CACHE_REGS
-    tarr = LOCAL_Flags;
+    tarr = REMOTE_Flags(worker_id);
   }
   Term tout = tarr[fv->FlagOfVE].at;
   if (IsVarTerm(tout))
@@ -1585,7 +1593,7 @@ do_prolog_flag_property(Term tflag,
       Yap_ArgList2ToVector(opts, prolog_flag_property_defs,
                            PROLOG_FLAG_PROPERTY_END, DOMAIN_ERROR_PROLOG_FLAG);
   if (args == NULL) {
-    Yap_ThrowError(LOCAL_Error_TYPE, opts, NULL);
+    Yap_ThrowError(REMOTE_ActiveError(worker_id)->errorNo, opts, NULL);
     return false;
   }
   if (IsStringTerm(tflag)) {
@@ -1662,9 +1670,9 @@ do_prolog_flag_property(Term tflag,
 static Int cont_prolog_flag_property(USES_REGS1) { /* current_prolog_flag */
   int i = IntOfTerm(EXTRA_CBACK_ARG(2, 1));
 
-  while (i < GLOBAL_flagCount + LOCAL_flagCount) {
+  while (i < GLOBAL_flagCount + REMOTE_flagCount(worker_id)) {
     int gmax = GLOBAL_flagCount;
-    int lmax = LOCAL_flagCount;
+    int lmax = REMOTE_flagCount(worker_id);
     Term lab;
 
     if (i >= gmax + lmax) {
@@ -1759,7 +1767,7 @@ static Int do_create_prolog_flag(USES_REGS1) {
       Yap_ArgList2ToVector(opts, prolog_flag_property_defs,
                            PROLOG_FLAG_PROPERTY_END, DOMAIN_ERROR_PROLOG_FLAG);
   if (args == NULL) {
-    Yap_ThrowError(LOCAL_Error_TYPE, opts, NULL);
+    Yap_ThrowError(REMOTE_ActiveError(worker_id)->errorNo, opts, NULL);
     return false;
   }
   fv = GetFlagProp(AtomOfTerm(tflag));
@@ -1855,7 +1863,7 @@ void Yap_InitFlags(bool bootstrap) {
   tr_fr_ptr tr0 = TR;
   flag_info *f = global_flags_setup;
   int lvl = push_text_stack();
-  char *buf = Malloc(4098);
+  char *buf = Malloc(4098 PASS_REGS);
   GLOBAL_flagCount = 0;
   if (bootstrap) {
     GLOBAL_Flags = (union flagTerm *)Yap_AllocCodeSpace(
@@ -1871,10 +1879,10 @@ void Yap_InitFlags(bool bootstrap) {
     GLOBAL_flagCount++;
     f++;
   }
-  LOCAL_flagCount = 0;
+  REMOTE_flagCount(worker_id) = 0;
   int nflags = sizeof(local_flags_setup) / sizeof(flag_info);
   if (bootstrap)
-    LOCAL_Flags =
+    REMOTE_Flags(worker_id) =
         (union flagTerm *)Yap_AllocCodeSpace(sizeof(union flagTerm) * nflags);
   f = local_flags_setup;
   while (f->name != NULL) {
@@ -1884,18 +1892,18 @@ void Yap_InitFlags(bool bootstrap) {
       s = buf;
       strcpy(buf, f->init);
     } else {
-      s = Malloc(strlen(f->init)+1);
+      s = Malloc(strlen(f->init)+1 PASS_REGS);
       strcpy(s, f->init);
     }
     bool itf = setInitialValue(bootstrap, f->def, s,
-                               LOCAL_Flags + LOCAL_flagCount);
+                               REMOTE_Flags(worker_id) + REMOTE_flagCount(worker_id));
     //    Term itf = Yap_BufferToTermWithPrioBindings(f->init,
     //    strlen(f->init)+1,
     //    LOBAL_MaxPriority, &tp);
     if (itf) {
-      initFlag(f, LOCAL_flagCount, false);
+      initFlag(f, REMOTE_flagCount(worker_id), false);
     }
-    LOCAL_flagCount++;
+    REMOTE_flagCount(worker_id)++;
     f++;
   }
   // fix readline gettong set so early

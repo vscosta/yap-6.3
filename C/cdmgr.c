@@ -120,22 +120,22 @@ restart:
 
 static void InitConsultStack(void) {
   CACHE_REGS
-  LOCAL_ConsultLow = (consult_obj *)Yap_AllocCodeSpace(sizeof(consult_obj) *
+  REMOTE_ConsultLow(worker_id) = (consult_obj *)Yap_AllocCodeSpace(sizeof(consult_obj) *
                                                        InitialConsultCapacity);
-  if (LOCAL_ConsultLow == NULL) {
+  if (REMOTE_ConsultLow(worker_id) == NULL) {
     Yap_Error(RESOURCE_ERROR_HEAP, TermNil, "No Heap Space in InitCodes");
     return;
   }
-  LOCAL_ConsultCapacity = InitialConsultCapacity;
-  LOCAL_ConsultBase = LOCAL_ConsultSp =
-      LOCAL_ConsultLow + LOCAL_ConsultCapacity;
+  REMOTE_ConsultCapacity(worker_id) = InitialConsultCapacity;
+  REMOTE_ConsultBase(worker_id) = REMOTE_ConsultSp(worker_id) =
+      REMOTE_ConsultLow(worker_id) + REMOTE_ConsultCapacity(worker_id);
 }
 
 void Yap_ResetConsultStack(void) {
   CACHE_REGS
-  Yap_FreeCodeSpace((char *)LOCAL_ConsultLow);
-  LOCAL_ConsultBase = LOCAL_ConsultSp = LOCAL_ConsultLow = NULL;
-  LOCAL_ConsultCapacity = InitialConsultCapacity;
+  Yap_FreeCodeSpace((char *)REMOTE_ConsultLow(worker_id));
+  REMOTE_ConsultBase(worker_id) = REMOTE_ConsultSp(worker_id) = REMOTE_ConsultLow(worker_id) = NULL;
+  REMOTE_ConsultCapacity(worker_id) = InitialConsultCapacity;
 }
 
 /**
@@ -143,8 +143,8 @@ void Yap_ResetConsultStack(void) {
  *
  */
 bool Yap_Consulting(USES_REGS1) {
-  return LOCAL_ConsultBase != NULL &&
-         LOCAL_ConsultSp != LOCAL_ConsultLow + LOCAL_ConsultCapacity;
+  return REMOTE_ConsultBase(worker_id) != NULL &&
+         REMOTE_ConsultSp(worker_id) != REMOTE_ConsultLow(worker_id) + REMOTE_ConsultCapacity(worker_id);
 }
 
 /******************************************************************
@@ -935,6 +935,7 @@ static void add_first_static(PredEntry *p, yamop *cp, int spy_flag) {
 
 /* p is already locked */
 static void add_first_dynamic(PredEntry *p, yamop *cp, int spy_flag) {
+  CACHE_REGS
   yamop *ncp = ((DynamicClause *)NULL)->ClCode;
   DynamicClause *cl;
 
@@ -1184,35 +1185,35 @@ void Yap_AssertzClause(PredEntry *p, yamop *cp) {
 static void expand_consult(void) {
   CACHE_REGS
   consult_obj *new_cl, *new_cs;
-  UInt OldConsultCapacity = LOCAL_ConsultCapacity;
+  UInt OldConsultCapacity = REMOTE_ConsultCapacity(worker_id);
 
   /* now double consult capacity */
-  LOCAL_ConsultCapacity += InitialConsultCapacity;
+  REMOTE_ConsultCapacity(worker_id) += InitialConsultCapacity;
   /* I assume it always works ;-) */
   while ((new_cl = (consult_obj *)Yap_AllocCodeSpace(
-              sizeof(consult_obj) * LOCAL_ConsultCapacity)) == NULL) {
-    if (!Yap_growheap(FALSE, sizeof(consult_obj) * LOCAL_ConsultCapacity,
+              sizeof(consult_obj) * REMOTE_ConsultCapacity(worker_id))) == NULL) {
+    if (!Yap_growheap(FALSE, sizeof(consult_obj) * REMOTE_ConsultCapacity(worker_id),
                       NULL)) {
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return;
     }
   }
   new_cs = new_cl + InitialConsultCapacity;
   /* start copying */
-  memmove((void *)new_cs, (void *)LOCAL_ConsultLow,
+  memmove((void *)new_cs, (void *)REMOTE_ConsultLow(worker_id),
           OldConsultCapacity * sizeof(consult_obj));
   /* copying done, release old space */
-  Yap_FreeCodeSpace((char *)LOCAL_ConsultLow);
+  Yap_FreeCodeSpace((char *)REMOTE_ConsultLow(worker_id));
   /* next, set up pointers correctly */
-  new_cs += (LOCAL_ConsultSp - LOCAL_ConsultLow);
-  /* put LOCAL_ConsultBase at same offset as before move */
-  LOCAL_ConsultBase = new_cl + ((LOCAL_ConsultBase - LOCAL_ConsultLow) +
+  new_cs += (REMOTE_ConsultSp(worker_id) - REMOTE_ConsultLow(worker_id));
+  /* put REMOTE_ConsultBase(worker_id) at same offset as before move */
+  REMOTE_ConsultBase(worker_id) = new_cl + ((REMOTE_ConsultBase(worker_id) - REMOTE_ConsultLow(worker_id)) +
                                 InitialConsultCapacity);
   /* new consult pointer */
-  LOCAL_ConsultSp =
-      new_cl + ((LOCAL_ConsultSp - LOCAL_ConsultLow) + InitialConsultCapacity);
+  REMOTE_ConsultSp(worker_id) =
+      new_cl + ((REMOTE_ConsultSp(worker_id) - REMOTE_ConsultLow(worker_id)) + InitialConsultCapacity);
   /* new end of memory */
-  LOCAL_ConsultLow = new_cl;
+  REMOTE_ConsultLow(worker_id) = new_cl;
 }
 
 static int not_was_reconsulted(PredEntry *p, Term t, int mode) {
@@ -1220,20 +1221,20 @@ static int not_was_reconsulted(PredEntry *p, Term t, int mode) {
   register consult_obj *fp;
   Prop p0 = AbsProp((PropEntry *)p);
 
-  if (p == LOCAL_LastAssertedPred)
+  if (p == REMOTE_LastAssertedPred(worker_id))
     return FALSE;
-  if (!LOCAL_ConsultSp) {
+  if (!REMOTE_ConsultSp(worker_id)) {
     InitConsultStack();
   }
   if (p->NOfClauses) {
-    for (fp = LOCAL_ConsultSp; fp < LOCAL_ConsultBase; ++fp)
+    for (fp = REMOTE_ConsultSp(worker_id); fp < REMOTE_ConsultBase(worker_id); ++fp)
       if (fp->p == p0)
         break;
   } else {
-    fp = LOCAL_ConsultBase;
+    fp = REMOTE_ConsultBase(worker_id);
   }
-  if (fp != LOCAL_ConsultBase) {
-    LOCAL_LastAssertedPred = p;
+  if (fp != REMOTE_ConsultBase(worker_id)) {
+    REMOTE_LastAssertedPred(worker_id) = p;
     return false;    /* careful */
   } else if (mode) { // consulting again a predicate in the original file.
     if ((p->NOfClauses &&
@@ -1250,25 +1251,24 @@ static int not_was_reconsulted(PredEntry *p, Term t, int mode) {
     //%s\n",NameOfFunctor(p->FunctorOfPred)->StrOfAE,p->src.OwnerFile->StrOfAE);
   }
   if (mode) {
-    if (LOCAL_ConsultSp <= LOCAL_ConsultLow + 6) {
+    if (REMOTE_ConsultSp(worker_id) <= REMOTE_ConsultLow(worker_id) + 6) {
       expand_consult();
     }
-    --LOCAL_ConsultSp;
-    LOCAL_ConsultSp->p = p0;
-    if (LOCAL_ConsultBase != LOCAL_ConsultLow + LOCAL_ConsultCapacity &&
-        LOCAL_ConsultBase[1].mode &&
+    --REMOTE_ConsultSp(worker_id);
+    REMOTE_ConsultSp(worker_id)->p = p0;
+    if (REMOTE_ConsultBase(worker_id) != REMOTE_ConsultLow(worker_id) + REMOTE_ConsultCapacity(worker_id) &&
+        REMOTE_ConsultBase(worker_id)[1].mode &&
         !(p->PredFlags & MultiFileFlag)) /* we are in reconsult mode */ {
       retract_all(p, Yap_static_in_use(p, TRUE));
     }
     // p->src.OwnerFile = Yap_ConsultingFile(PASS_REGS1);
   }
-  LOCAL_LastAssertedPred = p;
+  REMOTE_LastAssertedPred(worker_id) = p;
   return TRUE; /* careful */
 }
 
 static yamop *addcl_permission_error(const char *file, const char *function,
                                      int lineno, PredEntry *ap, int in_use) {
-  CACHE_REGS
   Term culprit = Yap_PredicateToIndicator(ap);
   return in_use ? (ap->ArityOfPE == 0
                        ? Yap_Error__(false, file, function, lineno,
@@ -1292,7 +1292,7 @@ static yamop *addcl_permission_error(const char *file, const char *function,
 }
 
 PredEntry *Yap_PredFromClause(Term t USES_REGS) {
-  Term cmod = LOCAL_SourceModule;
+  Term cmod = REMOTE_SourceModule(worker_id);
   arity_t extra_arity = 0;
 
   if (IsVarTerm(t))
@@ -1344,21 +1344,21 @@ bool Yap_discontiguous(PredEntry *ap, Term mode USES_REGS) {
     return false;
   if ((mode != TermConsult && mode != TermReconsult))
     return false;
-  if (!LOCAL_ConsultSp) {
+  if (!REMOTE_ConsultSp(worker_id)) {
     return false;
   }
-  if (ap == LOCAL_LastAssertedPred)
+  if (ap == REMOTE_LastAssertedPred(worker_id))
     return false;
   if (ap->NOfClauses) {
     Term repeat = AbsPair((CELL *)AbsPredProp(ap));
-    for (fp = LOCAL_ConsultSp; fp < LOCAL_ConsultBase; ++fp)
+    for (fp = REMOTE_ConsultSp(worker_id); fp < REMOTE_ConsultBase(worker_id); ++fp)
       if (fp->p == AbsPredProp(ap)) {
         // detect repeated warnings
-        if (LOCAL_ConsultSp == LOCAL_ConsultLow + 1) {
+        if (REMOTE_ConsultSp(worker_id) == REMOTE_ConsultLow(worker_id) + 1) {
           expand_consult();
         }
-        --LOCAL_ConsultSp;
-        LOCAL_ConsultSp->r = repeat;
+        --REMOTE_ConsultSp(worker_id);
+        REMOTE_ConsultSp(worker_id)->r = repeat;
         return true;
       } else if (fp->r == repeat && ap->NOfClauses > 4) {
         return false;
@@ -1423,15 +1423,15 @@ bool Yap_multiple(PredEntry *ap, Term mode USES_REGS) {
   if ((ap->PredFlags & (MultiFileFlag | LogUpdatePredFlag | DynamicPredFlag)) ||
       mode != TermReconsult)
     return false;
-  if (LOCAL_consult_level == 0)
+  if (REMOTE_consult_level(worker_id) == 0)
     return false;
-  for (fp = LOCAL_ConsultSp; fp < LOCAL_ConsultBase; ++fp)
+  for (fp = REMOTE_ConsultSp(worker_id); fp < REMOTE_ConsultBase(worker_id); ++fp)
     if (fp->p == AbsPredProp(ap)) {
       return false;
     }
   return ap->NOfClauses > 0 && ap->src.OwnerFile != AtomNil &&
          Yap_ConsultingFile(PASS_REGS1) != ap->src.OwnerFile &&
-         LOCAL_Including != MkAtomTerm(ap->src.OwnerFile);
+         REMOTE_Including(worker_id) != MkAtomTerm(ap->src.OwnerFile);
 }
 
 static int is_fact(Term t) {
@@ -1449,13 +1449,13 @@ static int is_fact(Term t) {
 
 Int Yap_source_line_no(void) {
   CACHE_REGS
-  return LOCAL_SourceFileLineno;
+  return REMOTE_SourceFileLineno(worker_id);
 }
 
 Atom Yap_source_file_name(void) {
   CACHE_REGS
-  if (LOCAL_SourceFileName)
-    return LOCAL_SourceFileName;
+  if (REMOTE_SourceFileName(worker_id))
+    return REMOTE_SourceFileName(worker_id);
   return AtomNil;
 }
 
@@ -1579,8 +1579,8 @@ bool Yap_addclause(Term t, yamop *cp, Term tmode, Term mod, Term *t4ref)
     sc[0] = Yap_MkApplTerm(Yap_MkFunctor(AtomDiscontiguous, 3), 3, disc);
     sc[1] = MkIntegerTerm(Yap_source_line_no());
     __android_log_print(ANDROID_LOG_INFO, "YAPDroid", "source %s ",
-                        RepAtom(LOCAL_SourceFileName)->StrOfAE);
-    sc[2] = MkAtomTerm(LOCAL_SourceFileName);
+                        RepAtom(REMOTE_SourceFileName(worker_id))->StrOfAE);
+    sc[2] = MkAtomTerm(REMOTE_SourceFileName(worker_id));
     sc[3] = t;
     t = Yap_MkApplTerm(Yap_MkFunctor(AtomStyleCheck, 4), 4, sc);
     Yap_PrintWarning(t);
@@ -1596,7 +1596,7 @@ bool Yap_addclause(Term t, yamop *cp, Term tmode, Term mod, Term *t4ref)
     disc[3] = MkAtomTerm(p->src.OwnerFile);
     sc[0] = Yap_MkApplTerm(Yap_MkFunctor(AtomMultiple, 4), 4, disc);
     sc[1] = MkIntegerTerm(Yap_source_line_no());
-    sc[2] = MkAtomTerm(LOCAL_SourceFileName);
+    sc[2] = MkAtomTerm(REMOTE_SourceFileName(worker_id));
     sc[3] = t;
     t = Yap_MkApplTerm(Yap_MkFunctor(AtomStyleCheck, 4), 4, sc);
     Yap_PrintWarning(t);
@@ -1604,8 +1604,8 @@ bool Yap_addclause(Term t, yamop *cp, Term tmode, Term mod, Term *t4ref)
   if (mode == consult)
     not_was_reconsulted(p, t, true);
   /* always check if we have a valid error first */
-  if (LOCAL_ErrorMessage &&
-      LOCAL_Error_TYPE == PERMISSION_ERROR_MODIFY_STATIC_PROCEDURE) {
+  if (REMOTE_ActiveError(worker_id)->errorMsg &&
+      REMOTE_ActiveError(worker_id)->errorNo == PERMISSION_ERROR_MODIFY_STATIC_PROCEDURE) {
     UNLOCKPE(31, p);
     return false;
   }
@@ -1843,20 +1843,20 @@ static Int p_compile(USES_REGS1) { /* '$compile'(+C,+Flags,+C0,-Ref) */
   if (IsVarTerm(mod) || !IsAtomTerm(mod))
     return false;
   /* separate assert in current file from reconsult
-    if (mode == assertz && LOCAL_consult_level && mod == CurrentModule)
+    if (mode == assertz && REMOTE_consult_level(worker_id) && mod == CurrentModule)
       mode = consult;
   */
   code_adr = Yap_cclause(t, 5, mod, Deref(ARG3)); /* vsc: give the number of
                                arguments to cclause() in case there is a
                                overflow */
   t = Deref(ARG1); /* just in case there was an heap overflow */
-  if (!LOCAL_ErrorMessage && code_adr != NULL) {
+  if (!REMOTE_ActiveError(worker_id)->errorMsg && code_adr != NULL) {
     YAPEnterCriticalSection();
     Yap_addclause(t, code_adr, t1, mod, &ARG5);
     YAPLeaveCriticalSection();
   }
-  if (LOCAL_ErrorMessage) {
-    Yap_Error(LOCAL_Error_TYPE, ARG1, LOCAL_ErrorMessage);
+  if (REMOTE_ActiveError(worker_id)->errorMsg) {
+    Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, ARG1, REMOTE_ActiveError(worker_id)->errorMsg);
     YAPLeaveCriticalSection();
     return false;
   }
@@ -1870,38 +1870,38 @@ Atom Yap_ConsultingFile(USES_REGS1) {
     //  return(AtomUserIn);
     return StreamFullName(sno);
   }
-  if (LOCAL_SourceFileName != NULL) {
-    return LOCAL_SourceFileName;
+  if (REMOTE_SourceFileName(worker_id) != NULL) {
+    return REMOTE_SourceFileName(worker_id);
   }
-  if (LOCAL_consult_level == 0) {
+  if (REMOTE_consult_level(worker_id) == 0) {
     return (AtomUser);
   } else {
-    return LOCAL_ConsultBase[2].f_name;
+    return REMOTE_ConsultBase(worker_id)[2].f_name;
   }
 }
 
 /* consult file *file*, *mode* may be one of either consult or reconsult */
 void Yap_init_consult(int mode, const char *filenam) {
   CACHE_REGS
-  if (!LOCAL_ConsultSp) {
+  if (!REMOTE_ConsultSp(worker_id)) {
     InitConsultStack();
   }
-  if (LOCAL_ConsultSp >= LOCAL_ConsultLow + 6) {
+  if (REMOTE_ConsultSp(worker_id) >= REMOTE_ConsultLow(worker_id) + 6) {
     expand_consult();
   }
-  LOCAL_ConsultSp--;
-  LOCAL_ConsultSp->f_name = Yap_LookupAtom(filenam);
-  LOCAL_ConsultSp--;
-  LOCAL_ConsultSp->mode = mode;
-  LOCAL_ConsultSp--;
-  LOCAL_ConsultSp->c = (LOCAL_ConsultBase - LOCAL_ConsultSp);
-  LOCAL_ConsultBase = LOCAL_ConsultSp;
+  REMOTE_ConsultSp(worker_id)--;
+  REMOTE_ConsultSp(worker_id)->f_name = Yap_LookupAtom(filenam);
+  REMOTE_ConsultSp(worker_id)--;
+  REMOTE_ConsultSp(worker_id)->mode = mode;
+  REMOTE_ConsultSp(worker_id)--;
+  REMOTE_ConsultSp(worker_id)->c = (REMOTE_ConsultBase(worker_id) - REMOTE_ConsultSp(worker_id));
+  REMOTE_ConsultBase(worker_id) = REMOTE_ConsultSp(worker_id);
 #if !defined(YAPOR) && !defined(YAPOR_SBA)
-/*  if (LOCAL_consult_level == 0)
+/*  if (REMOTE_consult_level(worker_id) == 0)
     do_toggle_static_predicates_in_use(TRUE); */
 #endif
-  LOCAL_consult_level++;
-  LOCAL_LastAssertedPred = NULL;
+  REMOTE_consult_level(worker_id)++;
+  REMOTE_LastAssertedPred(worker_id) = NULL;
 }
 
 static Int p_startconsult(USES_REGS1) { /* '$start_consult'(+Mode)	 */
@@ -1912,25 +1912,25 @@ static Int p_startconsult(USES_REGS1) { /* '$start_consult'(+Mode)	 */
   setBooleanLocalPrologFlag(COMPILING_FLAG, AtomTrue);
   mode = strcmp("consult", (char *)smode);
   Yap_init_consult(mode, RepAtom(AtomOfTerm(Deref(ARG2)))->StrOfAE);
-  t = MkIntTerm(LOCAL_consult_level);
+  t = MkIntTerm(REMOTE_consult_level(worker_id));
   return (Yap_unify_constant(ARG3, t));
 }
 
 static Int p_showconslultlev(USES_REGS1) {
   Term t;
 
-  t = MkIntTerm(LOCAL_consult_level);
+  t = MkIntTerm(REMOTE_consult_level(worker_id));
   return (Yap_unify_constant(ARG1, t));
 }
 
 static void end_consult(USES_REGS1) {
-  LOCAL_ConsultSp = LOCAL_ConsultBase;
-  LOCAL_ConsultBase = LOCAL_ConsultSp + LOCAL_ConsultSp->c;
-  LOCAL_ConsultSp += 3;
-  LOCAL_consult_level--;
-  LOCAL_LastAssertedPred = NULL;
+  REMOTE_ConsultSp(worker_id) = REMOTE_ConsultBase(worker_id);
+  REMOTE_ConsultBase(worker_id) = REMOTE_ConsultSp(worker_id) + REMOTE_ConsultSp(worker_id)->c;
+  REMOTE_ConsultSp(worker_id) += 3;
+  REMOTE_consult_level(worker_id)--;
+  REMOTE_LastAssertedPred(worker_id) = NULL;
 #if !defined(YAPOR) && !defined(YAPOR_SBA)
-/*  if (LOCAL_consult_level == 0)
+/*  if (REMOTE_consult_level(worker_id) == 0)
     do_toggle_static_predicates_in_use(FALSE);*/
 #endif
   setBooleanLocalPrologFlag(COMPILING_FLAG, AtomFalse);
@@ -1995,8 +1995,8 @@ static Int p_purge_clauses(USES_REGS1) { /* '$purge_clauses'(+Func) */
   /* try to use the garbage collector to recover the mega clause,
      in case the objs pointing to it are dead themselves */
   if (DeadMegaClauses != before) {
-    if (!Yap_gcl(LOCAL_Error_Size, 2, ENV, gc_P(P, CP))) {
-      Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+    if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 2, ENV, gc_P(P, CP))) {
+      Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return FALSE;
     }
   }
@@ -2817,18 +2817,18 @@ static Int p_is_call_counted(USES_REGS1) {
 }
 
 static Int p_call_count_info(USES_REGS1) {
-  return (Yap_unify(MkIntegerTerm(LOCAL_ReductionsCounter), ARG1) &&
-          Yap_unify(MkIntegerTerm(LOCAL_PredEntriesCounter), ARG2) &&
-          Yap_unify(MkIntegerTerm(LOCAL_PredEntriesCounter), ARG3));
+  return (Yap_unify(MkIntegerTerm(REMOTE_ReductionsCounter(worker_id)), ARG1) &&
+          Yap_unify(MkIntegerTerm(REMOTE_PredEntriesCounter(worker_id)), ARG2) &&
+          Yap_unify(MkIntegerTerm(REMOTE_PredEntriesCounter(worker_id)), ARG3));
 }
 
 static Int p_call_count_reset(USES_REGS1) {
-  LOCAL_ReductionsCounter = 0;
-  LOCAL_ReductionsCounterOn = FALSE;
-  LOCAL_PredEntriesCounter = 0;
-  LOCAL_PredEntriesCounterOn = FALSE;
-  LOCAL_RetriesCounter = 0;
-  LOCAL_RetriesCounterOn = FALSE;
+  REMOTE_ReductionsCounter(worker_id) = 0;
+  REMOTE_ReductionsCounterOn(worker_id) = FALSE;
+  REMOTE_PredEntriesCounter(worker_id) = 0;
+  REMOTE_PredEntriesCounterOn(worker_id) = FALSE;
+  REMOTE_RetriesCounter(worker_id) = 0;
+  REMOTE_RetriesCounterOn(worker_id) = FALSE;
   return (TRUE);
 }
 
@@ -2838,14 +2838,14 @@ static Int p_call_count_set(USES_REGS1) {
   int do_entries = IntOfTerm(ARG6);
 
   if (do_calls)
-    LOCAL_ReductionsCounter = IntegerOfTerm(Deref(ARG1));
-  LOCAL_ReductionsCounterOn = do_calls;
+    REMOTE_ReductionsCounter(worker_id) = IntegerOfTerm(Deref(ARG1));
+  REMOTE_ReductionsCounterOn(worker_id) = do_calls;
   if (do_retries)
-    LOCAL_RetriesCounter = IntegerOfTerm(Deref(ARG3));
-  LOCAL_RetriesCounterOn = do_retries;
+    REMOTE_RetriesCounter(worker_id) = IntegerOfTerm(Deref(ARG3));
+  REMOTE_RetriesCounterOn(worker_id) = do_retries;
   if (do_entries)
-    LOCAL_PredEntriesCounter = IntegerOfTerm(Deref(ARG5));
-  LOCAL_PredEntriesCounterOn = do_entries;
+    REMOTE_PredEntriesCounter(worker_id) = IntegerOfTerm(Deref(ARG5));
+  REMOTE_PredEntriesCounterOn(worker_id) = do_entries;
   return (TRUE);
 }
 
@@ -2879,6 +2879,7 @@ static Int p_clean_up_dead_clauses(USES_REGS1) {
 
 void Yap_HidePred(PredEntry *pe) {
 
+  CACHE_REGS
   if (pe->PredFlags & HiddenPredFlag)
     return;
   pe->PredFlags |= (HiddenPredFlag | NoSpyPredFlag | NoTracePredFlag);
@@ -2988,7 +2989,7 @@ static Int fetch_next_lu_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr, boo
   tr = Yap_GetFromSlot(yterms + 3);
   if (cl == NULL) {
     UNLOCK(pe->PELock);
-      LOCAL_CurHandle = yterms;
+      REMOTE_CurHandle(worker_id) = yterms;
       return FALSE;
   }
   rtn = MkDBRefTerm((DBRef)cl);
@@ -3004,7 +3005,7 @@ static Int fetch_next_lu_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr, boo
   if (cl->ClFlags & FactMask) {
     if (!Yap_unify_constant(tb, MkAtomTerm(AtomTrue)) || !Yap_unify(tr, rtn)) {
        UNLOCK(pe->PELock);
-        LOCAL_CurHandle = yterms;
+        REMOTE_CurHandle(worker_id) = yterms;
       return FALSE;
     }
     if (pe->ArityOfPE) {
@@ -3035,7 +3036,7 @@ static Int fetch_next_lu_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr, boo
       /* we don't actually need to execute code */
       UNLOCK(pe->PELock);
     }
-      LOCAL_CurHandle = yterms;
+      REMOTE_CurHandle(worker_id) = yterms;
     return TRUE;
   } else {
     Term t;
@@ -3043,19 +3044,19 @@ static Int fetch_next_lu_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr, boo
     while ((t = Yap_FetchClauseTermFromDB(cl->lusl.ClSource)) == 0L) {
 
       if (first_time) {
-        if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
+        if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
           if (!Yap_growglobal(NULL)) {
             UNLOCK(pe->PELock);
             Yap_ThrowError(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                      LOCAL_ErrorMessage);
+                      REMOTE_ActiveError(worker_id)->errorMsg);
             return false;
           }
         } else {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
-          if (!Yap_gcl(LOCAL_Error_Size, 7, ENV, gc_P(P, CP))) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+          if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 7, ENV, gc_P(P, CP))) {
             UNLOCK(pe->PELock);
-            Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+            Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
             return false;
           }
         }
@@ -3063,9 +3064,9 @@ static Int fetch_next_lu_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr, boo
       tb = Yap_GetFromSlot(yterms + 2);
       tr = Yap_GetFromSlot(yterms + 3);
       } else {
-        if (!Yap_gcl(LOCAL_Error_Size, 0, ENV, gc_P(P, CP))) {
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 0, ENV, gc_P(P, CP))) {
           UNLOCK(pe->PELock);
-          Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       th = Yap_GetFromSlot(yterms + 1);
@@ -3074,7 +3075,7 @@ static Int fetch_next_lu_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr, boo
 
       }
     }
-      LOCAL_CurHandle = yterms;
+      REMOTE_CurHandle(worker_id) = yterms;
     UNLOCK(pe->PELock);
     return (Yap_unify(th, ArgOfTerm(1, t)) && Yap_unify(tb, ArgOfTerm(2, t)) &&
             Yap_unify(tr, rtn));
@@ -3126,7 +3127,7 @@ static Int fetch_next_lu_clause_erase(PredEntry *pe, yamop *i_code, yamop *cp_pt
   tr = Yap_GetFromSlot(yterms + 3);
   if (cl == NULL) {
     UNLOCK(pe->PELock);
-    LOCAL_CurHandle = yterms;
+    REMOTE_CurHandle(worker_id) = yterms;
     return FALSE;
   }
   rtn = MkDBRefTerm((DBRef)cl);
@@ -3142,7 +3143,7 @@ static Int fetch_next_lu_clause_erase(PredEntry *pe, yamop *i_code, yamop *cp_pt
   if (cl->ClFlags & FactMask) {
     if (!Yap_unify_constant(tb, MkAtomTerm(AtomTrue)) || !Yap_unify(tr, rtn)) {
       UNLOCK(pe->PELock);
-        LOCAL_CurHandle = yterms;
+        REMOTE_CurHandle(worker_id) = yterms;
       return FALSE;
     }
     if (pe->ArityOfPE) {
@@ -3174,45 +3175,45 @@ static Int fetch_next_lu_clause_erase(PredEntry *pe, yamop *i_code, yamop *cp_pt
       UNLOCK(pe->PELock);
     }
     Yap_ErLogUpdCl(cl);
-        LOCAL_CurHandle = yterms;
+        REMOTE_CurHandle(worker_id) = yterms;
 	return true;
   } else {
     Term t;
     while ((t = Yap_FetchClauseTermFromDB(cl->lusl.ClSource)) == 0L) {
         if (first_time) {
-            if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-                LOCAL_Error_TYPE = YAP_NO_ERROR;
+            if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+                REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
                 if (!Yap_locked_growglobal(NULL)) {
                     UNLOCK(pe->PELock);
                     Yap_ThrowError(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                                   LOCAL_ErrorMessage);
+                                   REMOTE_ActiveError(worker_id)->errorMsg);
                     return false;
                 }
             } else {
-                LOCAL_Error_TYPE = YAP_NO_ERROR;
-                if (!Yap_locked_gcl(LOCAL_Error_Size, 0, ENV, gc_P(P, CP))) {
+                REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+                if (!Yap_locked_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 0, ENV, gc_P(P, CP))) {
                     UNLOCK(pe->PELock);
-                    Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+                    Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
                     return FALSE;
                 }
             }
             th = Yap_GetFromSlot(yterms + 1);
             tb = Yap_GetFromSlot(yterms + 2);
             tr = Yap_GetFromSlot(yterms + 3);
-            LOCAL_CurHandle = yterms;
+            REMOTE_CurHandle(worker_id) = yterms;
         } else {
-            if (!Yap_gcl(LOCAL_Error_Size, 6, ENV, CP)) {
+            if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 6, ENV, CP)) {
                 UNLOCK(pe->PELock);
-                Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+                Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
                 return FALSE;
             }
             th = Yap_GetFromSlot(yterms  +1);
             tb = Yap_GetFromSlot(yterms + 2);
             tr = Yap_GetFromSlot(yterms + 3);
-            LOCAL_CurHandle = yterms;
+            REMOTE_CurHandle(worker_id) = yterms;
         }
     }
-    LOCAL_CurHandle = yterms;
+    REMOTE_CurHandle(worker_id) = yterms;
     bool res = Yap_unify(th, ArgOfTerm(1, t)) && Yap_unify(tb, ArgOfTerm(2, t)) &&
         Yap_unify(tr, rtn);
   if (res)
@@ -3540,7 +3541,7 @@ restart:
   return;
 overflow:
   if (!Yap_growstack(64 * 1024)) {
-    Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+    Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
     return;
   }
   goto restart;
@@ -3561,7 +3562,7 @@ static Int fetch_next_static_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr,
      Yap_RecoverSlots(4);
   */
   if (cl == NULL) {
-      LOCAL_CurHandle = yterms;
+      REMOTE_CurHandle(worker_id) = yterms;
     UNLOCKPE(45, pe);
     return false;
   }
@@ -3571,7 +3572,7 @@ static Int fetch_next_static_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr,
     rtn = Yap_MkMegaRefTerm(pe, code);
     if (!Yap_unify(Terms[1], MkAtomTerm(AtomTrue)) ||
         !Yap_unify(Terms[2], rtn)) {
-        LOCAL_CurHandle = yterms;
+        REMOTE_CurHandle(worker_id) = yterms;
       UNLOCKPE(45, pe);
       return false;
     }
@@ -3591,13 +3592,13 @@ static Int fetch_next_static_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr,
       P = code;
     }
     UNLOCKPE(45, pe);
-      LOCAL_CurHandle = yterms;
+      REMOTE_CurHandle(worker_id) = yterms;
       return true;
   } else if (arity && cl->ClFlags & FactMask) {
     rtn = Yap_MkStaticRefTerm(cl, pe);
     if (!Yap_unify(Terms[1], MkAtomTerm(AtomTrue)) ||
         !Yap_unify(Terms[2], rtn)) {
-        LOCAL_CurHandle = yterms;
+        REMOTE_CurHandle(worker_id) = yterms;
       UNLOCKPE(45, pe);
       return false;
     }
@@ -3615,43 +3616,43 @@ static Int fetch_next_static_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr,
     }
     P = cl->ClCode;
     UNLOCKPE(45, pe);
-      LOCAL_CurHandle = yterms;
+      REMOTE_CurHandle(worker_id) = yterms;
     return true;
   }
   if (!(pe->PredFlags & SourcePredFlag)) {
     /* no source */
     rtn = Yap_MkStaticRefTerm(cl, pe);
     UNLOCKPE(45, pe);
-    LOCAL_CurHandle = yterms;
+    REMOTE_CurHandle(worker_id) = yterms;
     bool rc = Yap_unify(Terms[2], rtn);
-      LOCAL_CurHandle = yterms;
+      REMOTE_CurHandle(worker_id) = yterms;
     return rc;
   } else {
     Term t;
     while ((t = Yap_FetchClauseTermFromDB(cl->usc.ClSource)) == 0L) {
       if (first_time) {
-        if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
+        if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
           if (!Yap_growglobal(NULL)) {
             UNLOCKPE(45, pe);
             Yap_ThrowError(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                           LOCAL_ErrorMessage);
+                           REMOTE_ActiveError(worker_id)->errorMsg);
 
             return FALSE;
           }
         } else {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
-          if (!Yap_dogc(0, NULL)) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+          if (!Yap_dogc(0, NULL PASS_REGS)) {
             UNLOCKPE(45, pe);
-            Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+            Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
             return false;
           }
         }
       } else {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
-        if (!Yap_dogc(0, NULL)) {
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+        if (!Yap_dogc(0, NULL PASS_REGS)) {
           UNLOCKPE(45, pe);
-          Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -3669,7 +3670,7 @@ static Int fetch_next_static_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr,
     if (IsApplTerm(t)) {
       rc = rc && Yap_unify(Terms[0], t);
     }
-      LOCAL_CurHandle = yterms;
+      REMOTE_CurHandle(worker_id) = yterms;
     return rc;
   }
 }
@@ -3924,7 +3925,7 @@ static Int nth_clause(USES_REGS1) {
       }
       cl0 = Yap_NthClause(pe, Count);
       ARG4 = Yap_GetFromSlot(sl4);
-      LOCAL_CurSlot = CurSlot;
+      REMOTE_CurSlot(worker_id) = CurSlot;
       if (cl0 == NULL) {
         UNLOCK(pe->PELock);
         return FALSE;
@@ -4072,10 +4073,10 @@ static Int nth_clause(USES_REGS1) {
 }
 
 static Int including(USES_REGS1) {
-  bool rc = Yap_unify(ARG1, LOCAL_Including);
+  bool rc = Yap_unify(ARG1, REMOTE_Including(worker_id));
   if (!rc)
     return FALSE;
-  LOCAL_Including = Deref(ARG2);
+  REMOTE_Including(worker_id) = Deref(ARG2);
   return true;
 }
 
@@ -4168,7 +4169,7 @@ static bool pred_flag_clause(Functor f, Term mod, const char *name,
   yamop *code_adr = Yap_cclause(tn, 2, mod, tn); /* vsc: give the number of
                             arguments to cclause() in case there is a overflow
                           */
-  if (LOCAL_ErrorMessage || code_adr == 0) {
+  if (REMOTE_ActiveError(worker_id)->errorMsg || code_adr == 0) {
     return false;
   }
   return Yap_addclause(tn, code_adr, TermAssertz, mod, NULL);
@@ -4237,7 +4238,6 @@ static Int init_pred_flag_vals(USES_REGS1) {
 }
 
 void Yap_InitCdMgr(void) {
-  CACHE_REGS
   Yap_InitCPred("$init_pred_flag_vals", 2, init_pred_flag_vals,
                 SyncPredFlag | NoTracePredFlag);
   Yap_InitCPred("$start_consult", 3, p_startconsult,

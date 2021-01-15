@@ -976,21 +976,22 @@ static void copy_back(ClauseDef *dest, CELL *pt, int max) {
 
 /* sort a group of clauses by using their tags */
 static void sort_group(GroupDef *grp, CELL *top, struct intermediates *cint) {
+  CACHE_REGS
   int max = (grp->LastClause - grp->FirstClause) + 1, i;
   CELL *pt, *base;
     int lvl = push_text_stack();
 #if USE_SYSTEM_MALLOC
-  if (!(base = Malloc(2 * max * sizeof(CELL)))) {
+  if (!(base = Malloc(2 * max * sizeof(CELL) PASS_REGS))) {
     CACHE_REGS
     save_machine_regs();
-    LOCAL_Error_Size = 2 * max * sizeof(CELL);
+    REMOTE_ActiveError(worker_id)->errorMsgLen = 2 * max * sizeof(CELL);
     siglongjmp(cint->CompilerBotch, 2);
   }
 #else
   base = top;
-  while (top + 2 * max > (CELL *)LOCAL_TrailTop) {
+  while (top + 2 * max > (CELL *)REMOTE_TrailTop(worker_id)) {
     if (!Yap_growtrail(2 * max * CellSize, TRUE)) {
-      LOCAL_Error_Size = 2 * max * CellSize;
+      REMOTE_ActiveError(worker_id)->errorMsgLen = 2 * max * CellSize;
       save_machine_regs();
       siglongjmp(cint->CompilerBotch, 4);
       return;
@@ -1576,16 +1577,16 @@ static UInt groups_in(ClauseDef *min, ClauseDef *max, GroupDef *grp,
     }
     groups++;
     grp++;
-    while (grp + 16 > (GroupDef *)LOCAL_TrailTop) {
+    while (grp + 16 > (GroupDef *)REMOTE_TrailTop(worker_id)) {
       UInt sz = (groups + 16) * sizeof(GroupDef);
 #if USE_SYSTEM_MALLOC
-      LOCAL_Error_Size = sz;
+      REMOTE_ActiveError(worker_id)->errorMsgLen = sz;
       /* grow stack */
       save_machine_regs();
       siglongjmp(cint->CompilerBotch, 4);
 #else
       if (!Yap_growtrail(sz, TRUE)) {
-        LOCAL_Error_Size = sz;
+        REMOTE_ActiveError(worker_id)->errorMsgLen = sz;
         save_machine_regs();
         siglongjmp(cint->CompilerBotch, 4);
         return 0;
@@ -1722,7 +1723,7 @@ static yamop *emit_switch_space(UInt n, UInt item_size,
     UInt sz = sizeof(LogUpdIndex) + n * item_size;
     LogUpdIndex *cl = (LogUpdIndex *)Yap_AllocCodeSpace(sz);
     if (cl == NULL) {
-      LOCAL_Error_Size = sz;
+      REMOTE_ActiveError(worker_id)->errorMsgLen = sz;
       /* grow stack */
       save_machine_regs();
       siglongjmp(cint->CompilerBotch, 2);
@@ -1739,7 +1740,7 @@ static yamop *emit_switch_space(UInt n, UInt item_size,
     UInt sz = sizeof(StaticIndex) + n * item_size;
     StaticIndex *cl = (StaticIndex *)Yap_AllocCodeSpace(sz);
     if (cl == NULL) {
-      LOCAL_Error_Size = sz;
+      REMOTE_ActiveError(worker_id)->errorMsgLen = sz;
       /* grow stack */
       save_machine_regs();
       siglongjmp(cint->CompilerBotch, 2);
@@ -2665,8 +2666,8 @@ static ClauseDef *copy_clauses(ClauseDef *max0, ClauseDef *min0, CELL *top,
                                struct intermediates *cint) {
   CACHE_REGS
   UInt sz = ((max0 + 1) - min0) * sizeof(ClauseDef);
-  if ((char *)top + sz >= LOCAL_TrailTop - 4096) {
-    LOCAL_Error_Size = sz;
+  if ((char *)top + sz >= REMOTE_TrailTop(worker_id) - 4096) {
+    REMOTE_ActiveError(worker_id)->errorMsgLen = sz;
     /* grow stack */
     save_machine_regs();
     siglongjmp(cint->CompilerBotch, 4);
@@ -2880,13 +2881,13 @@ static UInt compile_index(struct intermediates *cint) {
   /* only global variable I use directly */
   cint->i_labelno = 1;
 
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 #if USE_SYSTEM_MALLOC
   if (!cint->cls) {
     cint->cls = (ClauseDef *)Yap_AllocCodeSpace(NClauses * sizeof(ClauseDef));
     if (!cint->cls) {
       /* tell how much space we need */
-      LOCAL_Error_Size += NClauses * sizeof(ClauseDef);
+      REMOTE_ActiveError(worker_id)->errorMsgLen += NClauses * sizeof(ClauseDef);
       /* grow stack */
       save_machine_regs();
       siglongjmp(cint->CompilerBotch, 2);
@@ -2898,7 +2899,7 @@ static UInt compile_index(struct intermediates *cint) {
   cint->cls = (ClauseDef *)HR;
   if (cint->cls + 2 * NClauses > (ClauseDef *)(ASP - 4096)) {
     /* tell how much space we need */
-    LOCAL_Error_Size += NClauses * sizeof(ClauseDef);
+    REMOTE_ActiveError(worker_id)->errorMsgLen += NClauses * sizeof(ClauseDef);
     /* grow stack */
     save_machine_regs();
     siglongjmp(cint->CompilerBotch, 3);
@@ -2942,39 +2943,39 @@ yamop *Yap_PredIsIndexable(PredEntry *ap, UInt NSlots, yamop *next_pc) {
   cint.code_addr = NULL;
   cint.blks = NULL;
   cint.cls = NULL;
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 
   if (ap->NOfClauses < 2)
     return NULL;
   if ((setjres = sigsetjmp(cint.CompilerBotch, 0)) == 3) {
     restore_machine_regs();
     recover_from_failed_susp_on_cls(&cint, 0);
-    if (!Yap_gcl(LOCAL_Error_Size, ap->ArityOfPE + NSlots, ENV, next_pc)) {
+    if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, ap->ArityOfPE + NSlots, ENV, next_pc)) {
       CleanCls(&cint);
-      Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return NULL;
     }
   } else if (setjres == 2) {
     restore_machine_regs();
-    LOCAL_Error_Size = recover_from_failed_susp_on_cls(&cint, LOCAL_Error_Size);
-    if (!Yap_growheap(FALSE, LOCAL_Error_Size, NULL)) {
+    REMOTE_ActiveError(worker_id)->errorMsgLen = recover_from_failed_susp_on_cls(&cint, REMOTE_ActiveError(worker_id)->errorMsgLen);
+    if (!Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL)) {
       CleanCls(&cint);
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return NULL;
     }
   } else if (setjres == 4) {
     restore_machine_regs();
     recover_from_failed_susp_on_cls(&cint, 0);
-    if (!Yap_growtrail(LOCAL_Error_Size, FALSE)) {
+    if (!Yap_growtrail(REMOTE_ActiveError(worker_id)->errorMsgLen, FALSE)) {
       CleanCls(&cint);
-      Yap_Error(RESOURCE_ERROR_TRAIL, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_TRAIL, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return NULL;
     }
   } else if (setjres != 0) {
     restore_machine_regs();
     recover_from_failed_susp_on_cls(&cint, 0);
-    if (!Yap_growheap(FALSE, LOCAL_Error_Size, NULL)) {
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+    if (!Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL)) {
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       CleanCls(&cint);
       return NULL;
     }
@@ -2984,7 +2985,7 @@ restart_index:
   cint.CodeStart = cint.BlobsStart = cint.cpc = cint.icpc = NULL;
   cint.expand_block = NULL;
   cint.label_offset = NULL;
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   cint.term_depth = cint.last_index_new_depth = cint.last_depth_size = 0L;
   if (compile_index(&cint) == (UInt)FAILCODE) {
     Yap_ReleaseCMem(&cint);
@@ -2997,14 +2998,14 @@ restart_index:
   }
 #endif
   /* globals for assembler */
-  LOCAL_IPredArity = ap->ArityOfPE;
+  REMOTE_IPredArity(worker_id) = ap->ArityOfPE;
   if (cint.CodeStart) {
     if ((indx_out = Yap_assemble(ASSEMBLING_INDEX, TermNil, ap, FALSE, &cint,
                                  cint.i_labelno + 1)) == NULL) {
-      if (!Yap_growheap(FALSE, LOCAL_Error_Size, NULL)) {
+      if (!Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL)) {
         Yap_ReleaseCMem(&cint);
         CleanCls(&cint);
-        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return NULL;
       }
       goto restart_index;
@@ -3026,7 +3027,7 @@ restart_index:
 static istack_entry *push_stack(istack_entry *sp, Int arg, Term Tag, Term extra,
                                 struct intermediates *cint) {
   CACHE_REGS
-  if (sp + 1 > (istack_entry *)LOCAL_TrailTop) {
+  if (sp + 1 > (istack_entry *)REMOTE_TrailTop(worker_id)) {
     save_machine_regs();
     siglongjmp(cint->CompilerBotch, 4);
   }
@@ -3934,7 +3935,7 @@ static yamop **expand_index(struct intermediates *cint) {
       cint->cls = (ClauseDef *)Yap_AllocCodeSpace(nclauses * sizeof(ClauseDef));
       if (!cint->cls) {
         /* tell how much space we need */
-        LOCAL_Error_Size += NClauses * sizeof(ClauseDef);
+        REMOTE_ActiveError(worker_id)->errorMsgLen += NClauses * sizeof(ClauseDef);
         /* grow stack */
         save_machine_regs();
         siglongjmp(cint->CompilerBotch, 2);
@@ -3944,7 +3945,7 @@ static yamop **expand_index(struct intermediates *cint) {
     cint->cls = (ClauseDef *)HR;
     if (cint->cls + 2 * nclauses > (ClauseDef *)(ASP - 4096)) {
       /* tell how much space we need (worst case) */
-      LOCAL_Error_Size += 2 * NClauses * sizeof(ClauseDef);
+      REMOTE_ActiveError(worker_id)->errorMsgLen += 2 * NClauses * sizeof(ClauseDef);
       /* grow stack */
       save_machine_regs();
       siglongjmp(cint->CompilerBotch, 3);
@@ -3963,7 +3964,7 @@ static yamop **expand_index(struct intermediates *cint) {
       cint->cls = (ClauseDef *)Yap_AllocCodeSpace(NClauses * sizeof(ClauseDef));
       if (!cint->cls) {
         /* tell how much space we need */
-        LOCAL_Error_Size += NClauses * sizeof(ClauseDef);
+        REMOTE_ActiveError(worker_id)->errorMsgLen += NClauses * sizeof(ClauseDef);
         /* grow stack */
         save_machine_regs();
         siglongjmp(cint->CompilerBotch, 2);
@@ -3973,7 +3974,7 @@ static yamop **expand_index(struct intermediates *cint) {
     cint->cls = (ClauseDef *)HR;
     if (cint->cls + 2 * NClauses > (ClauseDef *)(ASP - 4096)) {
       /* tell how much space we need (worst case) */
-      LOCAL_Error_Size += 2 * NClauses * sizeof(ClauseDef);
+      REMOTE_ActiveError(worker_id)->errorMsgLen += 2 * NClauses * sizeof(ClauseDef);
       save_machine_regs();
       siglongjmp(cint->CompilerBotch, 3);
     }
@@ -4087,11 +4088,11 @@ static yamop *ExpandIndex(PredEntry *ap, int ExtraArgs,
     restore_machine_regs();
     /* grow stack */
     recover_from_failed_susp_on_cls(&cint, 0);
-    Yap_gcl(LOCAL_Error_Size, ap->ArityOfPE + ExtraArgs, ENV, nextop);
+    Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, ap->ArityOfPE + ExtraArgs, ENV, nextop);
   } else if (cb == 2) {
     restore_machine_regs();
-    LOCAL_Error_Size = recover_from_failed_susp_on_cls(&cint, LOCAL_Error_Size);
-    if (!Yap_growheap(FALSE, LOCAL_Error_Size, NULL)) {
+    REMOTE_ActiveError(worker_id)->errorMsgLen = recover_from_failed_susp_on_cls(&cint, REMOTE_ActiveError(worker_id)->errorMsgLen);
+    if (!Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL)) {
       save_machine_regs();
       if (ap->PredFlags & LogUpdatePredFlag) {
         Yap_kill_iblock((ClauseUnion *)ClauseCodeToLogUpdIndex(
@@ -4118,14 +4119,14 @@ static yamop *ExpandIndex(PredEntry *ap, int ExtraArgs,
 #if defined(YAPOR) || defined(THREADS)
       }
 #endif
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       CleanCls(&cint);
       return FAILCODE;
     }
   } else if (cb == 4) {
     restore_machine_regs();
     Yap_ReleaseCMem(&cint);
-    if (!Yap_growtrail(LOCAL_Error_Size, FALSE)) {
+    if (!Yap_growtrail(REMOTE_ActiveError(worker_id)->errorMsgLen, FALSE)) {
       save_machine_regs();
       if (ap->PredFlags & LogUpdatePredFlag) {
         Yap_kill_iblock((ClauseUnion *)ClauseCodeToLogUpdIndex(
@@ -4144,8 +4145,8 @@ static yamop *ExpandIndex(PredEntry *ap, int ExtraArgs,
 restart_index:
   cint.CodeStart = cint.cpc = cint.BlobsStart = cint.icpc = NIL;
   cint.CurrentPred = ap;
-  LOCAL_ErrorMessage = NULL;
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
   if (P->opc == Yap_opcode(_expand_clauses)) {
     expand_clauses = P;
   } else {
@@ -4180,12 +4181,12 @@ restart_index:
   }
 #endif
   /* globals for assembler */
-  LOCAL_IPredArity = ap->ArityOfPE;
+  REMOTE_IPredArity(worker_id) = ap->ArityOfPE;
   if (cint.CodeStart) {
     if ((indx_out = Yap_assemble(ASSEMBLING_EINDEX, TermNil, ap, FALSE, &cint,
                                  cint.i_labelno + 1)) == NULL) {
-      if (!Yap_growheap(FALSE, LOCAL_Error_Size, NULL)) {
-        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      if (!Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL)) {
+        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         Yap_ReleaseCMem(&cint);
         CleanCls(&cint);
         return FAILCODE;
@@ -4255,7 +4256,7 @@ yamop *Yap_ExpandIndex(PredEntry *ap, UInt nargs) {
 static path_stack_entry *push_path(path_stack_entry *sp, yamop **pipc,
                                    ClauseDef *clp, struct intermediates *cint) {
   CACHE_REGS
-  if (sp + 1 > (path_stack_entry *)LOCAL_TrailTop) {
+  if (sp + 1 > (path_stack_entry *)REMOTE_TrailTop(worker_id)) {
     save_machine_regs();
     siglongjmp(cint->CompilerBotch, 4);
   }
@@ -4272,7 +4273,7 @@ static path_stack_entry *fetch_new_block(path_stack_entry *sp, yamop **pipc,
                                          PredEntry *ap,
                                          struct intermediates *cint) {
   CACHE_REGS
-  if (sp + 1 > (path_stack_entry *)LOCAL_TrailTop) {
+  if (sp + 1 > (path_stack_entry *)REMOTE_TrailTop(worker_id)) {
     save_machine_regs();
     siglongjmp(cint->CompilerBotch, 4);
   }
@@ -5558,23 +5559,23 @@ void Yap_AddClauseToIndex(PredEntry *ap, yamop *beg, int first) {
   cint.term_depth = cint.last_index_new_depth = cint.last_depth_size = 0L;
   if ((cb = sigsetjmp(cint.CompilerBotch, 0)) == 3) {
     restore_machine_regs();
-    Yap_gcl(LOCAL_Error_Size, ap->ArityOfPE, ENV, CP);
+    Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, ap->ArityOfPE, ENV, CP);
     save_machine_regs();
   } else if (cb == 2) {
     restore_machine_regs();
-    Yap_growheap(FALSE, LOCAL_Error_Size, NULL);
+    Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL);
     save_machine_regs();
   } else if (cb == 4) {
     restore_machine_regs();
-    Yap_growtrail(LOCAL_Error_Size, FALSE);
+    Yap_growtrail(REMOTE_ActiveError(worker_id)->errorMsgLen, FALSE);
     save_machine_regs();
   }
   if (cb) {
     Yap_RemoveIndexation(ap);
     return;
   }
-  LOCAL_Error_Size = 0;
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
 #if DEBUG
   if (GLOBAL_Option['i' - 'a' + 1]) {
     Yap_DebugPutc(stderr, '+');
@@ -5994,19 +5995,19 @@ void Yap_RemoveClauseFromIndex(PredEntry *ap, yamop *beg) {
   cint.CodeStart = cint.BlobsStart = cint.cpc = cint.icpc = NULL;
   if ((cb = sigsetjmp(cint.CompilerBotch, 0)) == 3) {
     restore_machine_regs();
-    Yap_gcl(LOCAL_Error_Size, ap->ArityOfPE, ENV, CP);
+    Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, ap->ArityOfPE, ENV, CP);
     save_machine_regs();
   } else if (cb == 2) {
     restore_machine_regs();
-    Yap_growheap(FALSE, LOCAL_Error_Size, NULL);
+    Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL);
     save_machine_regs();
   } else if (cb == 4) {
     restore_machine_regs();
-    Yap_growtrail(LOCAL_Error_Size, FALSE);
+    Yap_growtrail(REMOTE_ActiveError(worker_id)->errorMsgLen, FALSE);
     save_machine_regs();
   }
-  LOCAL_Error_Size = 0;
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   cint.term_depth = cint.last_index_new_depth = cint.last_depth_size = 0L;
   if (cb || (ap->NOfClauses == 2 &&
              ap->PredFlags & IndexedPredFlag)) {

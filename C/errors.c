@@ -111,6 +111,7 @@ static yap_error_descriptor_t *CopyException(yap_error_descriptor_t *t);
   
 
 static Term queryErr(const char *q, yap_error_descriptor_t *i) {
+  CACHE_REGS
   query_key_i(errorNo, "errorNo", q, i);
   query_key_i(errorClass, "errorClass", q, i);
   query_key_s(errorAsText, "errorAsText", q, i);
@@ -189,6 +190,7 @@ static void printErr(yap_error_descriptor_t *i) {
 }
 
 static YAP_Term add_key_b(const char *key, bool v, YAP_Term o0) {
+  CACHE_REGS
   YAP_Term tkv[2];
   tkv[1] = v ? TermTrue : TermFalse;
   tkv[0] = MkStringTerm(key);
@@ -197,6 +199,7 @@ static YAP_Term add_key_b(const char *key, bool v, YAP_Term o0) {
 }
 
 static YAP_Term add_key_i(const char *key, YAP_Int v, YAP_Term o0) {
+  CACHE_REGS
   YAP_Term tkv[2];
   tkv[1] = MkIntegerTerm(v), tkv[0] = MkStringTerm(key);
   Term node = Yap_MkApplTerm(FunctorEq, 2, tkv);
@@ -204,6 +207,7 @@ static YAP_Term add_key_i(const char *key, YAP_Int v, YAP_Term o0) {
 }
 
 static YAP_Term add_key_s(const char *key, const char *v, YAP_Term o0) {
+  CACHE_REGS
   Term tkv[2];
   if (!v || v[0] == '\0')
     return o0;
@@ -258,13 +262,13 @@ bool Yap_Warning(const char *s, ...) {
   char tmpbuf[MAXPATHLEN];
   yap_error_number err;
 
-  LOCAL_DoingUndefp = true;
-  if (LOCAL_PrologMode & InErrorMode && (err = LOCAL_ActiveError->errorNo)) {
+  REMOTE_DoingUndefp(worker_id) = true;
+  if (REMOTE_PrologMode(worker_id) & InErrorMode && (err = REMOTE_ActiveError(worker_id)->errorNo)) {
     fprintf(stderr, "%% Warning %s WITHIN ERROR %s %s\n", s,
             Yap_errorClassName(Yap_errorClass(err)), Yap_errorName(err));
     Yap_RestartYap(1);
   }
-  LOCAL_PrologMode |= InErrorMode;
+  REMOTE_PrologMode(worker_id) |= InErrorMode;
   pred = RepPredProp(PredPropByFunc(FunctorPrintMessage,
                                     PROLOG_MODULE)); // PROCEDURE_print_message2
   va_start(ap, s);
@@ -281,15 +285,15 @@ bool Yap_Warning(const char *s, ...) {
   va_end(ap);
   if (pred->OpcodeOfPred == UNDEF_OPCODE || pred->OpcodeOfPred == FAIL_OPCODE) {
     fprintf(stderr, "warning message: %s\n", tmpbuf);
-    LOCAL_DoingUndefp = false;
-    LOCAL_PrologMode &= ~InErrorMode;
+    REMOTE_DoingUndefp(worker_id) = false;
+    REMOTE_PrologMode(worker_id) &= ~InErrorMode;
     return false;
   }
 
   ts[1] = MkAtomTerm(AtomWarning);
   ts[0] = MkAtomTerm(Yap_LookupAtom(tmpbuf));
   rc = Yap_execute_pred(pred, ts, true PASS_REGS);
-  LOCAL_PrologMode &= ~InErrorMode;
+  REMOTE_PrologMode(worker_id) &= ~InErrorMode;
   return rc;
 }
 
@@ -312,22 +316,22 @@ void Yap_InitError__(const char *file, const char *function, int lineno,
   } else
     return;
   va_end(ap);
-  if (LOCAL_ActiveError->errorNo != YAP_NO_ERROR) {
-    yap_error_number err = LOCAL_ActiveError->errorNo;
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+    yap_error_number err = REMOTE_ActiveError(worker_id)->errorNo;
     fprintf(stderr, "%% Warning %s WITHIN ERROR %s %s\n", Yap_errorName(e),
             Yap_errorClassName(Yap_errorClass(err)), Yap_errorName(err));
     return;
   }
-  LOCAL_ActiveError->errorNo = e;
-  LOCAL_ActiveError->errorFile = NULL;
-  LOCAL_ActiveError->errorFunction = NULL;
-  LOCAL_ActiveError->errorLine = 0;
+  REMOTE_ActiveError(worker_id)->errorNo = e;
+  REMOTE_ActiveError(worker_id)->errorFile = NULL;
+  REMOTE_ActiveError(worker_id)->errorFunction = NULL;
+  REMOTE_ActiveError(worker_id)->errorLine = 0;
   if (fmt && tmpbuf) {
-    LOCAL_Error_Size = strlen(tmpbuf);
-    LOCAL_ActiveError->errorMsg = malloc(LOCAL_Error_Size + 1);
-    strcpy((char *)LOCAL_ActiveError->errorMsg, tmpbuf);
+    REMOTE_ActiveError(worker_id)->errorMsgLen = strlen(tmpbuf);
+    REMOTE_ActiveError(worker_id)->errorMsg = malloc(REMOTE_ActiveError(worker_id)->errorMsgLen + 1);
+    strcpy((char *)REMOTE_ActiveError(worker_id)->errorMsg, tmpbuf);
   } else {
-    LOCAL_Error_Size = 0;
+    REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
   }
 }
 
@@ -343,25 +347,25 @@ bool Yap_PrintWarning(Term twarning) {
   Term ts[2], err;
 
   
-  if (twarning && LOCAL_PrologMode & InErrorMode &&
-      LOCAL_ActiveError->errorClass != WARNING &&
-      (err = LOCAL_ActiveError->errorNo)  ) {
+  if (twarning && REMOTE_PrologMode(worker_id) & InErrorMode &&
+      REMOTE_ActiveError(worker_id)->errorClass != WARNING &&
+      (err = REMOTE_ActiveError(worker_id)->errorNo)  ) {
     fprintf(stderr, "%% Warning %s while processing error: %s %s\n",
             Yap_TermToBuffer(twarning,
                              Quote_illegal_f | Ignore_ops_f),
             Yap_errorClassName(Yap_errorClass(err)), Yap_errorName(err));
     return false;
   }
-  LOCAL_PrologMode |= InErrorMode;
+  REMOTE_PrologMode(worker_id) |= InErrorMode;
   if (pred->OpcodeOfPred == UNDEF_OPCODE || pred->OpcodeOfPred == FAIL_OPCODE) {
     fprintf(stderr, "%s:%ld/* d:%d warning */:\n",
-	    LOCAL_ActiveError->errorFile,
-	    LOCAL_ActiveError->errorLine, 0 );
+	    REMOTE_ActiveError(worker_id)->errorFile,
+	    REMOTE_ActiveError(worker_id)->errorLine, 0 );
     if (!twarning)
       twarning =  Yap_MkFullError();
     Yap_DebugPlWriteln(twarning);
-    LOCAL_DoingUndefp = false;
-    LOCAL_PrologMode &= ~InErrorMode;
+    REMOTE_DoingUndefp(worker_id) = false;
+    REMOTE_PrologMode(worker_id) &= ~InErrorMode;
     CurrentModule = cmod;
     return false;
   }
@@ -370,8 +374,8 @@ bool Yap_PrintWarning(Term twarning) {
   ts[1] = twarning;
   ts[0] = MkAtomTerm(AtomWarning);
   rc = Yap_execute_pred(pred, ts, true PASS_REGS);
-  LOCAL_within_print_message = false;
-  LOCAL_PrologMode &= ~InErrorMode;
+  REMOTE_within_print_message(worker_id) = false;
+  REMOTE_PrologMode(worker_id) &= ~InErrorMode;
   return rc;
    
 }
@@ -379,13 +383,13 @@ bool Yap_PrintWarning(Term twarning) {
 bool Yap_HandleError__(const char *file, const char *function, int lineno,
                        const char *s, ...) {
   CACHE_REGS
-  yap_error_number err = LOCAL_Error_TYPE;
+  yap_error_number err = REMOTE_ActiveError(worker_id)->errorNo;
   const char *serr;
 
   arity_t arity = 2;
 
-  if (LOCAL_ErrorMessage) {
-    serr = LOCAL_ErrorMessage;
+  if (REMOTE_ActiveError(worker_id)->errorMsg) {
+    serr = REMOTE_ActiveError(worker_id)->errorMsg;
   } else {
     serr = s;
   }
@@ -405,11 +409,11 @@ bool Yap_HandleError__(const char *file, const char *function, int lineno,
                   serr);
       return false;
     }
-    LOCAL_PrologMode = UserMode;
+    REMOTE_PrologMode(worker_id) = UserMode;
     return true;
   case RESOURCE_ERROR_AUXILIARY_STACK:
-    if (LOCAL_MAX_SIZE < (char *)AuxSp - AuxBase) {
-      LOCAL_MAX_SIZE += 1024;
+    if (REMOTE_MAX_SIZE(worker_id) < (char *)AuxSp - AuxBase) {
+      REMOTE_MAX_SIZE(worker_id) += 1024;
     }
     if (!Yap_ExpandPreAllocCodeSpace(0, NULL, TRUE)) {
       /* crash in flames */
@@ -417,7 +421,7 @@ bool Yap_HandleError__(const char *file, const char *function, int lineno,
                   ARG1, serr);
       return false;
     }
-    LOCAL_PrologMode = UserMode;
+    REMOTE_PrologMode(worker_id) = UserMode;
     return true;
   case RESOURCE_ERROR_HEAP:
     if (!Yap_growheap(FALSE, 0, NULL)) {
@@ -427,17 +431,17 @@ bool Yap_HandleError__(const char *file, const char *function, int lineno,
     }
   default:
   
-    if (LOCAL_PrologMode == UserMode)
-      Yap_ThrowError__(file, function, lineno, err, LOCAL_RawTerm, serr);
+    if (REMOTE_PrologMode(worker_id) == UserMode)
+      Yap_ThrowError__(file, function, lineno, err, REMOTE_ActiveError(worker_id)->errorRawTerm, serr);
     else
-      LOCAL_PrologMode &= ~InErrorMode;
+      REMOTE_PrologMode(worker_id) &= ~InErrorMode;
     return false;
   }
 }
 
 int Yap_SWIHandleError(const char *s, ...) {
   CACHE_REGS
-  yap_error_number err = LOCAL_Error_TYPE;
+  yap_error_number err = REMOTE_ActiveError(worker_id)->errorNo;
   char *serr;
 
   if (s) {
@@ -451,8 +455,8 @@ int Yap_SWIHandleError(const char *s, ...) {
     }
     return TRUE;
   case RESOURCE_ERROR_AUXILIARY_STACK:
-    if (LOCAL_MAX_SIZE < (char *)AuxSp - AuxBase) {
-      LOCAL_MAX_SIZE += 1024;
+    if (REMOTE_MAX_SIZE(worker_id) < (char *)AuxSp - AuxBase) {
+      REMOTE_MAX_SIZE(worker_id) += 1024;
     }
     if (!Yap_ExpandPreAllocCodeSpace(0, NULL, TRUE)) {
       /* crash in flames */
@@ -476,12 +480,12 @@ void Yap_RestartYap(int flag) {
 #if PUSH_REGS
   restore_absmi_regs(&Yap_standard_regs);
 #endif
-  siglongjmp(*LOCAL_RestartEnv, flag);
+  siglongjmp(*REMOTE_RestartEnv(worker_id), flag);
 }
 
 static void error_exit_yap(int value) {
   CACHE_REGS
-  if (!(LOCAL_PrologMode & BootMode)) {
+  if (!(REMOTE_PrologMode(worker_id) & BootMode)) {
 
 #if DEBUG
 #endif
@@ -539,6 +543,7 @@ static char tmpbuf[YAP_BUF_SIZE];
 
 #define BEGIN_ERRORS()                                                         \
   static Term mkerrort(yap_error_number e, Term culprit, Term info) {          \
+    CACHE_REGS                                                                 \
     if (!e || !info) return TermNil; \
     switch (e) {
 
@@ -593,30 +598,32 @@ static char tmpbuf[YAP_BUF_SIZE];
 /// add a new error descriptor, either to the top of the  stack,
 /// or replacing the top;
 bool Yap_pushErrorContext(bool link , yap_error_descriptor_t *new_error) {
+  CACHE_REGS
   memset(new_error, 0, sizeof(yap_error_descriptor_t));
   if (link)
-    new_error->top_error = LOCAL_ActiveError;
-  LOCAL_ActiveError = new_error;
+    new_error->top_error = REMOTE_ActiveError(worker_id);
+  REMOTE_ActiveError(worker_id) = new_error;
   return true;
 }
 
 /* static void */
 /* reset_error_description(void) { */
-/*   yap_error_descriptor_t *bf = LOCAL_ActiveError->top_error; */
+/*   yap_error_descriptor_t *bf = REMOTE_ActiveError(worker_id)->top_error; */
 /*   if (Yap_HasException()) */
-/*   memset(LOCAL_ActiveError, 0, sizeof(*LOCAL_ActiveError)); */
-/*   LOCAL_ActiveError->top_error = bf; */
+/*   memset(REMOTE_ActiveError(worker_id), 0, sizeof(*REMOTE_ActiveError(worker_id))); */
+/*   REMOTE_ActiveError(worker_id)->top_error = bf; */
 /* } */
 yap_error_descriptor_t *Yap_popErrorContext(bool mdnew, bool pass) {
-  yap_error_descriptor_t *e = LOCAL_ActiveError, *ep = LOCAL_ActiveError->top_error;
+  CACHE_REGS
+  yap_error_descriptor_t *e = REMOTE_ActiveError(worker_id), *ep = REMOTE_ActiveError(worker_id)->top_error;
   // last block
-  LOCAL_ActiveError = ep;
+  REMOTE_ActiveError(worker_id) = ep;
   if (e->errorNo && !ep->errorNo && pass) {
     yap_error_descriptor_t *epp = ep->top_error;
     memmove(ep, e, sizeof(*e));
     ep->top_error = epp;
   }
-  return LOCAL_ActiveError;
+  return REMOTE_ActiveError(worker_id);
 }
 /**
  * Throw an error directly to the error handler
@@ -629,6 +636,7 @@ yap_error_descriptor_t *Yap_popErrorContext(bool mdnew, bool pass) {
  */
 void Yap_ThrowError__(const char *file, const char *function, int lineno,
                       yap_error_number type, Term where, ...) {
+  CACHE_REGS
   va_list ap;
   char tmpbuf[MAXPATHLEN];
 
@@ -645,7 +653,7 @@ void Yap_ThrowError__(const char *file, const char *function, int lineno,
   } else {
     Yap_Error__(true, file, function, lineno, type, where, NULL);
   }
-  if (LOCAL_RestartEnv && !LOCAL_delay) {
+  if (REMOTE_RestartEnv(worker_id) && !REMOTE_delay(worker_id)) {
     Yap_RestartYap(5);
   }
   Yap_exit(5);
@@ -656,7 +664,8 @@ void Yap_ThrowError__(const char *file, const char *function, int lineno,
  *
  */
 void Yap_ThrowExistingError(void) {
-  if (LOCAL_RestartEnv) {
+  CACHE_REGS
+  if (REMOTE_RestartEnv(worker_id)) {
     Yap_RestartYap(5);
   }
   Yap_exit(5);
@@ -664,7 +673,8 @@ void Yap_ThrowExistingError(void) {
 
 Term Yap_MkFullError(void)
 {
-  yap_error_descriptor_t *i =  CopyException(Yap_local.ActiveError);
+  CACHE_REGS
+  yap_error_descriptor_t *i =  CopyException(REMOTE_ActiveError(worker_id));
   i->errorAsText = Yap_errorName( i->errorNo );
   i->errorClass = Yap_errorClass( i-> errorNo );
   i->classAsText = Yap_errorClassName(i->errorClass);
@@ -675,6 +685,7 @@ Term Yap_MkFullError(void)
 bool Yap_MkErrorRecord(yap_error_descriptor_t *r, const char *file,
                        const char *function, int lineno, yap_error_number type,
   Term where, const char *s) {
+  CACHE_REGS
   if (!Yap_pc_add_location(r, P, B, ENV))
     Yap_env_add_location(r, CP, B, ENV, 0);
   if (where == 0L || where == TermNil) {
@@ -683,7 +694,7 @@ bool Yap_MkErrorRecord(yap_error_descriptor_t *r, const char *file,
     r->culprit = Yap_TermToBuffer(
         where, Quote_illegal_f | Ignore_ops_f);
   }
-  if (type != SYNTAX_ERROR && LOCAL_consult_level > 0) {
+  if (type != SYNTAX_ERROR && REMOTE_consult_level(worker_id) > 0) {
     r->parserFile = Yap_ConsultingFile(PASS_REGS1)->StrOfAE;
     r->parserLine = Yap_source_line_no();
   }
@@ -694,8 +705,8 @@ bool Yap_MkErrorRecord(yap_error_descriptor_t *r, const char *file,
   r->errorLine = lineno;
   r->errorFunction = function;
   r->errorFile = file;
-  r->prologConsulting = Yap_Consulting();
-  LOCAL_PrologMode |= InErrorMode;
+  r->prologConsulting = Yap_Consulting(PASS_REGS1);
+  REMOTE_PrologMode(worker_id) |= InErrorMode;
   Yap_ClearExs();
   // first, obtain current location
 
@@ -703,12 +714,12 @@ bool Yap_MkErrorRecord(yap_error_descriptor_t *r, const char *file,
   // function);
   //  tf = MkAtomTerm(Yap_LookupAtom(LOCAL_FileNameBuf));
 #if DEBUG_STRICT
-  if (Yap_heap_regs && !(LOCAL_PrologMode & BootMode))
+  if (Yap_heap_regs && !(REMOTE_PrologMode(worker_id) & BootMode))
     fprintf(stderr, "***** Processing Error %d (%lx,%x) %s***\n", type,
-            (unsigned long int)LOCAL_Signals, LOCAL_PrologMode, fmt);
+            (unsigned long int)REMOTE_Signals(worker_id), REMOTE_PrologMode(worker_id), fmt);
   else
     fprintf(stderr, "***** Processing Error %d (%x) %s***\n", type,
-            LOCAL_PrologMode, fmt);
+            REMOTE_PrologMode(worker_id), fmt);
 #endif
   if (r->errorNo == SYNTAX_ERROR) {
     r->errorClass = SYNTAX_ERROR_CLASS;
@@ -768,7 +779,7 @@ yamop *Yap_Error__(bool throw, const char *file, const char *function,
   case SYSTEM_ERROR_INTERNAL: {
     fprintf(stderr, "%% Internal YAP Error: %s exiting....\n", tmpbuf);
     //    serious = true;
-    if (LOCAL_PrologMode & BootMode) {
+    if (REMOTE_PrologMode(worker_id) & BootMode) {
       fprintf(stderr, "%% YAP crashed while booting %s\n", tmpbuf);
     } else {
       Yap_output_bug_location(P, FIND_PRED_FROM_ANYWHERE, YAP_BUF_SIZE);
@@ -797,46 +808,46 @@ yamop *Yap_Error__(bool throw, const char *file, const char *function,
     error_exit_yap(1);
   }
   case USER_EVENT: {
-    LOCAL_ActiveError = Yap_UserError(where,LOCAL_ActiveError);
+    REMOTE_ActiveError(worker_id) = Yap_UserError(where,REMOTE_ActiveError(worker_id));
     break;
   }
   case ABORT_EVENT:
     //      fun = FunctorDollarVar;
     //    serious = true;
-    LOCAL_ActiveError->errorNo = ABORT_EVENT;
+    REMOTE_ActiveError(worker_id)->errorNo = ABORT_EVENT;
     Yap_JumpToEnv();
     P = FAILCODE;
-    LOCAL_PrologMode &= ~InErrorMode;
+    REMOTE_PrologMode(worker_id) &= ~InErrorMode;
     return P;
   case CALL_COUNTER_UNDERFLOW_EVENT:
     /* Do a long jump */
-    LOCAL_ReductionsCounterOn = FALSE;
-    LOCAL_PredEntriesCounterOn = FALSE;
-    LOCAL_RetriesCounterOn = FALSE;
-    LOCAL_ActiveError->errorNo = CALL_COUNTER_UNDERFLOW_EVENT;
+    REMOTE_ReductionsCounterOn(worker_id) = FALSE;
+    REMOTE_PredEntriesCounterOn(worker_id) = FALSE;
+    REMOTE_RetriesCounterOn(worker_id) = FALSE;
+    REMOTE_ActiveError(worker_id)->errorNo = CALL_COUNTER_UNDERFLOW_EVENT;
     Yap_JumpToEnv();
     P = FAILCODE;
-    LOCAL_PrologMode &= ~InErrorMode;
+    REMOTE_PrologMode(worker_id) &= ~InErrorMode;
     return P;
   case PRED_ENTRY_COUNTER_UNDERFLOW_EVENT:
     /* Do a long jump */
-    LOCAL_ReductionsCounterOn = FALSE;
-    LOCAL_PredEntriesCounterOn = FALSE;
-    LOCAL_RetriesCounterOn = FALSE;
-    LOCAL_ActiveError->errorNo = PRED_ENTRY_COUNTER_UNDERFLOW_EVENT;
+    REMOTE_ReductionsCounterOn(worker_id) = FALSE;
+    REMOTE_PredEntriesCounterOn(worker_id) = FALSE;
+    REMOTE_RetriesCounterOn(worker_id) = FALSE;
+    REMOTE_ActiveError(worker_id)->errorNo = PRED_ENTRY_COUNTER_UNDERFLOW_EVENT;
     Yap_JumpToEnv();
     P = FAILCODE;
-    LOCAL_PrologMode &= ~InErrorMode;
+    REMOTE_PrologMode(worker_id) &= ~InErrorMode;
     return P;
   case RETRY_COUNTER_UNDERFLOW_EVENT:
     /* Do a long jump */
-    LOCAL_ReductionsCounterOn = FALSE;
-    LOCAL_PredEntriesCounterOn = FALSE;
-    LOCAL_RetriesCounterOn = FALSE;
-    LOCAL_ActiveError->errorNo = RETRY_COUNTER_UNDERFLOW_EVENT;
+    REMOTE_ReductionsCounterOn(worker_id) = FALSE;
+    REMOTE_PredEntriesCounterOn(worker_id) = FALSE;
+    REMOTE_RetriesCounterOn(worker_id) = FALSE;
+    REMOTE_ActiveError(worker_id)->errorNo = RETRY_COUNTER_UNDERFLOW_EVENT;
     Yap_JumpToEnv();
     P = FAILCODE;
-    LOCAL_PrologMode &= ~InErrorMode;
+    REMOTE_PrologMode(worker_id) &= ~InErrorMode;
     return P;
   default:
     va_start(ap, where);
@@ -852,67 +863,67 @@ yamop *Yap_Error__(bool throw, const char *file, const char *function,
       break;
     }
   }
-  Yap_MkErrorRecord(LOCAL_ActiveError, file, function, lineno, type, where, s);
+  Yap_MkErrorRecord(REMOTE_ActiveError(worker_id), file, function, lineno, type, where, s);
   if (where == 0 || where == TermNil) {
-    LOCAL_ActiveError->culprit = 0;
+    REMOTE_ActiveError(worker_id)->culprit = 0;
   }
   if (P == (yamop *)(FAILCODE)) {
-    LOCAL_PrologMode &= ~InErrorMode;
+    REMOTE_PrologMode(worker_id) &= ~InErrorMode;
     return P;
   }
   /* PURE_ABORT may not have set where correctly, BootMode may not have the data
    * terms ready */
-  if (type == ABORT_EVENT || LOCAL_PrologMode & BootMode) {
-    LOCAL_PrologMode &= ~AbortMode;
-    LOCAL_PrologMode &= ~InErrorMode;
+  if (type == ABORT_EVENT || REMOTE_PrologMode(worker_id) & BootMode) {
+    REMOTE_PrologMode(worker_id) &= ~AbortMode;
+    REMOTE_PrologMode(worker_id) &= ~InErrorMode;
     /* make sure failure will be seen at next port */
     // no need to lock & unlock
-    if (LOCAL_PrologMode & AsyncIntMode)
+    if (REMOTE_PrologMode(worker_id) & AsyncIntMode)
       Yap_signal(YAP_FAIL_SIGNAL);
     P = FAILCODE;
   } else {
     /* Exit Abort Mode, if we were there */
-    LOCAL_PrologMode &= ~AbortMode;
-    LOCAL_PrologMode |= InErrorMode;
+    REMOTE_PrologMode(worker_id) &= ~AbortMode;
+    REMOTE_PrologMode(worker_id) |= InErrorMode;
   }
 
 #ifdef DEBUG
   // DumpActiveGoals( USES_REGS1 );
 #endif /* DEBUG */
-  if (LOCAL_ActiveError->errorNo!= SYNTAX_ERROR)
-    LOCAL_ActiveError->prologStack=Yap_dump_stack();
+  if (REMOTE_ActiveError(worker_id)->errorNo!= SYNTAX_ERROR)
+    REMOTE_ActiveError(worker_id)->prologStack=Yap_dump_stack();
   CalculateStackGap(PASS_REGS1);
 #if DEBUG
   //    DumpActiveGoals( PASS_REGS1 );
 #endif
   /* wait if we we are in user code,
      it's up to her to decide */
-  if (LOCAL_delay)
+  if (REMOTE_delay(worker_id))
     return P;
-  if (LOCAL_DoingUndefp) {
-      LOCAL_DoingUndefp = false;
-    LOCAL_Signals = 0;
-    yap_error_descriptor_t *co = CopyException( LOCAL_ActiveError );
+  if (REMOTE_DoingUndefp(worker_id)) {
+      REMOTE_DoingUndefp(worker_id) = false;
+    REMOTE_Signals(worker_id) = 0;
+    yap_error_descriptor_t *co = CopyException( REMOTE_ActiveError(worker_id) );
     Yap_PrintWarning(MkErrorTerm(Yap_GetException( co )));
     return P;
   }
-  // LOCAL_ActiveError = Yap_GetException();
+  // REMOTE_ActiveError(worker_id) = Yap_GetException();
   // reset_error_description();
   if (!throw) {
     Yap_JumpToEnv();
-    pop_text_stack(LOCAL_MallocDepth+1);
+    pop_text_stack(REMOTE_MallocDepth(worker_id)+1);
   }
-  LOCAL_PrologMode = UserMode;
+  REMOTE_PrologMode(worker_id) = UserMode;
   return P;
 }
 
 static Int close_error(USES_REGS1) {
-  if (!LOCAL_CommittedError)
+  if (!REMOTE_CommittedError(worker_id))
     return true;
-  LOCAL_CommittedError->errorNo = YAP_NO_ERROR;
-  LOCAL_ErrorMessage = NULL;
-  free(LOCAL_CommittedError);
-  LOCAL_CommittedError = NULL;
+  REMOTE_CommittedError(worker_id)->errorNo = YAP_NO_ERROR;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
+  free(REMOTE_CommittedError(worker_id));
+  REMOTE_CommittedError(worker_id) = NULL;
   return true;
 }
 
@@ -992,7 +1003,7 @@ const char *Yap_errorClassName(yap_error_class_number e) {
 yap_error_descriptor_t *Yap_GetException(yap_error_descriptor_t *i) {
   CACHE_REGS
   if (i->errorNo != YAP_NO_ERROR) {
-    yap_error_descriptor_t *t = LOCAL_ActiveError,
+    yap_error_descriptor_t *t = REMOTE_ActiveError(worker_id),
                            *nt = calloc(1,sizeof(yap_error_descriptor_t));
     memmove(nt, t, sizeof(yap_error_descriptor_t));
     return nt;
@@ -1001,12 +1012,14 @@ yap_error_descriptor_t *Yap_GetException(yap_error_descriptor_t *i) {
 }
 
 void Yap_PrintException(yap_error_descriptor_t *i) {
-  printErr(LOCAL_ActiveError);
+  CACHE_REGS
+  printErr(REMOTE_ActiveError(worker_id));
 }
 
 bool Yap_RaiseException(void) {
-  if (LOCAL_ActiveError == NULL ||
-      LOCAL_ActiveError->errorNo == YAP_NO_ERROR)
+  CACHE_REGS
+  if (REMOTE_ActiveError(worker_id) == NULL ||
+      REMOTE_ActiveError(worker_id)->errorNo == YAP_NO_ERROR)
     return false;
   Yap_RestartYap(5);
   return false;
@@ -1015,8 +1028,9 @@ bool Yap_RaiseException(void) {
 
 bool Yap_ResetException(yap_error_descriptor_t *i) {
   // reset error descriptor
+  CACHE_REGS
   if (!i)
-    i = LOCAL_ActiveError;
+    i = REMOTE_ActiveError(worker_id);
   yap_error_descriptor_t *bf = i->top_error;
   memset(i, 0, sizeof(*i));
   i->top_error = bf;
@@ -1064,7 +1078,7 @@ static Int print_exception(USES_REGS1) {
 	}
         printErr(t);
     } else {
-           return Yap_WriteTerm(LOCAL_c_error_stream,t1,TermNil PASS_REGS);
+           return Yap_WriteTerm(REMOTE_c_error_stream(worker_id),t1,TermNil PASS_REGS);
         }
   //      Yap_DebugPlWriteln(rc);
   return true;
@@ -1128,10 +1142,10 @@ static Int get_exception(USES_REGS1) {
   yap_error_descriptor_t *i;
   Term t;
 
-  if (LOCAL_ActiveError->errorNo != YAP_NO_ERROR) {
-    i = Yap_GetException(LOCAL_ActiveError);
-    Yap_ResetException(LOCAL_ActiveError);
-    LOCAL_PrologMode = UserMode;
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+    i = Yap_GetException(REMOTE_ActiveError(worker_id));
+    Yap_ResetException(REMOTE_ActiveError(worker_id));
+    REMOTE_PrologMode(worker_id) = UserMode;
     if (i->errorRawTerm &&
         (i->errorClass == EVENT || i->errorNo == SYNTAX_ERROR)) {
       t = i->errorRawTerm;
@@ -1156,29 +1170,30 @@ yap_error_descriptor_t *event(Term t, yap_error_descriptor_t *i) {
 }
 
 yap_error_descriptor_t *Yap_UserError(Term t, yap_error_descriptor_t *i) {
+  CACHE_REGS
   Term n = t;
   bool found = false, wellformed = true;
     if (!IsApplTerm(t) || FunctorOfTerm(t) != FunctorError) {
-        LOCAL_Error_TYPE = THROW_EVENT;
-        LOCAL_ActiveError->errorClass = EVENT;
-        LOCAL_ActiveError->errorAsText = Yap_errorName(THROW_EVENT);
-        LOCAL_ActiveError->classAsText =
+        REMOTE_ActiveError(worker_id)->errorNo = THROW_EVENT;
+        REMOTE_ActiveError(worker_id)->errorClass = EVENT;
+        REMOTE_ActiveError(worker_id)->errorAsText = Yap_errorName(THROW_EVENT);
+        REMOTE_ActiveError(worker_id)->classAsText =
                 Yap_errorClassName(Yap_errorClass(THROW_EVENT));
-        LOCAL_ActiveError->errorRawTerm = Yap_SaveTerm(t);
-        LOCAL_ActiveError->culprit = NULL;
+        REMOTE_ActiveError(worker_id)->errorRawTerm = Yap_SaveTerm(t);
+        REMOTE_ActiveError(worker_id)->culprit = NULL;
     } else     if (i->errorNo != YAP_NO_ERROR && i->errorNo != ERROR_EVENT) {
-            LOCAL_Error_TYPE = i->errorNo;
-            LOCAL_ActiveError->errorClass = Yap_errorClass(i->errorNo);
-            LOCAL_ActiveError->errorAsText = Yap_errorName(i->errorNo);
-            LOCAL_ActiveError->classAsText =
+            REMOTE_ActiveError(worker_id)->errorNo = i->errorNo;
+            REMOTE_ActiveError(worker_id)->errorClass = Yap_errorClass(i->errorNo);
+            REMOTE_ActiveError(worker_id)->errorAsText = Yap_errorName(i->errorNo);
+            REMOTE_ActiveError(worker_id)->classAsText =
                     Yap_errorClassName(Yap_errorClass(i->errorNo));
-            LOCAL_ActiveError->errorRawTerm = Yap_SaveTerm(t);
-            LOCAL_ActiveError->culprit = NULL;
+            REMOTE_ActiveError(worker_id)->errorRawTerm = Yap_SaveTerm(t);
+            REMOTE_ActiveError(worker_id)->culprit = NULL;
   } else {
     Term t1, t2;
     t1 = ArgOfTerm(1, t);
     t2 = ArgOfTerm(2, t);
-    //    LOCAL_Error_TYPE = ERROR_EVENT;
+    //    REMOTE_ActiveError(worker_id)->errorNo = ERROR_EVENT;
     wellformed = wellformed && (i->errorAsText != NULL);
     if (wellformed) {
       int j;
@@ -1229,7 +1244,7 @@ yap_error_descriptor_t *Yap_UserError(Term t, yap_error_descriptor_t *i) {
     i->errorGoal = Yap_TermToBuffer(
         n, Quote_illegal_f | Ignore_ops_f );
   }
-  Yap_prolog_add_culprit(i PASS_REGS);
+  Yap_prolog_add_culprit(i);
   return i;
 }
 
@@ -1400,7 +1415,6 @@ static Int get_predicate_indicator(USES_REGS1) {
 }
 
 void Yap_InitErrorPreds(void) {
-  CACHE_REGS
   Yap_InitCPred("$print_exception", 1, print_exception, 0);
   Yap_InitCPred("$reset_exception", 1, reset_exception, 0);
 

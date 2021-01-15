@@ -189,6 +189,7 @@ static Term CreateNewArena(CELL *ptr, UInt size) {
 }
 
 static inline void enter_cell_space(cell_space_t *cs, Term *arenap) {
+  CACHE_REGS
   cs->oH = HR;
   cs->oHB = HB;
   cs->oASP = ASP;
@@ -202,6 +203,7 @@ static inline void enter_cell_space(cell_space_t *cs, Term *arenap) {
 }
 
 static inline void exit_cell_space(cell_space_t *cs) {
+  CACHE_REGS
   if (cs->arenaL) {
     HR = cs->oH;
   }
@@ -216,7 +218,7 @@ static Term NewArena(UInt size, UInt arity, CELL *where, int wid) {
     if (where == NULL || where == HR) {
       while (HR + size > ASP - 2 * MIN_ARENA_SIZE) {
 	if (!Yap_dogc(0, NULL PASS_REGS)) {
-	  Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+	  Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	  return 0;
 	}
       }
@@ -252,7 +254,7 @@ static Int p_allocate_arena(USES_REGS1) {
 }
 
 static Int p_default_arena_size(USES_REGS1) {
-  return Yap_unify(ARG1, MkIntegerTerm(ArenaSz(LOCAL_GlobalArena)));
+  return Yap_unify(ARG1, MkIntegerTerm(ArenaSz(REMOTE_GlobalArena(worker_id))));
 }
 
 void Yap_AllocateDefaultArena(size_t gsize, int wid, void *cs) {
@@ -275,7 +277,7 @@ static Term GrowArena(Term arena, size_t size, UInt arity,
   if (arena == TermNil) {
   }
   size_t old_size = ArenaSz(arena);
-  LOCAL_ArenaOverflows++;
+  REMOTE_ArenaOverflows(worker_id)++;
   if (size == 0) {
     if (old_size < 128 * 1024) {
       size = old_size;
@@ -685,7 +687,7 @@ init_stack(&stt, sz);
 	  }
 	  to_visit = bp;
 	}
-	if (TR > (tr_fr_ptr) LOCAL_TrailTop - 256) {
+	if (TR > (tr_fr_ptr) REMOTE_TrailTop(worker_id) - 256) {
 	  /* Trail overflow */
 	  if (!Yap_growtrail((TR - TR0) * sizeof(tr_fr_ptr *), TRUE)) {
 	    goto trail_overflow;
@@ -771,10 +773,10 @@ overflow:
     to_visit--;
      VUNMARK(to_visit->oldp, to_visit->oldv);
   }
-  clean_tr(TR0);
+  clean_tr(TR0 PASS_REGS);
   HB = HB0;
-    if (&LOCAL_GlobalArena == arenap)
-      LOCAL_GlobalArenaOverflows++;
+    if (&REMOTE_GlobalArena(worker_id) == arenap)
+      REMOTE_GlobalArenaOverflows(worker_id)++;
     HR = *ptf_+1;
     slb = Yap_PushHandle(pt0_[1]);
     sle = Yap_PushHandle(bind0);
@@ -785,14 +787,14 @@ overflow:
       restarts++;
       if ((*arenap =
 	   GrowArena(*arenap, min_grow,  1, cspace PASS_REGS)) == 0) {
-	Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+	Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	return 0L;
       }
     } else {
-      if (!Yap_expand(0)) {
+      if (!Yap_expand(0 PASS_REGS)) {
   close_stack(&stt);
 
-	Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+	Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	return 0L;
       }
     }
@@ -810,7 +812,7 @@ overflow:
      VUNMARK(to_visit->oldp, to_visit->oldv);
   }
 #endif
-  clean_tr(TR0);
+  clean_tr(TR0 PASS_REGS);
     HR = HB;
     if (arenap) {
      *arenap = CloseArena(cspace   PASS_REGS);
@@ -823,10 +825,10 @@ overflow:
       /* Trail overflow */
       if (!Yap_growtrail(256 * 256 * sizeof(struct trail_frame), false)) {
   close_stack(&stt);
-	Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+	Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	return 0L;
       }
-    } while (TR > (tr_fr_ptr) LOCAL_TrailTop - 256 * 256);
+    } while (TR > (tr_fr_ptr) REMOTE_TrailTop(worker_id) - 256 * 256);
     bind0 = Yap_PopHandle(sle);
         t = Yap_PopHandle(slb);
     if (arenap) {
@@ -929,6 +931,7 @@ p_rational_tree_to_forest(USES_REGS1) /* copy term t to a new instance  */
 Term
 Yap_TermAsForest(Term t1, Term *list) /* copy term t to a new instance  */
 {
+  CACHE_REGS
   *list = TermNil;
   Term t = CopyTermToArena(t1, false, false, 2, NULL, list, 0 PASS_REGS);
   if (t == 0L)
@@ -957,7 +960,7 @@ static Term CreateTermInArena(Atom Na, UInt Nar, UInt arity, Term *newarena,
   UInt i;
 
  restart:
-  enter_cell_space(&cells, newarena PASS_REGS);
+  enter_cell_space(&cells, newarena);
   tf = AbsAppl(HR);
   HR[0] = (CELL) f;
   HR += 1 + ArityOfFunctor(f);
@@ -966,9 +969,9 @@ static Term CreateTermInArena(Atom Na, UInt Nar, UInt arity, Term *newarena,
     HR = HB0 = HB;
     {
       //      CELL *old_top = ArenaLimit(*nsizeof(CELL)ewarena);
-      if (*newarena == LOCAL_GlobalArena)
-	LOCAL_GlobalArenaOverflows++;
-      *newarena = CloseArena(&cells);
+      if (*newarena == REMOTE_GlobalArena(worker_id))
+	REMOTE_GlobalArenaOverflows(worker_id)++;
+      *newarena = CloseArena(&cells PASS_REGS);
 
       if ((*newarena = GrowArena(*newarena, Nar * sizeof(CELL), arity + 1,
 				 &cells PASS_REGS)) == 0) {
@@ -1046,8 +1049,8 @@ inline static GlobalEntry *GetGlobalEntry(Atom at USES_REGS)
 #if THREADS
   new->owner_id = worker_id;
 #endif
-  new->NextGE = LOCAL_GlobalVariables;
-  LOCAL_GlobalVariables = new;
+  new->NextGE = REMOTE_GlobalVariables(worker_id);
+  REMOTE_GlobalVariables(worker_id) = new;
   new->AtomOfGE = ae;
   AddPropToAtom(ae, (PropEntry *) new);
   RESET_VARIABLE(&new->global);
@@ -1057,8 +1060,8 @@ inline static GlobalEntry *GetGlobalEntry(Atom at USES_REGS)
 
 static UInt garena_overflow_size(CELL *arena USES_REGS) {
   UInt dup = (((CELL *) arena - H0) * sizeof(CELL)) >> 3;
-  if (dup < 64 * 1024 * LOCAL_GlobalArenaOverflows)
-    dup = 64 * 1024 * LOCAL_GlobalArenaOverflows;
+  if (dup < 64 * 1024 * REMOTE_GlobalArenaOverflows(worker_id))
+    dup = 64 * 1024 * REMOTE_GlobalArenaOverflows(worker_id);
   if (dup > 1024 * 1024)
     return 1024 * 1024;
   return dup;
@@ -1096,8 +1099,8 @@ static Int p_nb_setarg(USES_REGS1) {
 
   to = Deref(ARG3);
   to = CopyTermToArena(
-		       ARG3, FALSE, TRUE, 3, &LOCAL_GlobalArena, NULL,
-		       garena_overflow_size(ArenaPt(LOCAL_GlobalArena) PASS_REGS) PASS_REGS);
+		       ARG3, FALSE, TRUE, 3, &REMOTE_GlobalArena(worker_id), NULL,
+		       garena_overflow_size(ArenaPt(REMOTE_GlobalArena(worker_id)) PASS_REGS) PASS_REGS);
   if (to == 0L)
     return FALSE;
 
@@ -1141,8 +1144,8 @@ static Int p_nb_set_shared_arg(USES_REGS1) {
   if (pos < 1 || pos > arity)
     return FALSE;
   to = CopyTermToArena(
-		       ARG3, TRUE, TRUE, 3, &LOCAL_GlobalArena, NULL,
-		       garena_overflow_size(ArenaPt(LOCAL_GlobalArena) PASS_REGS) PASS_REGS);
+		       ARG3, TRUE, TRUE, 3, &REMOTE_GlobalArena(worker_id), NULL,
+		       garena_overflow_size(ArenaPt(REMOTE_GlobalArena(worker_id)) PASS_REGS) PASS_REGS);
   if (to == 0L)
     return FALSE;
   dest = Deref(ARG2);
@@ -1226,8 +1229,8 @@ static Int p_nb_create_accumulator(USES_REGS1) {
     return FALSE;
   }
   to = CopyTermToArena(
-		       t, TRUE, TRUE, 2, &LOCAL_GlobalArena, NULL,
-		       garena_overflow_size(ArenaPt(LOCAL_GlobalArena) PASS_REGS) PASS_REGS);
+		       t, TRUE, TRUE, 2, &REMOTE_GlobalArena(worker_id), NULL,
+		       garena_overflow_size(ArenaPt(REMOTE_GlobalArena(worker_id)) PASS_REGS) PASS_REGS);
   if (to == 0L)
     return FALSE;
   t2 = Deref(ARG2);
@@ -1279,8 +1282,8 @@ static Int p_nb_add_to_accumulator(USES_REGS1) {
 	target[1] = source[1];
       } else {
 	/* we need to create a new long int */
-	new = CopyTermToArena(new, TRUE, TRUE, 2, &LOCAL_GlobalArena, NULL,
-			      garena_overflow_size(ArenaPt(LOCAL_GlobalArena)
+	new = CopyTermToArena(new, TRUE, TRUE, 2, &REMOTE_GlobalArena(worker_id), NULL,
+			      garena_overflow_size(ArenaPt(REMOTE_GlobalArena(worker_id))
 						   PASS_REGS) PASS_REGS);
 	destp = RepAppl(Deref(ARG1));
 	destp[1] = new;
@@ -1309,8 +1312,8 @@ static Int p_nb_add_to_accumulator(USES_REGS1) {
 
     new = Yap_Eval(new);
     new = CopyTermToArena(
-			  new, TRUE, TRUE, 2, &LOCAL_GlobalArena, NULL,
-			  garena_overflow_size(ArenaPt(LOCAL_GlobalArena) PASS_REGS) PASS_REGS);
+			  new, TRUE, TRUE, 2, &REMOTE_GlobalArena(worker_id), NULL,
+			  garena_overflow_size(ArenaPt(REMOTE_GlobalArena(worker_id)) PASS_REGS) PASS_REGS);
     destp = RepAppl(Deref(ARG1));
     destp[1] = new;
 
@@ -1344,8 +1347,8 @@ Term Yap_SetGlobalVal(Atom at, Term t0) {
   GlobalEntry *ge;
   ge = GetGlobalEntry(at PASS_REGS);
   to = CopyTermToArena(
-		       t0, FALSE, TRUE, 2, &LOCAL_GlobalArena, NULL,
-		       garena_overflow_size(ArenaPt(LOCAL_GlobalArena) PASS_REGS) PASS_REGS);
+		       t0, FALSE, TRUE, 2, &REMOTE_GlobalArena(worker_id), NULL,
+		       garena_overflow_size(ArenaPt(REMOTE_GlobalArena(worker_id)) PASS_REGS) PASS_REGS);
   if (to == 0L)
     return to;
   WRITE_LOCK(ge->GRWLock);
@@ -1358,8 +1361,8 @@ Term Yap_SaveTerm(Term t0) {
   CACHE_REGS
     Term to;
   to = CopyTermToArena(
-		       Deref(t0), FALSE, TRUE, 2, &LOCAL_GlobalArena, NULL,
-		       garena_overflow_size(ArenaPt(LOCAL_GlobalArena) PASS_REGS) PASS_REGS);
+		       Deref(t0), FALSE, TRUE, 2, &REMOTE_GlobalArena(worker_id), NULL,
+		       garena_overflow_size(ArenaPt(REMOTE_GlobalArena(worker_id)) PASS_REGS) PASS_REGS);
   if (to == 0L)
     return to;
   return to;
@@ -1389,8 +1392,8 @@ static Int p_nb_set_shared_val(USES_REGS1) {
   }
   ge = GetGlobalEntry(AtomOfTerm(t) PASS_REGS);
   to = CopyTermToArena(
-		       ARG2, TRUE, TRUE, 2, &LOCAL_GlobalArena, NULL,
-		       garena_overflow_size(ArenaPt(LOCAL_GlobalArena) PASS_REGS) PASS_REGS);
+		       ARG2, TRUE, TRUE, 2, &REMOTE_GlobalArena(worker_id), NULL,
+		       garena_overflow_size(ArenaPt(REMOTE_GlobalArena(worker_id)) PASS_REGS) PASS_REGS);
   if (to == 0L)
     return FALSE;
   WRITE_LOCK(ge->GRWLock);
@@ -1506,10 +1509,10 @@ static Int nbdelete(Atom at USES_REGS) {
   }
   WRITE_LOCK(ge->GRWLock);
   ae = ge->AtomOfGE;
-  if (LOCAL_GlobalVariables == ge) {
-    LOCAL_GlobalVariables = ge->NextGE;
+  if (REMOTE_GlobalVariables(worker_id) == ge) {
+    REMOTE_GlobalVariables(worker_id) = ge->NextGE;
   } else {
-    g = LOCAL_GlobalVariables;
+    g = REMOTE_GlobalVariables(worker_id);
     while (g->NextGE != ge)
       g = g->NextGE;
     g->NextGE = ge->NextGE;
@@ -1582,7 +1585,7 @@ static Int p_nb_create(USES_REGS1) {
     return FALSE;
   }
   to = CreateTermInArena(AtomOfTerm(tname), IntegerOfTerm(tarity), 3,
-			 &LOCAL_GlobalArena, 0L PASS_REGS);
+			 &REMOTE_GlobalArena(worker_id), 0L PASS_REGS);
   if (!to)
     return FALSE;
   WRITE_LOCK(ge->GRWLock);
@@ -1633,7 +1636,7 @@ static Int p_nb_create2(USES_REGS1) {
     return FALSE;
   }
   to = CreateTermInArena(AtomOfTerm(tname), IntegerOfTerm(tarity), 4,
-			 &LOCAL_GlobalArena, tinit PASS_REGS);
+			 &REMOTE_GlobalArena(worker_id), tinit PASS_REGS);
   if (!to)
     return FALSE;
   WRITE_LOCK(ge->GRWLock);
@@ -1648,7 +1651,7 @@ static Int p_nb_create2(USES_REGS1) {
 static Int nb_queue(UInt arena_sz USES_REGS) {
   Term queue_arena, queue, ar[QUEUE_FUNCTOR_ARITY], *nar;
   Term t = Deref(ARG1);
-  LOCAL_DepthArenas++;
+  REMOTE_DepthArenas(worker_id)++;
   if (!IsVarTerm(t)) {
     if (!IsApplTerm(t)) {
       return FALSE;
@@ -1673,8 +1676,8 @@ static Int nb_queue(UInt arena_sz USES_REGS) {
 
 static Int p_nb_queue(USES_REGS1) {
   UInt arena_sz = (ASP - HR) / 16;
-  if (LOCAL_DepthArenas > 1)
-    arena_sz /= LOCAL_DepthArenas;
+  if (REMOTE_DepthArenas(worker_id) > 1)
+    arena_sz /= REMOTE_DepthArenas(worker_id);
   if (arena_sz < MIN_ARENA_SIZE)
     arena_sz = MIN_ARENA_SIZE;
   if (arena_sz > MAX_ARENA_SIZE)
@@ -1743,7 +1746,7 @@ static Int p_nb_queue_close(USES_REGS1) {
   Term t = Deref(ARG1);
   Int out;
 
-  LOCAL_DepthArenas--;
+  REMOTE_DepthArenas(worker_id)--;
   if (!IsVarTerm(t)) {
     CELL *qp;
 
@@ -1937,7 +1940,7 @@ static Int p_nb_heap(USES_REGS1) {
 				Yap_MkFunctor(AtomHeapData, 2 * hsize + HEAP_START + 1),
 				2 * hsize + HEAP_START + 1 PASS_REGS)) == TermNil) {
     if (!Yap_dogc(0, NULL PASS_REGS)) {
-      Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+      Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return 0;
     }
   }
@@ -2028,6 +2031,7 @@ static void DelHeapRoot(CELL *pt, UInt sz) {
 }
 
 static CELL *new_heap_entry(CELL *qd) {
+  CACHE_REGS
   size_t hsize, hmsize;
   if (!qd)
     return FALSE;
@@ -2169,7 +2173,7 @@ static Int p_nb_beam(USES_REGS1) {
 				Yap_MkFunctor(AtomHeapData, 5 * hsize + HEAP_START + 1),
 				5 * hsize + HEAP_START + 1 PASS_REGS)) == TermNil) {
     if (!Yap_dogc(0, NULL PASS_REGS)) {
-      Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+      Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return 0;
     }
   }
@@ -2389,6 +2393,7 @@ static Term DelBeamMin(CELL *pt, CELL *pt2, UInt sz) {
 }
 
 static size_t new_beam_entry(CELL *qd) {
+  CACHE_REGS
   size_t hsize, hmsize;
   hsize = IntegerOfTerm(qd[HEAP_SIZE]);
   hmsize = IntegerOfTerm(qd[HEAP_MAX]);
@@ -2513,7 +2518,7 @@ static Int p_nb_beam_keys(USES_REGS1) {
   for (i = 0; i < qsz; i++) {
     if (HR > ASP - 1024) {
       if (!Yap_dogc(0, NULL PASS_REGS)) {
-	Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+	Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 	return 0;
       }
 
@@ -2594,7 +2599,7 @@ static Int init_current_nb(USES_REGS1) { /* current_atom(?Atom)		 */
     }
   }
   READ_LOCK(HashChain[0].AERWLock);
-  EXTRA_CBACK_ARG(1, 1) = MkIntegerTerm((Int) LOCAL_GlobalVariables);
+  EXTRA_CBACK_ARG(1, 1) = MkIntegerTerm((Int) REMOTE_GlobalVariables(worker_id));
   return cont_current_nb(PASS_REGS1);
 }
 

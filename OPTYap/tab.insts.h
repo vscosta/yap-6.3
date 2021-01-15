@@ -59,10 +59,10 @@
             B_FZ = gcp;                                                   \
             TR_FZ = TR;                                                   \
             /* store dependency frame */                                  \
-            new_dependency_frame(new_dep_fr, TRUE, LOCAL_top_or_fr, gcp,  \
-                                 gcp, SG_FR, FALSE, LOCAL_top_dep_fr);    \
-            LOCAL_top_dep_fr = new_dep_fr;                                \
-            GEN_CP(gcp)->cp_dep_fr = LOCAL_top_dep_fr;                    \
+            new_dependency_frame(new_dep_fr, TRUE, REMOTE_top_or_fr(worker_id), gcp,  \
+                                 gcp, SG_FR, FALSE, REMOTE_top_dep_fr(worker_id));    \
+            REMOTE_top_dep_fr(worker_id) = new_dep_fr;                                \
+            GEN_CP(gcp)->cp_dep_fr = REMOTE_top_dep_fr(worker_id);                    \
           } else {                                                        \
             /* go batched */                                              \
             GEN_CP(gcp)->cp_dep_fr = NULL;                                \
@@ -129,10 +129,10 @@
           gccp->cp_env = ENV;                                               \
           gccp->cp_cp = CPREG;                                              \
           /* store dependency frame */                                      \
-          new_dependency_frame(new_dep_fr, DEP_ON_STACK, LOCAL_top_or_fr,   \
-			       gccp, gccp, SG_FR, TRUE, LOCAL_top_dep_fr);  \
-          LOCAL_top_dep_fr = new_dep_fr;                                    \
-          GEN_CP(gccp)->cp_dep_fr = LOCAL_top_dep_fr;                       \
+          new_dependency_frame(new_dep_fr, DEP_ON_STACK, REMOTE_top_or_fr(worker_id),   \
+			       gccp, gccp, SG_FR, TRUE, REMOTE_top_dep_fr(worker_id));  \
+          REMOTE_top_dep_fr(worker_id) = new_dep_fr;                                    \
+          GEN_CP(gccp)->cp_dep_fr = REMOTE_top_dep_fr(worker_id);                       \
           GEN_CP(gccp)->cp_sg_fr = SG_FR;                                   \
 	  /* adjust freeze registers */					    \
 	  H_FZ = HR;							    \
@@ -206,9 +206,9 @@
           B_FZ = ccp;                    	                                 \
           TR_FZ = TR;                                                            \
           /* store dependency frame */                                           \
-          new_dependency_frame(new_dep_fr, DEP_ON_STACK, LOCAL_top_or_fr,        \
-                               LEADER_CP, ccp, SG_FR, FALSE, LOCAL_top_dep_fr);  \
-          LOCAL_top_dep_fr = new_dep_fr;                                         \
+          new_dependency_frame(new_dep_fr, DEP_ON_STACK, REMOTE_top_or_fr(worker_id),        \
+                               LEADER_CP, ccp, SG_FR, FALSE, REMOTE_top_dep_fr(worker_id));  \
+          REMOTE_top_dep_fr(worker_id) = new_dep_fr;                                         \
           /* store consumer choice point */                                      \
           HBREG = HR;                                                             \
           store_yaam_reg_cpdepth(ccp);                                           \
@@ -218,7 +218,7 @@
           ccp->cp_b  = B;                                                        \
           ccp->cp_env= ENV;                                                      \
           ccp->cp_cp = CPREG;                                                    \
-          CONS_CP(ccp)->cp_dep_fr = LOCAL_top_dep_fr;                            \
+          CONS_CP(ccp)->cp_dep_fr = REMOTE_top_dep_fr(worker_id);                            \
           store_low_level_trace_info(CONS_CP(ccp), TAB_ENT);                     \
           /* set_cut((CELL *)ccp, B); --> no effect */                           \
           B = ccp;                                                               \
@@ -1413,7 +1413,7 @@
 
       /* find chain choice point to backtrack */
       top_chain_cp = DepFr_backchain_cp(dep_fr);
-      chain_cp = DepFr_leader_cp(LOCAL_top_dep_fr);
+      chain_cp = DepFr_leader_cp(REMOTE_top_dep_fr(worker_id));
       if (YOUNGER_CP(top_chain_cp, chain_cp))
         chain_cp = top_chain_cp;
       TABLING_ERROR_CHECKING(answer_resolution, EQUAL_OR_YOUNGER_CP(top_chain_cp, B));
@@ -1585,11 +1585,11 @@
       unbind_variables(B->cp_tr, chain_cp->cp_tr);
       TABLING_ERROR_CHECKING(answer_resolution, TR != B->cp_tr && !IsPairTerm((CELL)TrailTerm(TR - 1)));
       TABLING_ERROR_CHECKING(answer_resolution, TR != B->cp_tr && (tr_fr_ptr) RepPair((CELL)TrailTerm(TR - 1)) != B->cp_tr);
-      if (DepFr_leader_cp(LOCAL_top_dep_fr) == chain_cp && (
+      if (DepFr_leader_cp(REMOTE_top_dep_fr(worker_id)) == chain_cp && (
         /* chain_cp is a leader node AND ... */
 #ifdef YAPOR
         /* the leader dependency is not on stack OR ... */
-        DepFr_leader_dep_is_on_stack(LOCAL_top_dep_fr) == FALSE ||
+        DepFr_leader_dep_is_on_stack(REMOTE_top_dep_fr(worker_id)) == FALSE ||
         /* the leader dependency is on stack (this means that chain_cp is a generator node) and */
 #endif /* YAPOR */
         /*                 there are no unexploited alternatives                 **
@@ -1643,14 +1643,14 @@
 
       if (IS_BATCHED_GEN_CP(B)) {
         B->cp_ap = NULL;
-        if (EQUAL_OR_YOUNGER_CP(B_FZ, B) && B != DepFr_leader_cp(LOCAL_top_dep_fr)) {
+        if (EQUAL_OR_YOUNGER_CP(B_FZ, B) && B != DepFr_leader_cp(REMOTE_top_dep_fr(worker_id))) {
           /* not leader on that node */
           B = B->cp_b;
           goto fail;
         }
       } else {
         B->cp_ap = ANSWER_RESOLUTION;
-        if (B != DepFr_leader_cp(LOCAL_top_dep_fr)) {
+        if (B != DepFr_leader_cp(REMOTE_top_dep_fr(worker_id))) {
           /* not leader on that node */
           B = B->cp_b;
           goto fail;
@@ -1682,7 +1682,7 @@
 #endif /* YAPOR */
 
     /* check for dependency frames with unconsumed answers */
-    dep_fr = LOCAL_top_dep_fr;
+    dep_fr = REMOTE_top_dep_fr(worker_id);
     while (YOUNGER_CP(DepFr_cons_cp(dep_fr), B)) {
       LOCK_DEP_FR(dep_fr);
       ans_node = DepFr_last_answer(dep_fr);

@@ -64,10 +64,10 @@ static CELL *AddToQueue(attvar_record *attv USES_REGS) {
   t[0] = (CELL) & (attv->Done);
   t[1] = attv->Value;
   /* follow the chain */
-  WGs = Yap_ReadTimedVar(LOCAL_WokenGoals);
+  WGs = Yap_ReadTimedVar(REMOTE_WokenGoals(worker_id));
   ng = Yap_MkApplTerm(FunctorAttGoal, 2, t);
 
-  Yap_UpdateTimedVar(LOCAL_WokenGoals, MkPairTerm(ng, WGs));
+  Yap_UpdateTimedVar(REMOTE_WokenGoals(worker_id), MkPairTerm(ng, WGs));
   if ((Term)WGs == TermNil) {
     /* from now on, we have to start waking up goals */
     Yap_signal(YAP_WAKEUP_SIGNAL);
@@ -79,9 +79,9 @@ static void AddFailToQueue(USES_REGS1) {
   Term WGs;
 
   /* follow the chain */
-  WGs = Yap_ReadTimedVar(LOCAL_WokenGoals);
+  WGs = Yap_ReadTimedVar(REMOTE_WokenGoals(worker_id));
 
-  Yap_UpdateTimedVar(LOCAL_WokenGoals, MkPairTerm(TermFail, WGs));
+  Yap_UpdateTimedVar(REMOTE_WokenGoals(worker_id), MkPairTerm(TermFail, WGs));
   if ((Term)WGs == TermNil) {
     /* from now on, we have to start waking up goals */
     Yap_signal(YAP_WAKEUP_SIGNAL);
@@ -165,6 +165,7 @@ static Term AttVarToTerm(CELL *orig) {
 
 static attvar_record *AttsFromTerm(Term inp)
 {
+  CACHE_REGS
   if (IsVarTerm(inp)) {
     if (IsAttachedTerm(inp)) {
       attvar_record *attv;
@@ -273,7 +274,7 @@ static Term BuildAttTerm(Functor mfun, UInt ar USES_REGS) {
   UInt i;
 
   if (HR + (1024 + ar) > ASP) {
-    LOCAL_Error_Size = ar * sizeof(CELL);
+    REMOTE_ActiveError(worker_id)->errorMsgLen = ar * sizeof(CELL);
     return 0L;
   }
   HR[0] = (CELL)mfun;
@@ -650,9 +651,9 @@ static Int put_att(USES_REGS1) {
       attv = RepAttVar(VarOfTerm(inp));
     } else {
       while (!(attv = BuildNewAttVar(PASS_REGS1))) {
-        LOCAL_Error_Size = sizeof(attvar_record);
-        if (!Yap_gcl(LOCAL_Error_Size, 5, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorMsgLen = sizeof(attvar_record);
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 5, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -661,8 +662,8 @@ static Int put_att(USES_REGS1) {
     mfun = Yap_MkFunctor(modname, ar);
     if (IsVarTerm(tatts = SearchAttsForModule(attv->Atts, mfun))) {
       while (!(tatts = BuildAttTerm(mfun, ar PASS_REGS))) {
-        if (!Yap_gcl(LOCAL_Error_Size, 5, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 5, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -715,9 +716,9 @@ static Int put_attr(USES_REGS1) {
       attv = RepAttVar(VarOfTerm(inp));
     } else {
       while (!(attv = BuildNewAttVar(PASS_REGS1))) {
-        LOCAL_Error_Size = sizeof(attvar_record);
-        if (!Yap_gcl(LOCAL_Error_Size, 5, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorMsgLen = sizeof(attvar_record);
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 5, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -775,9 +776,9 @@ static Int rm_att(USES_REGS1) {
       attv = RepAttVar(VarOfTerm(inp));
     } else {
       while (!(attv = BuildNewAttVar(PASS_REGS1))) {
-        LOCAL_Error_Size = sizeof(attvar_record);
-        if (!Yap_gcl(LOCAL_Error_Size, 5, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorMsgLen = sizeof(attvar_record);
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 5, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -787,8 +788,8 @@ static Int rm_att(USES_REGS1) {
     mfun = Yap_MkFunctor(modname, ar);
     if (IsVarTerm(tatts = SearchAttsForModule(attv->Atts, mfun))) {
       while (!(tatts = BuildAttTerm(mfun, ar PASS_REGS))) {
-        if (!Yap_gcl(LOCAL_Error_Size, 4, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 4, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -874,9 +875,9 @@ static Int put_attrs(USES_REGS1) {
       attv = RepAttVar(VarOfTerm(inp));
     } else {
       while (!(attv = BuildNewAttVar(PASS_REGS1))) {
-        LOCAL_Error_Size = sizeof(attvar_record);
-        if (!Yap_gcl(LOCAL_Error_Size, 3, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorMsgLen = sizeof(attvar_record);
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 3, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -1048,7 +1049,7 @@ static Term AllAttVars(USES_REGS1) {
     case (CELL)FunctorAttVar:
       if (IsUnboundVar(pt + 1)) {
         if (ASP - myH < 1024) {
-          LOCAL_Error_Size = (ASP - HR) * sizeof(CELL);
+          REMOTE_ActiveError(worker_id)->errorMsgLen = (ASP - HR) * sizeof(CELL);
           return 0L;
         }
         if (myH != HR) {
@@ -1097,8 +1098,8 @@ static Int all_attvars(USES_REGS1) {
     Term out;
 
     if (!(out = AllAttVars(PASS_REGS1))) {
-      if (!Yap_gcl(LOCAL_Error_Size, 1, ENV, gc_P(P, CP))) {
-        Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+      if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 1, ENV, gc_P(P, CP))) {
+        Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return FALSE;
       }
     } else {

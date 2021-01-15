@@ -89,7 +89,7 @@ Term Yap_StringToNumberTerm(const char *s, encoding_t *encp, bool error_on) {
   if (encp)
     GLOBAL_Stream[sno].encoding = *encp;
   else
-    GLOBAL_Stream[sno].encoding = LOCAL_encoding;
+    GLOBAL_Stream[sno].encoding = REMOTE_encoding(worker_id);
 #ifdef __ANDROID__
   while (*s && isblank(*s) && Yap_wide_chtype(*s) == BS)
     s++;
@@ -175,12 +175,12 @@ static encoding_t DefaultEncoding(void) {
 
 encoding_t Yap_DefaultEncoding(void) {
   CACHE_REGS
-  return LOCAL_encoding;
+  return REMOTE_encoding(worker_id);
 }
 
 void Yap_SetDefaultEncoding(encoding_t new_encoding) {
   CACHE_REGS
-  LOCAL_encoding = new_encoding;
+  REMOTE_encoding(worker_id) = new_encoding;
 }
 
 static Int get_default_encoding(USES_REGS1) {
@@ -747,7 +747,7 @@ static Int char_conversion(USES_REGS1) {
         Yap_AllocCodeSpace(NUMBER_OF_CHARS * sizeof(char));
     while (GLOBAL_CharConversionTable2 == NULL) {
       if (!Yap_growheap(FALSE, NUMBER_OF_CHARS * sizeof(char), NULL)) {
-        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return (FALSE);
       }
     }
@@ -835,7 +835,7 @@ static Int p_all_char_conversions(USES_REGS1) {
 
 void Yap_InitChtypes(void) {
   CACHE_REGS
-  LOCAL_encoding = DefaultEncoding();
+  REMOTE_encoding(worker_id) = DefaultEncoding();
   Yap_InitCPred("$change_type_of_char", 2, p_change_type_of_char,
                 SafePredFlag | SyncPredFlag | HiddenPredFlag);
   Yap_InitCPred("toupper", 2, toupper2, SafePredFlag);

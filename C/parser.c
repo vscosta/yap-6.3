@@ -70,14 +70,14 @@ extern const char *Yap_tokText(void *tokptr);
 static void syntax_msg(const char *msg, ...) {
   CACHE_REGS
   va_list ap;
-  if (!LOCAL_Error_TYPE ||
-      (LOCAL_Error_TYPE == SYNTAX_ERROR &&
-       LOCAL_toktide->TokPos < LOCAL_ActiveError->parserPos)) {
-    if (!LOCAL_ErrorMessage) {
-      LOCAL_ErrorMessage = malloc(MAX_ERROR_MSG_SIZE + 1);
+  if (!REMOTE_ActiveError(worker_id)->errorNo ||
+      (REMOTE_ActiveError(worker_id)->errorNo == SYNTAX_ERROR &&
+       REMOTE_toktide(worker_id)->TokPos < REMOTE_ActiveError(worker_id)->parserPos)) {
+    if (!REMOTE_ActiveError(worker_id)->errorMsg) {
+      REMOTE_ActiveError(worker_id)->errorMsg = malloc(MAX_ERROR_MSG_SIZE + 1);
     }
     va_start(ap, msg);
-    vsnprintf(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE, msg, ap);
+    vsnprintf(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE, msg, ap);
     va_end(ap);
   }
 }
@@ -85,7 +85,7 @@ static void syntax_msg(const char *msg, ...) {
 #define TRY(S, P)                                                              \
   {                                                                            \
     Volatile JMPBUFF *saveenv, newenv;                                         \
-    Volatile TokEntry *saveT = LOCAL_tokptr;                                   \
+    Volatile TokEntry *saveT = REMOTE_tokptr(worker_id);                                   \
     Volatile CELL *saveH = HR;                                                 \
     Volatile int savecurprio = curprio;                                        \
     saveenv = FailBuff;                                                        \
@@ -98,14 +98,14 @@ static void syntax_msg(const char *msg, ...) {
       FailBuff = saveenv;                                                      \
       HR = saveH;                                                              \
       curprio = savecurprio;                                                   \
-      LOCAL_tokptr = saveT;                                                    \
+      REMOTE_tokptr(worker_id) = saveT;                                                    \
     }                                                                          \
   }
 
 #define TRY3(S, P, F)                                                          \
   {                                                                            \
     Volatile JMPBUFF *saveenv, newenv;                                         \
-    Volatile TokEntry *saveT = LOCAL_tokptr;                                   \
+    Volatile TokEntry *saveT = REMOTE_tokptr(worker_id);                                   \
     Volatile CELL *saveH = HR;                                                 \
     saveenv = FailBuff;                                                        \
     if (!sigsetjmp(newenv.JmpBuff, 0)) {                                       \
@@ -116,7 +116,7 @@ static void syntax_msg(const char *msg, ...) {
     } else {                                                                   \
       FailBuff = saveenv;                                                      \
       HR = saveH;                                                              \
-      LOCAL_tokptr = saveT;                                                    \
+      REMOTE_tokptr(worker_id) = saveT;                                                    \
       F                                                                        \
     }                                                                          \
   }
@@ -135,10 +135,10 @@ VarEntry *Yap_LookupVar(const char *var) /* lookup variable in variables table
     fprintf(stderr, "[LookupVar %s]", var);
 #endif
   if (var[0] != '_' || var[1] != '\0') {
-    VarEntry **op = &LOCAL_VarTable;
+    VarEntry **op = &REMOTE_VarTable(worker_id);
     UInt hv;
 
-    p = LOCAL_VarTable;
+    p = REMOTE_VarTable(worker_id);
     hv = HashFunction((unsigned char *)var) % AtomHashTableSize;
     while (p != NULL) {
       CELL hpv = p->hv;
@@ -162,7 +162,7 @@ VarEntry *Yap_LookupVar(const char *var) /* lookup variable in variables table
         p = p->VarRight;
       }
     }
-    p = Malloc(sizeof(VarEntry));
+    p = Malloc(sizeof(VarEntry) PASS_REGS);
     *op = p;
     p->VarLeft = p->VarRight = NULL;
     p->hv = hv;
@@ -170,9 +170,9 @@ VarEntry *Yap_LookupVar(const char *var) /* lookup variable in variables table
     p->VarRep = vat;
    } else {
     /* anon var */
-    p = Malloc(sizeof(VarEntry));
-    p->VarLeft = LOCAL_AnonVarTable;
-    LOCAL_AnonVarTable = p;
+    p = Malloc(sizeof(VarEntry) PASS_REGS);
+    p->VarLeft = REMOTE_AnonVarTable(worker_id);
+    REMOTE_AnonVarTable(worker_id) = p;
     p->VarRight = NULL;
     p->refs = 0L;
     p->hv = 1L;
@@ -180,12 +180,12 @@ VarEntry *Yap_LookupVar(const char *var) /* lookup variable in variables table
   }
   p->VarAdr = TermNil;
     p->VarNext = NULL;
-    if (LOCAL_VarList) {
-        LOCAL_VarTail->VarNext = p;
+    if (REMOTE_VarList(worker_id)) {
+        REMOTE_VarTail(worker_id)->VarNext = p;
     } else {
-        LOCAL_VarList = p;
+        REMOTE_VarList(worker_id) = p;
     }
-    LOCAL_VarTail = p;
+    REMOTE_VarTail(worker_id) = p;
     return (p);
 }
 
@@ -211,7 +211,7 @@ static Term VarNames(VarEntry *p, Term l USES_REGS) {
             }
             if (HR > ASP - 4096) {
                 save_machine_regs();
-                longjmp(LOCAL_IOBotch, 1);
+                longjmp(REMOTE_IOBotch(worker_id), 1);
             }
 	    p = p->VarNext;
     }
@@ -243,7 +243,7 @@ static Term Singletons(VarEntry *p, Term l USES_REGS) {
           }
           if (HR > ASP - 4096) {
               save_machine_regs();
-              longjmp(LOCAL_IOBotch, 1);
+              longjmp(REMOTE_IOBotch(worker_id), 1);
           }
       }
           p = p->VarNext;
@@ -271,7 +271,7 @@ static Term Variables(VarEntry *p, Term l USES_REGS) {
             }
             if (HR > ASP - 4096) {
                 save_machine_regs();
-                longjmp(LOCAL_IOBotch, 1);
+                longjmp(REMOTE_IOBotch(worker_id), 1);
             }
             p = p->VarNext;
     }
@@ -369,22 +369,22 @@ int Yap_IsPosfixOp(Atom op, int *pptr, int *lpptr) {
 }
 
 inline static void GNextToken(USES_REGS1) {
-  if (LOCAL_tokptr->Tok == Ord(eot_tok))
+  if (REMOTE_tokptr(worker_id)->Tok == Ord(eot_tok))
     return;
-  if (LOCAL_tokptr == LOCAL_toktide) {
-    LOCAL_toktide = LOCAL_tokptr = LOCAL_tokptr->TokNext;
+  if (REMOTE_tokptr(worker_id) == REMOTE_toktide(worker_id)) {
+    REMOTE_toktide(worker_id) = REMOTE_tokptr(worker_id) = REMOTE_tokptr(worker_id)->TokNext;
   } else
-    LOCAL_tokptr = LOCAL_tokptr->TokNext;
+    REMOTE_tokptr(worker_id) = REMOTE_tokptr(worker_id)->TokNext;
 }
 
 inline static void checkfor(Term c, JMPBUFF *FailBuff,
                             encoding_t enc USES_REGS) {
-  if (LOCAL_tokptr->Tok != Ord(Ponctuation_tok) || LOCAL_tokptr->TokInfo != c) {
+  if (REMOTE_tokptr(worker_id)->Tok != Ord(Ponctuation_tok) || REMOTE_tokptr(worker_id)->TokInfo != c) {
     char s[1024];
-    strncpy(s, Yap_tokText(LOCAL_tokptr), 1023);
+    strncpy(s, Yap_tokText(REMOTE_tokptr(worker_id)), 1023);
     syntax_msg("line %d: expected to find "
                "\'%c....................................\', found %s",
-               LOCAL_tokptr->TokLine, c, s);
+               REMOTE_tokptr(worker_id)->TokLine, c, s);
     FAIL;
   }
   NextToken;
@@ -418,7 +418,7 @@ static int get_quasi_quotation(term_t t, unsigned char **here,
       *here = in + 1; /* after } */
       in--;           /* Before | */
 
-      if (LOCAL_quasi_quotations) /* option; must return strings */
+      if (REMOTE_quasi_quotations(worker_id)) /* option; must return strings */
       {
         PL_chars_t txt;
         int rc;
@@ -456,63 +456,63 @@ static Term ParseArgs(Atom a, Term close, JMPBUFF *FailBuff, Term arg1,
 #endif
 
   NextToken;
-    p = LOCAL_ParserAuxSp-LOCAL_ParserAuxBase;
+    p = REMOTE_ParserAuxSp(worker_id)-REMOTE_ParserAuxBase(worker_id);
   if (arg1) {
-      intptr_t diff = LOCAL_ParserAuxSp-LOCAL_ParserAuxBase;
-    LOCAL_ParserAuxBase[p] = arg1;
+      intptr_t diff = REMOTE_ParserAuxSp(worker_id)-REMOTE_ParserAuxBase(worker_id);
+    REMOTE_ParserAuxBase(worker_id)[p] = arg1;
     nargs++;
-    LOCAL_ParserAuxSp = LOCAL_ParserAuxBase+(p+1);
-    if (LOCAL_tokptr->Tok == Ord(Ponctuation_tok) &&
-        LOCAL_tokptr->TokInfo == close) {
+    REMOTE_ParserAuxSp(worker_id) = REMOTE_ParserAuxBase(worker_id)+(p+1);
+    if (REMOTE_tokptr(worker_id)->Tok == Ord(Ponctuation_tok) &&
+        REMOTE_tokptr(worker_id)->TokInfo == close) {
 
         func = Yap_MkFunctor(a, 1);
         if (func == NULL) {
-            syntax_msg("line %d: Heap Overflow", LOCAL_tokptr->TokLine);
+            syntax_msg("line %d: Heap Overflow", REMOTE_tokptr(worker_id)->TokLine);
             FAIL;
         }
-      t = Yap_MkApplTerm(func, nargs, LOCAL_ParserAuxSp+diff);
+      t = Yap_MkApplTerm(func, nargs, REMOTE_ParserAuxSp(worker_id)+diff);
       if (HR > ASP - 4096) {
-        syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+        syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
         FAIL;
       }
       NextToken;
-      LOCAL_ParserAuxSp = LOCAL_ParserAuxBase+p;
+      REMOTE_ParserAuxSp(worker_id) = REMOTE_ParserAuxBase(worker_id)+p;
       return t;
     }
   }
   while (1) {
-    Term *tp = LOCAL_ParserAuxSp;
-    if (LOCAL_ParserAuxSp + 1 >= LOCAL_ParserAuxMax) {
-        size_t sz = LOCAL_ParserAuxMax-LOCAL_ParserAuxBase, off = LOCAL_ParserAuxSp-LOCAL_ParserAuxBase;
+    Term *tp = REMOTE_ParserAuxSp(worker_id);
+    if (REMOTE_ParserAuxSp(worker_id) + 1 >= REMOTE_ParserAuxMax(worker_id)) {
+        size_t sz = REMOTE_ParserAuxMax(worker_id)-REMOTE_ParserAuxBase(worker_id), off = REMOTE_ParserAuxSp(worker_id)-REMOTE_ParserAuxBase(worker_id);
         sz += 4096;
-        if ((LOCAL_ParserAuxBase = Realloc(LOCAL_ParserAuxBase, sz) )== NULL) {
-            syntax_msg("line %d: Parser Stack Overflow", LOCAL_tokptr->TokLine);
+        if ((REMOTE_ParserAuxBase(worker_id) = Realloc(REMOTE_ParserAuxBase(worker_id), sz PASS_REGS) )== NULL) {
+            syntax_msg("line %d: Parser Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
             FAIL;
         }
-        LOCAL_ParserAuxSp = LOCAL_ParserAuxBase+off;
-        LOCAL_ParserAuxMax = LOCAL_ParserAuxBase+sz;
+        REMOTE_ParserAuxSp(worker_id) = REMOTE_ParserAuxBase(worker_id)+off;
+        REMOTE_ParserAuxMax(worker_id) = REMOTE_ParserAuxBase(worker_id)+sz;
     }
     *tp++ = ParseTerm(999, FailBuff, enc, cmod PASS_REGS);
-    LOCAL_ParserAuxSp = tp;
+    REMOTE_ParserAuxSp(worker_id) = tp;
     ++nargs;
-    if (LOCAL_tokptr->Tok != Ord(Ponctuation_tok))
+    if (REMOTE_tokptr(worker_id)->Tok != Ord(Ponctuation_tok))
       break;
-    if (LOCAL_tokptr->TokInfo != TermComma)
+    if (REMOTE_tokptr(worker_id)->TokInfo != TermComma)
       break;
     NextToken;
   }
-  LOCAL_ParserAuxSp = LOCAL_ParserAuxBase+p;
+  REMOTE_ParserAuxSp(worker_id) = REMOTE_ParserAuxBase(worker_id)+p;
   /*
    * Needed because the arguments for the functor are placed in reverse
    * order
    */
   if (HR > ASP - (nargs + 1)) {
-    syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+    syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
     FAIL;
   }
   func = Yap_MkFunctor(a, nargs);
   if (func == NULL) {
-    syntax_msg("line %d: Heap Overflow", LOCAL_tokptr->TokLine);
+    syntax_msg("line %d: Heap Overflow", REMOTE_tokptr(worker_id)->TokLine);
     FAIL;
   }
 #ifdef SFUNC
@@ -522,12 +522,12 @@ static Term ParseArgs(Atom a, Term close, JMPBUFF *FailBuff, Term arg1,
     t = Yap_MkApplTerm(Yap_MkFunctor(a, nargs), nargs, p);
 #else
   if (a == AtomDBref && nargs == 2)
-    t = MkDBRefTerm((DBRef)IntegerOfTerm(LOCAL_ParserAuxBase[p]));
+    t = MkDBRefTerm((DBRef)IntegerOfTerm(REMOTE_ParserAuxBase(worker_id)[p]));
   else
-    t = Yap_MkApplTerm(func, nargs, LOCAL_ParserAuxBase+p);
+    t = Yap_MkApplTerm(func, nargs, REMOTE_ParserAuxBase(worker_id)+p);
 #endif
   if (HR > ASP - 4096) {
-    syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+    syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
     FAIL;
   }
   /* check for possible overflow against local stack */
@@ -556,21 +556,21 @@ loop:
   to_store = HR;
   HR += 2;
   to_store[0] = ParseTerm(999, FailBuff, enc, cmod PASS_REGS);
-  if (LOCAL_tokptr->Tok == Ord(Ponctuation_tok)) {
-    if (LOCAL_tokptr->TokInfo == TermComma) {
+  if (REMOTE_tokptr(worker_id)->Tok == Ord(Ponctuation_tok)) {
+    if (REMOTE_tokptr(worker_id)->TokInfo == TermComma) {
       NextToken;
       {
         /* check for possible overflow against local stack */
         if (HR > ASP - 4096) {
           to_store[1] = TermNil;
-          syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+          syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
           FAIL;
         } else {
           to_store[1] = AbsPair(HR);
           goto loop;
         }
       }
-    } else if (LOCAL_tokptr->TokInfo == TermVBar) {
+    } else if (REMOTE_tokptr(worker_id)->TokInfo == TermVBar) {
       NextToken;
       to_store[1] = ParseTerm(999, FailBuff, enc, cmod PASS_REGS);
     } else {
@@ -578,7 +578,7 @@ loop:
     }
   } else {
     syntax_msg("line %d: looking for symbol ',','|' got symbol '%s'",
-               LOCAL_tokptr->TokLine, Yap_tokText(LOCAL_tokptr));
+               REMOTE_tokptr(worker_id)->TokLine, Yap_tokText(REMOTE_tokptr(worker_id)));
     FAIL;
   }
   return (o);
@@ -593,14 +593,14 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
   Volatile int curprio = 0, opprio, oplprio, oprprio;
   Volatile Atom opinfo;
 
-  switch (LOCAL_tokptr->Tok) {
+  switch (REMOTE_tokptr(worker_id)->Tok) {
   case Name_tok:
-    t = LOCAL_tokptr->TokInfo;
+    t = REMOTE_tokptr(worker_id)->TokInfo;
     NextToken;
     /* special rules apply for +1, -2.3, etc... */
-    if (LOCAL_tokptr->Tok == Number_tok) {
+    if (REMOTE_tokptr(worker_id)->Tok == Number_tok) {
       if (t == TermMinus) {
-        t = LOCAL_tokptr->TokInfo;
+        t = REMOTE_tokptr(worker_id)->TokInfo;
         if (IsIntTerm(t))
           t = MkIntTerm(-IntOfTerm(t));
         else if (IsFloatTerm(t))
@@ -616,11 +616,11 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
         break;
       }
     }
-    if ((LOCAL_tokptr->Tok != Ord(Ponctuation_tok) ||
-         LOCAL_tokptr->TokInfo != Terml) &&
+    if ((REMOTE_tokptr(worker_id)->Tok != Ord(Ponctuation_tok) ||
+         REMOTE_tokptr(worker_id)->TokInfo != Terml) &&
         IsPrefixOp(AtomOfTerm(t), &opprio, &oprprio, cmod PASS_REGS)) {
-      if (LOCAL_tokptr->Tok == Name_tok) {
-        Atom at = AtomOfTerm(LOCAL_tokptr->TokInfo);
+      if (REMOTE_tokptr(worker_id)->Tok == Name_tok) {
+        Atom at = AtomOfTerm(REMOTE_tokptr(worker_id)->TokInfo);
 #ifndef _MSC_VER
         if (t == TermPlus) {
           if (at == AtomInf) {
@@ -650,36 +650,36 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
         TRY(
             /* build appl on the heap */
             func = Yap_MkFunctor(AtomOfTerm(t), 1); if (func == NULL) {
-              syntax_msg("line %d: Heap Overflow", LOCAL_tokptr->TokLine);
+              syntax_msg("line %d: Heap Overflow", REMOTE_tokptr(worker_id)->TokLine);
               FAIL;
             } t = ParseTerm(oprprio, FailBuff, enc, cmod PASS_REGS);
             t = Yap_MkApplTerm(func, 1, &t);
             /* check for possible overflow against local stack */
             if (HR > ASP - 4096) {
-              syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+              syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
               FAIL;
             } curprio = opprio;
             , break;)
       }
     }
-    if (LOCAL_tokptr->Tok == Ord(Ponctuation_tok) &&
-        LOCAL_tokptr->TokInfo == Terml)
+    if (REMOTE_tokptr(worker_id)->Tok == Ord(Ponctuation_tok) &&
+        REMOTE_tokptr(worker_id)->TokInfo == Terml)
       t = ParseArgs(AtomOfTerm(t), TermEndBracket, FailBuff, 0L, enc,
                     cmod PASS_REGS);
     break;
 
   case Number_tok:
-    t = LOCAL_tokptr->TokInfo;
+    t = REMOTE_tokptr(worker_id)->TokInfo;
     NextToken;
     break;
 
   case String_tok: /* build list on the heap */
-    t = LOCAL_tokptr->TokInfo;
+    t = REMOTE_tokptr(worker_id)->TokInfo;
     NextToken;
     break;
 
   case Var_tok:
-    varinfo = (VarEntry *)(LOCAL_tokptr->TokInfo);
+    varinfo = (VarEntry *)(REMOTE_tokptr(worker_id)->TokInfo);
     if ((t = varinfo->VarAdr) == TermNil) {
       t = varinfo->VarAdr = MkVarTerm();
     }
@@ -687,13 +687,13 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
     break;
 
   case Error_tok:
-    syntax_msg("line %d: found ill-formed \"%s\"", LOCAL_tokptr->TokLine,
-               Yap_tokText(LOCAL_tokptr));
+    syntax_msg("line %d: found ill-formed \"%s\"", REMOTE_tokptr(worker_id)->TokLine,
+               Yap_tokText(REMOTE_tokptr(worker_id)));
     FAIL;
 
   case Ponctuation_tok:
 
-    switch (RepAtom(AtomOfTerm(LOCAL_tokptr->TokInfo))->StrOfAE[0]) {
+    switch (RepAtom(AtomOfTerm(REMOTE_tokptr(worker_id)->TokInfo))->StrOfAE[0]) {
     case '(':
     case 'l': /* non solo ( */
       NextToken;
@@ -702,8 +702,8 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
       break;
     case '[':
       NextToken;
-      if (LOCAL_tokptr->Tok == Ponctuation_tok &&
-          LOCAL_tokptr->TokInfo == TermEndSquareBracket) {
+      if (REMOTE_tokptr(worker_id)->Tok == Ponctuation_tok &&
+          REMOTE_tokptr(worker_id)->TokInfo == TermEndSquareBracket) {
         t = TermNil;
         NextToken;
         break;
@@ -713,8 +713,8 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
       break;
     case '{':
       NextToken;
-      if (LOCAL_tokptr->Tok == Ponctuation_tok &&
-          (int)LOCAL_tokptr->TokInfo == TermEndCurlyBracket) {
+      if (REMOTE_tokptr(worker_id)->Tok == Ponctuation_tok &&
+          (int)REMOTE_tokptr(worker_id)->TokInfo == TermEndCurlyBracket) {
         t = MkAtomTerm(AtomBraces);
         NextToken;
         break;
@@ -723,35 +723,35 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
       t = Yap_MkApplTerm(FunctorBraces, 1, &t);
       /* check for possible overflow against local stack */
       if (HR > ASP - 4096) {
-        syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+        syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
         FAIL;
       }
       checkfor(TermEndCurlyBracket, FailBuff, enc PASS_REGS);
       break;
     default:
       syntax_msg("line %d: unexpected ponctuation signal %s",
-                 LOCAL_tokptr->TokLine, Yap_tokRep(LOCAL_tokptr));
+                 REMOTE_tokptr(worker_id)->TokLine, Yap_tokRep(REMOTE_tokptr(worker_id)));
       FAIL;
     }
     break;
 
 #if QQ
   case QuasiQuotes_tok: {
-    qq_t *qq = (qq_t *)(LOCAL_tokptr->TokInfo);
-    term_t pv, positions = LOCAL_subtpos, to;
+    qq_t *qq = (qq_t *)(REMOTE_tokptr(worker_id)->TokInfo);
+    term_t pv, positions = REMOTE_subtpos(worker_id), to;
     Atom at;
     Term tn;
     CELL *tnp;
 
     // from SWI, enter the list
     /* prepare (if we are the first in term) */
-    if (!LOCAL_varnames)
-      LOCAL_varnames = PL_new_term_ref();
-    if (!LOCAL_qq) {
-      if (LOCAL_quasi_quotations) {
-        LOCAL_qq = LOCAL_quasi_quotations;
+    if (!REMOTE_varnames(worker_id))
+      REMOTE_varnames(worker_id) = PL_new_term_ref();
+    if (!REMOTE_qq(worker_id)) {
+      if (REMOTE_quasi_quotations(worker_id)) {
+        REMOTE_qq(worker_id) = REMOTE_quasi_quotations(worker_id);
       } else {
-        if (!(LOCAL_qq = PL_new_term_ref()))
+        if (!(REMOTE_qq(worker_id) = PL_new_term_ref()))
           return FALSE;
       }
       //  create positions term
@@ -767,20 +767,20 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
         pv = 0;
       /* push type */
 
-      if (!(LOCAL_qq_tail = PL_copy_term_ref(LOCAL_qq)))
+      if (!(REMOTE_qq(worker_id)_tail = PL_copy_term_ref(REMOTE_qq(worker_id))))
         return FALSE;
     }
 
     NextToken;
     t = ParseTerm(GLOBAL_MaxPriority, FailBuff, enc, cmod PASS_REGS);
-    if (LOCAL_tokptr->Tok != QuasiQuotes_tok) {
+    if (REMOTE_tokptr(worker_id)->Tok != QuasiQuotes_tok) {
       syntax_msg("expected to find quasi quotes, got \"%s\"", ,
-                 Yap_tokText(LOCAL_tokptr));
+                 Yap_tokText(REMOTE_tokptr(worker_id)));
       FAIL;
     }
     if (!(is_quasi_quotation_syntax(t, &at))) {
       syntax_msg("bad quasi quotation syntax, at \"%s\"",
-                 Yap_tokText(LOCAL_tokptr));
+                 Yap_tokText(REMOTE_tokptr(worker_id)));
       FAIL;
     }
     /* Arg 2: the content */
@@ -790,7 +790,7 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
     if (!get_quasi_quotation(Yap_InitSlot(ArgOfTerm(2, tn)), &qq->text,
                              qq->text + strlen((const char *)qq->text))) {
       syntax_msg("could not get quasi quotation, at \"%s\"",
-                 Yap_tokText(LOCAL_tokptr));
+                 Yap_tokText(REMOTE_tokptr(worker_id)));
       FAIL;
     }
     if (positions) {
@@ -802,18 +802,18 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
                          qq->mid.charno + 2,    /* end of | token */
                          PL_INTPTR, qqend - 2)) /* end minus "|}" */
         syntax_msg("failed to unify quasi quotation, at \"%s\"",
-                   Yap_tokText(LOCAL_tokptr));
+                   Yap_tokText(REMOTE_tokptr(worker_id)));
       FAIL;
     }
 
-    tnp[2] = Yap_GetFromSlot(LOCAL_varnames); /* Arg 3: the var dictionary */
+    tnp[2] = Yap_GetFromSlot(REMOTE_varnames(worker_id)); /* Arg 3: the var dictionary */
     /* Arg 4: the result */
     t = ArgOfTerm(4, tn);
     if (!(to = PL_new_term_ref()) ||
-        !PL_unify_list(LOCAL_qq_tail, to, LOCAL_qq_tail) ||
+        !PL_unify_list(REMOTE_qq(worker_id)_tail, to, REMOTE_qq(worker_id)_tail) ||
         !PL_unify(to, Yap_InitSlot(tn))) {
       syntax_msg("failed to unify quasi quotation, at \"%s\"",
-                 Yap_tokRep(LOCAL_tokptr, enc));
+                 Yap_tokRep(REMOTE_tokptr(worker_id), enc));
       FAIL;
     }
   }
@@ -821,16 +821,16 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
     NextToken;
     break;
   default:
-    syntax_msg("line %d: expected operator, got \'%s\'", LOCAL_tokptr->TokLine,
-               Yap_tokText(LOCAL_tokptr));
+    syntax_msg("line %d: expected operator, got \'%s\'", REMOTE_tokptr(worker_id)->TokLine,
+               Yap_tokText(REMOTE_tokptr(worker_id)));
     FAIL;
   }
 
   /* main loop to parse infix and posfix operators starts here */
   while (true) {
     Atom name;
-    if (LOCAL_tokptr->Tok == Ord(Name_tok) &&
-        Yap_HasOp((name = AtomOfTerm(LOCAL_tokptr->TokInfo)))) {
+    if (REMOTE_tokptr(worker_id)->Tok == Ord(Name_tok) &&
+        Yap_HasOp((name = AtomOfTerm(REMOTE_tokptr(worker_id)->TokInfo)))) {
       Atom save_opinfo = opinfo = name;
       if (IsInfixOp(save_opinfo, &opprio, &oplprio, &oprprio, cmod PASS_REGS) &&
           opprio <= prio && oplprio >= curprio) {
@@ -838,7 +838,7 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
         Volatile int oldprio = curprio;
         TRY3(
             func = Yap_MkFunctor(save_opinfo, 2); if (func == NULL) {
-              syntax_msg("line %d: Heap Overflow", LOCAL_tokptr->TokLine);
+              syntax_msg("line %d: Heap Overflow", REMOTE_tokptr(worker_id)->TokLine);
               FAIL;
             } NextToken;
             {
@@ -848,7 +848,7 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
               t = Yap_MkApplTerm(func, 2, args);
               /* check for possible overflow against local stack */
               if (HR > ASP - 4096) {
-                syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+                syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
                 FAIL;
               }
             },
@@ -859,15 +859,15 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
       if (IsPosfixOp(opinfo, &opprio, &oplprio, cmod PASS_REGS) &&
           opprio <= prio && oplprio >= curprio) {
         /* parse as posfix operator */
-        Functor func = Yap_MkFunctor(AtomOfTerm(LOCAL_tokptr->TokInfo), 1);
+        Functor func = Yap_MkFunctor(AtomOfTerm(REMOTE_tokptr(worker_id)->TokInfo), 1);
         if (func == NULL) {
-          syntax_msg("line %d: Heap Overflow", LOCAL_tokptr->TokLine);
+          syntax_msg("line %d: Heap Overflow", REMOTE_tokptr(worker_id)->TokLine);
           FAIL;
         }
         t = Yap_MkApplTerm(func, 1, &t);
         /* check for possible overflow against local stack */
         if (HR > ASP - 4096) {
-          syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+          syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
           FAIL;
         }
         curprio = opprio;
@@ -876,8 +876,8 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
       }
       break;
     }
-    if (LOCAL_tokptr->Tok == Ord(Ponctuation_tok)) {
-      if (LOCAL_tokptr->TokInfo == TermComma && prio >= 1000 &&
+    if (REMOTE_tokptr(worker_id)->Tok == Ord(Ponctuation_tok)) {
+      if (REMOTE_tokptr(worker_id)->TokInfo == TermComma && prio >= 1000 &&
           curprio <= 999) {
         Volatile Term args[2];
         NextToken;
@@ -886,12 +886,12 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
         t = Yap_MkApplTerm(FunctorComma, 2, args);
         /* check for possible overflow against local stack */
         if (HR > ASP - 4096) {
-          syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+          syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
           FAIL;
         }
         curprio = 1000;
         continue;
-      } else if (LOCAL_tokptr->TokInfo == TermVBar &&
+      } else if (REMOTE_tokptr(worker_id)->TokInfo == TermVBar &&
                  IsInfixOp(AtomVBar, &opprio, &oplprio, &oprprio,
                            cmod PASS_REGS) &&
                  opprio <= prio && oplprio >= curprio) {
@@ -902,12 +902,12 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
         t = Yap_MkApplTerm(FunctorVBar, 2, args);
         /* check for possible overflow against local stack */
         if (HR > ASP - 4096) {
-          syntax_msg("line %d: Stack Overflow", LOCAL_tokptr->TokLine);
+          syntax_msg("line %d: Stack Overflow", REMOTE_tokptr(worker_id)->TokLine);
           FAIL;
         }
         curprio = opprio;
         continue;
-      } else if (LOCAL_tokptr->TokInfo == TermBeginBracket &&
+      } else if (REMOTE_tokptr(worker_id)->TokInfo == TermBeginBracket &&
                  IsPosfixOp(AtomEmptyBrackets, &opprio, &oplprio,
                             cmod PASS_REGS) &&
                  opprio <= prio && oplprio >= curprio) {
@@ -915,7 +915,7 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
                       cmod PASS_REGS);
         curprio = opprio;
         continue;
-      } else if (LOCAL_tokptr->TokInfo == TermBeginSquareBracket &&
+      } else if (REMOTE_tokptr(worker_id)->TokInfo == TermBeginSquareBracket &&
                  IsPosfixOp(AtomEmptySquareBrackets, &opprio, &oplprio,
                             cmod PASS_REGS) &&
                  opprio <= prio && oplprio >= curprio) {
@@ -924,7 +924,7 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
         t = MakeAccessor(t, FunctorEmptySquareBrackets PASS_REGS);
         curprio = opprio;
         continue;
-      } else if (LOCAL_tokptr->TokInfo == TermBeginCurlyBracket &&
+      } else if (REMOTE_tokptr(worker_id)->TokInfo == TermBeginCurlyBracket &&
                  IsPosfixOp(AtomBraces, &opprio, &oplprio, cmod PASS_REGS) &&
                  opprio <= prio && oplprio >= curprio) {
         t = ParseArgs(AtomBraces, TermEndCurlyBracket, FailBuff, t, enc,
@@ -934,9 +934,9 @@ static Term ParseTerm(int prio, JMPBUFF *FailBuff, encoding_t enc,
         continue;
       }
     }
-    if (LOCAL_tokptr->Tok <= Ord(String_tok)) {
+    if (REMOTE_tokptr(worker_id)->Tok <= Ord(String_tok)) {
       syntax_msg("line %d: expected operator, got \'%s\'",
-                 LOCAL_tokptr->TokLine, Yap_tokText(LOCAL_tokptr));
+                 REMOTE_tokptr(worker_id)->TokLine, Yap_tokText(REMOTE_tokptr(worker_id)));
       FAIL;
     }
     break;
@@ -948,23 +948,23 @@ Term Yap_Parse(UInt prio, encoding_t enc, Term cmod) {
   CACHE_REGS
   // ensure that if we throw an exception
   // t will be 0.
-    LOCAL_ActiveError->errorMsg=NULL;
-    LOCAL_ActiveError->errorMsgLen=0;
+    REMOTE_ActiveError(worker_id)->errorMsg=NULL;
+    REMOTE_ActiveError(worker_id)->errorMsgLen=0;
   Volatile Term t = 0;
   JMPBUFF FailBuff;
   yhandle_t sls = Yap_StartSlots();
-  LOCAL_ErrorMessage = NULL;
-  LOCAL_toktide = LOCAL_tokptr;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
+  REMOTE_toktide(worker_id) = REMOTE_tokptr(worker_id);
 
   if (!sigsetjmp(FailBuff.JmpBuff, 0)) {
-    LOCAL_ActiveError->errorMsg=NULL;
-    LOCAL_ActiveError->errorMsgLen=0;
-                                                  LOCAL_ParserAuxSp = LOCAL_ParserAuxBase = Malloc(4096*sizeof(CELL));
-                                                  LOCAL_ParserAuxMax =   LOCAL_ParserAuxBase+4096;
+    REMOTE_ActiveError(worker_id)->errorMsg=NULL;
+    REMOTE_ActiveError(worker_id)->errorMsgLen=0;
+                                                  REMOTE_ParserAuxSp(worker_id) = REMOTE_ParserAuxBase(worker_id) = Malloc(4096*sizeof(CELL) PASS_REGS);
+                                                  REMOTE_ParserAuxMax(worker_id) =   REMOTE_ParserAuxBase(worker_id)+4096;
     t = ParseTerm(prio, &FailBuff, enc, cmod PASS_REGS);
 #if DEBUG
     if (GLOBAL_Option['p' - 'a' + 1]) {
-      Yap_DebugPlWrite(MkIntTerm(LOCAL_tokptr->TokLine));
+      Yap_DebugPlWrite(MkIntTerm(REMOTE_tokptr(worker_id)->TokLine));
       Yap_DebugPutc(stderr, '[');
       if (t == 0)
         Yap_DebugPlWrite(MkIntTerm(0));
@@ -976,24 +976,24 @@ Term Yap_Parse(UInt prio, encoding_t enc, Term cmod) {
 #endif
     Yap_CloseSlots(sls);
   }
-  if (LOCAL_tokptr != NULL && LOCAL_tokptr->Tok != Ord(eot_tok)) {
-    LOCAL_Error_TYPE =SYNTAX_ERROR; 
-    if (LOCAL_tokptr->TokNext) {
+  if (REMOTE_tokptr(worker_id) != NULL && REMOTE_tokptr(worker_id)->Tok != Ord(eot_tok)) {
+    REMOTE_ActiveError(worker_id)->errorNo =SYNTAX_ERROR; 
+    if (REMOTE_tokptr(worker_id)->TokNext) {
       size_t sz = strlen("bracket or operator expected.");
-      LOCAL_ErrorMessage =malloc(sz+1);
-      strncpy(LOCAL_ErrorMessage, "bracket or operator expected.", sz  );
+      REMOTE_ActiveError(worker_id)->errorMsg =malloc(sz+1);
+      strncpy(REMOTE_ActiveError(worker_id)->errorMsg, "bracket or operator expected.", sz  );
     } else {
       size_t sz = strlen("term  must end with . or EOF.");
-      LOCAL_ErrorMessage =malloc(sz+1);
-      strncpy(LOCAL_ErrorMessage,"term  must end with . or EOF.", sz  );
+      REMOTE_ActiveError(worker_id)->errorMsg =malloc(sz+1);
+      strncpy(REMOTE_ActiveError(worker_id)->errorMsg,"term  must end with . or EOF.", sz  );
     }
     t = 0;
   }
-  if (t != 0 && LOCAL_Error_TYPE == SYNTAX_ERROR) {
-    LOCAL_Error_TYPE = YAP_NO_ERROR;
-    LOCAL_ErrorMessage = NULL;
+  if (t != 0 && REMOTE_ActiveError(worker_id)->errorNo == SYNTAX_ERROR) {
+    REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+    REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   }
-  //    if (LOCAL_tokptr->Tok != Ord(eot_tok))
+  //    if (REMOTE_tokptr(worker_id)->Tok != Ord(eot_tok))
   //  return (0L);
   return t;
 }

@@ -103,7 +103,7 @@ static Term get_matrix_element(Term t1, Term t2 USES_REGS) {
 
 static Term Eval(Term t USES_REGS) {
   eval_context_t ctx;
-  ctx.p = LOCAL_ctx;
+  ctx.p = REMOTE_ctx(worker_id);
 
   if (IsVarTerm(t)) {
     Yap_ArithError(INSTANTIATION_ERROR, t, "in arithmetic");
@@ -149,17 +149,17 @@ static Term Eval(Term t USES_REGS) {
       }
       ctx.f = fun;
       ctx.fp = RepAppl(t);
-      LOCAL_ctx = &ctx;
+      REMOTE_ctx(worker_id) = &ctx;
       *RepAppl(t) = (CELL)AtomFoundVar;
       t1 = Eval(ArgOfTerm(1, t) PASS_REGS);
       if (n == 1) {
         *RepAppl(t) = (CELL)fun;
-        LOCAL_ctx = ctx.p;
+        REMOTE_ctx(worker_id) = ctx.p;
         return Yap_eval_unary(p->FOfEE, t1);
       }
       t2 = Eval(ArgOfTerm(2, t) PASS_REGS);
       *RepAppl(t) = (CELL)fun;
-      LOCAL_ctx = ctx.p;
+      REMOTE_ctx(worker_id) = ctx.p;
       return Yap_eval_binary(p->FOfEE, t1, t2);
     }
   } /* else if (IsPairTerm(t)) */
@@ -217,7 +217,7 @@ static Int p_is(USES_REGS1) { /* X is Y	 */
   }
   do {
     go = false;
-    out = Yap_Eval(t PASS_REGS);
+    out = Yap_Eval(t);
     go = Yap_CheckArithError();
   } while (go);
   return Yap_unify_constant(ARG1, out);
@@ -234,14 +234,14 @@ static Int p_isnan(USES_REGS1) { /* X isnan Y	 */
   Term out = 0L;
 
   while (!(out = Eval(Deref(ARG1) PASS_REGS))) {
-    if (LOCAL_Error_TYPE == RESOURCE_ERROR_STACK) {
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
-      if (!Yap_gcl(LOCAL_Error_Size, 1, ENV, CP)) {
-        Yap_EvalError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+    if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_STACK) {
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+      if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 1, ENV, CP)) {
+        Yap_EvalError(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return FALSE;
       }
     } else {
-      Yap_EvalError(LOCAL_Error_TYPE, ARG1, LOCAL_ErrorMessage);
+      Yap_EvalError(REMOTE_ActiveError(worker_id)->errorNo, ARG1, REMOTE_ActiveError(worker_id)->errorMsg);
       return FALSE;
     }
   }
@@ -265,14 +265,14 @@ static Int p_isinf(USES_REGS1) { /* X is Y        */
   Term out = 0L;
 
   while (!(out = Eval(Deref(ARG1) PASS_REGS))) {
-    if (LOCAL_Error_TYPE == RESOURCE_ERROR_STACK) {
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
-      if (!Yap_gcl(LOCAL_Error_Size, 1, ENV, CP)) {
-        Yap_EvalError(RESOURCE_ERROR_STACK, ARG2, LOCAL_ErrorMessage);
+    if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_STACK) {
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+      if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 1, ENV, CP)) {
+        Yap_EvalError(RESOURCE_ERROR_STACK, ARG2, REMOTE_ActiveError(worker_id)->errorMsg);
         return FALSE;
       }
     } else {
-      Yap_EvalError(LOCAL_Error_TYPE, ARG1, LOCAL_ErrorMessage);
+      Yap_EvalError(REMOTE_ActiveError(worker_id)->errorNo, ARG1, REMOTE_ActiveError(worker_id)->errorMsg);
       return FALSE;
     }
   }
@@ -315,14 +315,14 @@ static Int p_logsum(USES_REGS1) { /* X is Y        */
 #endif
     } else {
       while (!(t1 = Eval(t1 PASS_REGS))) {
-        if (LOCAL_Error_TYPE == RESOURCE_ERROR_STACK) {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
-          if (!Yap_gcl(LOCAL_Error_Size, 1, ENV, CP)) {
-            Yap_EvalError(RESOURCE_ERROR_STACK, ARG2, LOCAL_ErrorMessage);
+        if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_STACK) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+          if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 1, ENV, CP)) {
+            Yap_EvalError(RESOURCE_ERROR_STACK, ARG2, REMOTE_ActiveError(worker_id)->errorMsg);
             return FALSE;
           }
         } else {
-          Yap_EvalError(LOCAL_Error_TYPE, ARG1, LOCAL_ErrorMessage);
+          Yap_EvalError(REMOTE_ActiveError(worker_id)->errorNo, ARG1, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -343,14 +343,14 @@ static Int p_logsum(USES_REGS1) { /* X is Y        */
 #endif
     } else {
       while (!(t2 = Eval(t2 PASS_REGS))) {
-        if (LOCAL_Error_TYPE == RESOURCE_ERROR_STACK) {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
-          if (!Yap_gcl(LOCAL_Error_Size, 2, ENV, CP)) {
-            Yap_EvalError(RESOURCE_ERROR_STACK, ARG2, LOCAL_ErrorMessage);
+        if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_STACK) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+          if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 2, ENV, CP)) {
+            Yap_EvalError(RESOURCE_ERROR_STACK, ARG2, REMOTE_ActiveError(worker_id)->errorMsg);
             return FALSE;
           }
         } else {
-          Yap_EvalError(LOCAL_Error_TYPE, ARG1, LOCAL_ErrorMessage);
+          Yap_EvalError(REMOTE_ActiveError(worker_id)->errorNo, ARG1, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -367,7 +367,6 @@ static Int p_logsum(USES_REGS1) { /* X is Y        */
 
 void Yap_EvalError__(const char *file, const char *function, int lineno,
                        yap_error_number type, Term where, ...) {
-  CACHE_REGS
   va_list ap;
   char *format, buf[MAX_ERROR_MSG_SIZE];
 

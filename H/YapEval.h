@@ -402,8 +402,8 @@ extern Term Yap_InnerEval__(Term USES_REGS);
 
 #define Yap_EvalError(id, t, ...)                                              \
   {                                                                            \
-    eval_context_t *ctx = LOCAL_ctx;                                           \
-    LOCAL_ctx = NULL;                                                          \
+    eval_context_t *ctx = REMOTE_ctx(worker_id);                                           \
+    REMOTE_ctx(worker_id) = NULL;                                                          \
     while (ctx) {                                                              \
       *ctx->fp = (CELL)(ctx->f);                                               \
       ctx = ctx->p;                                                            \
@@ -413,8 +413,8 @@ extern Term Yap_InnerEval__(Term USES_REGS);
 
 #define Yap_ArithError(id, t, ...)                                             \
   {                                                                            \
-    eval_context_t *ctx = LOCAL_ctx;                                           \
-    LOCAL_ctx = NULL;                                                          \
+    eval_context_t *ctx = REMOTE_ctx(worker_id);                                           \
+    REMOTE_ctx(worker_id) = NULL;                                                          \
     while (ctx) {                                                              \
       *ctx->fp = (CELL)(ctx->f);                                               \
       ctx = ctx->p;                                                            \
@@ -436,13 +436,14 @@ extern Term Yap_InnerEval__(Term USES_REGS);
 
 static inline bool Yap_CheckArithError(void)
 {
+  CACHE_REGS
   bool on = false;
   yap_error_number err;
-  if (LOCAL_Error_TYPE== RESOURCE_ERROR_STACK) {    
-    LOCAL_Error_TYPE = YAP_NO_ERROR;                
-    if (!Yap_gcl(LOCAL_Error_Size, 2, ENV, CP)) {   
+  if (REMOTE_ActiveError(worker_id)->errorNo== RESOURCE_ERROR_STACK) {    
+    REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;                
+    if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 2, ENV, CP)) {   
       on = false; 
-      Yap_ThrowError(RESOURCE_ERROR_STACK, ARG2, "while running arithmetic"); 
+      Yap_ThrowError(RESOURCE_ERROR_STACK, ARG2, "while running arithmetic");
     } else {
       on = true;
     }

@@ -946,10 +946,10 @@ prof_alrm(int signo, siginfo_t *si, void *scv)
   }
   GLOBAL_ProfOn = TRUE;
   oldpc = (void *) CONTEXT_PC(scv);
-  if (LOCAL_PrologMode & TestMode) {
+  if (REMOTE_PrologMode(worker_id) & TestMode) {
 
     b.tag = '?';
-    b.ptr= (void *)LOCAL_PrologMode;
+    b.ptr= (void *)REMOTE_PrologMode(worker_id);
     fwrite(&b,sizeof(b),1,GLOBAL_FPreds);
     GLOBAL_ProfOn = FALSE;
     return;

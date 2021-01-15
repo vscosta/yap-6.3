@@ -65,9 +65,9 @@ static UInt total_megaclause, total_released, nof_megaclauses;
 static Term BlobTermInCodeAdjust(Term t) {
   CACHE_REGS
 #if TAGS_FAST_OPS
-  return t - LOCAL_ClDiff;
+  return t - REMOTE_ClDiff(worker_id);
 #else
-  return t + LOCAL_ClDiff;
+  return t + REMOTE_ClDiff(worker_id);
 #endif
 }
 
@@ -142,7 +142,7 @@ void Yap_BuildMegaClause(PredEntry *ap) {
   while (TRUE) {
     memmove((void *)ptr, (void *)cl->ClCode, sz);
     if (has_blobs) {
-      LOCAL_ClDiff = (char *)(ptr) - (char *)cl->ClCode;
+      REMOTE_ClDiff(worker_id) = (char *)(ptr) - (char *)cl->ClCode;
       restore_opcodes(ptr, NULL PASS_REGS);
     }
     ptr = (yamop *)((char *)ptr + sz);
@@ -451,7 +451,6 @@ static Int p_dbassert(USES_REGS1) { /* '$number_of_clauses'(Predicate,M,N) */
 }
 
 void Yap_InitDBLoadPreds(void) {
-  CACHE_REGS
     //CurrentModule = DBLOAD_MODULE;
   Yap_InitCPred("$dbload_get_space", 4, p_dbload_get_space, 0L);
   Yap_InitCPred("$dbassert", 3, p_dbassert, 0L);

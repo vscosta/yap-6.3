@@ -24,7 +24,7 @@
         insert_into_global_sg_fr_list(sg_fr);
       } else
 #endif /* LIMIT_TABLING */
-          if (IN_BETWEEN(LOCAL_TrailBase, pt, LOCAL_TrailTop)) {
+          if (IN_BETWEEN(REMOTE_TrailBase(worker_id), pt, REMOTE_TrailTop(worker_id))) {
         /* skip, this is a problem because we lose information,
            namely active references */
         pt1 = (tr_fr_ptr)pt;

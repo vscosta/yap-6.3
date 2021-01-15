@@ -516,7 +516,7 @@ Create a directory  _Yap_Dir_. If the parent directory does not exist, silently 
 static Int make_directory(USES_REGS1) {
   int lvl = push_text_stack();
   const char *fd0 = Yap_AbsoluteFile(Yap_TextTermToText(Deref(ARG1) PASS_REGS),true);
-  char *fd = Malloc(strlen(fd0)+1);
+  char *fd = Malloc(strlen(fd0)+1 PASS_REGS);
   strcpy( fd, fd0);
   char *s = (char *)skip_root(fd), *ns;
   int ch;
@@ -682,7 +682,7 @@ static Int same_file(USES_REGS1) {
     struct stat *b1, *b2;
     while ((char *)HR + sizeof(struct stat) * 2 > (char *)(ASP - 1024)) {
       if (!Yap_gcl(2 * sizeof(struct stat), 2, ENV, Yap_gcP())) {
-        Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return FALSE;
       }
     }

@@ -71,7 +71,7 @@ static void
 LeaveGrowMode(prolog_exec_mode grow_mode)
 {
   CACHE_REGS
-  LOCAL_PrologMode &= ~grow_mode;
+  REMOTE_PrologMode(worker_id) &= ~grow_mode;
 }
 
 
@@ -92,25 +92,25 @@ static void
 SetHeapRegs(bool copying_threads USES_REGS)
 {
 #ifdef undf7
-  Sfprintf(stderr,"HeapBase = %x\tHeapTop=%x\nGlobalBase=%x\tGlobalTop=%x\nLocalBase=%x\tLocatTop=%x\n", Yap_HeapBase, HeapTop, LOCAL_GlobalBase, H, LCL0, ASP);
+  Sfprintf(stderr,"HeapBase = %x\tHeapTop=%x\nGlobalBase=%x\tGlobalTop=%x\nLocalBase=%x\tLocatTop=%x\n", Yap_HeapBase, HeapTop, REMOTE_GlobalBase(worker_id), H, LCL0, ASP);
 #endif
   /* The old stack pointers */
-  LOCAL_OldLCL0 = LCL0;
-  LOCAL_OldASP = ASP;
-  LOCAL_OldGlobalBase = (CELL *)LOCAL_GlobalBase;
-  LOCAL_OldH = HR;
-  LOCAL_OldH0 = H0;
-  LOCAL_OldTrailBase = LOCAL_TrailBase;
-  LOCAL_OldTrailTop = LOCAL_TrailTop;
-  LOCAL_OldTR = TR;
-  LOCAL_OldHeapBase = Yap_HeapBase;
-  LOCAL_OldHeapTop = HeapTop;
+  REMOTE_OldLCL0(worker_id) = LCL0;
+  REMOTE_OldASP(worker_id) = ASP;
+  REMOTE_OldGlobalBase(worker_id) = (CELL *)REMOTE_GlobalBase(worker_id);
+  REMOTE_OldH(worker_id) = HR;
+  REMOTE_OldH0(worker_id) = H0;
+  REMOTE_OldTrailBase(worker_id) = REMOTE_TrailBase(worker_id);
+  REMOTE_OldTrailTop(worker_id) = REMOTE_TrailTop(worker_id);
+  REMOTE_OldTR(worker_id) = TR;
+  REMOTE_OldHeapBase(worker_id) = Yap_HeapBase;
+  REMOTE_OldHeapTop(worker_id) = HeapTop;
   /* Adjust stack addresses */
-  LOCAL_TrailBase = TrailAddrAdjust(LOCAL_TrailBase);
-  LOCAL_TrailTop = TrailAddrAdjust(LOCAL_TrailTop);
-  CurrentTrailTop = (tr_fr_ptr)(LOCAL_TrailTop-MinTrailGap);
-  LOCAL_GlobalBase = BaseAddrAdjust(LOCAL_GlobalBase);
-  LOCAL_LocalBase = LocalAddrAdjust(LOCAL_LocalBase);
+  REMOTE_TrailBase(worker_id) = TrailAddrAdjust(REMOTE_TrailBase(worker_id));
+  REMOTE_TrailTop(worker_id) = TrailAddrAdjust(REMOTE_TrailTop(worker_id));
+  CurrentTrailTop = (tr_fr_ptr)(REMOTE_TrailTop(worker_id)-MinTrailGap);
+  REMOTE_GlobalBase(worker_id) = BaseAddrAdjust(REMOTE_GlobalBase(worker_id));
+  REMOTE_LocalBase(worker_id) = LocalAddrAdjust(REMOTE_LocalBase(worker_id));
 #if !USE_SYSTEM_MALLOC && !USE_DL_MALLOC
   AuxSp = PtoBaseAdjust(AuxSp);
   AuxTop = (ADDR)PtoBaseAdjust((CELL *)AuxTop);
@@ -134,17 +134,17 @@ SetHeapRegs(bool copying_threads USES_REGS)
     Yap_REGS.CUT_C_TOP = CutCAdjust(Yap_REGS.CUT_C_TOP);
   if (HB)
     HB = PtoGloAdjust(HB);
-  if (LOCAL_OpenArray)
-    LOCAL_OpenArray = PtoGloAdjust(LOCAL_OpenArray);
+  if (REMOTE_OpenArray(worker_id))
+    REMOTE_OpenArray(worker_id) = PtoGloAdjust(REMOTE_OpenArray(worker_id));
   if (B)
     B = ChoicePtrAdjust(B);
 #ifdef YAPOR_THREADS
   {
     choiceptr cpt;
-    cpt = Get_LOCAL_top_cp();
+    cpt = Get_REMOTE_top_cp(worker_id)();
     if (cpt) {
       //      cpt = ChoicePtrAdjust( cpt );
-      Set_LOCAL_top_cp( cpt );
+      Set_REMOTE_top_cp(worker_id)( cpt );
     }
   }
 #endif
@@ -167,17 +167,17 @@ SetHeapRegs(bool copying_threads USES_REGS)
   else if (IsOldLocalPtr(S))
     S = PtoLocAdjust(S);
   if (!copying_threads) {
-    if (LOCAL_GlobalArena)
-      LOCAL_GlobalArena = AbsAppl(PtoGloAdjust(RepAppl(LOCAL_GlobalArena)));
+    if (REMOTE_GlobalArena(worker_id))
+      REMOTE_GlobalArena(worker_id) = AbsAppl(PtoGloAdjust(RepAppl(REMOTE_GlobalArena(worker_id))));
   }
 #ifdef COROUTINING
-  if (LOCAL_AttsMutableList)
-    LOCAL_AttsMutableList = AbsAppl(PtoGloAdjust(RepAppl(LOCAL_AttsMutableList)));
-  if (LOCAL_WokenGoals)
-    LOCAL_WokenGoals = AbsAppl(PtoGloAdjust(RepAppl(LOCAL_WokenGoals)));
+  if (REMOTE_AttsMutableList(worker_id))
+    REMOTE_AttsMutableList(worker_id) = AbsAppl(PtoGloAdjust(RepAppl(REMOTE_AttsMutableList(worker_id))));
+  if (REMOTE_WokenGoals(worker_id))
+    REMOTE_WokenGoals(worker_id) = AbsAppl(PtoGloAdjust(RepAppl(REMOTE_WokenGoals(worker_id))));
 #endif
-  LOCAL_GcGeneration = AbsAppl(PtoGloAdjust(RepAppl(LOCAL_GcGeneration)));
-  LOCAL_GcPhase = AbsAppl(PtoGloAdjust(RepAppl(LOCAL_GcPhase)));
+  REMOTE_GcGeneration(worker_id) = AbsAppl(PtoGloAdjust(RepAppl(REMOTE_GcGeneration(worker_id))));
+  REMOTE_GcPhase(worker_id) = AbsAppl(PtoGloAdjust(RepAppl(REMOTE_GcPhase(worker_id))));
 }
 
 static void
@@ -185,9 +185,9 @@ MoveLocalAndTrail( USES_REGS1 )
 {
 	/* cpcellsd(To,From,NOfCells) - copy the cells downwards  */
 #if USE_SYSTEM_MALLOC
-  cpcellsd(ASP, (CELL *)((char *)LOCAL_OldASP+LOCAL_BaseDiff), (CELL *)LOCAL_OldTR - LOCAL_OldASP);
+  cpcellsd(ASP, (CELL *)((char *)REMOTE_OldASP(worker_id)+REMOTE_BaseDiff(worker_id)), (CELL *)REMOTE_OldTR(worker_id) - REMOTE_OldASP(worker_id));
 #else
-  cpcellsd(ASP, LOCAL_OldASP, (CELL *)LOCAL_OldTR - LOCAL_OldASP);
+  cpcellsd(ASP, REMOTE_OldASP(worker_id), (CELL *)REMOTE_OldTR(worker_id) - REMOTE_OldASP(worker_id));
 #endif
 }
 
@@ -198,22 +198,22 @@ CopyLocalAndTrail( USES_REGS1 )
 {
 	/* cpcellsd(To,From,NOfCells) - copy the cells downwards  */
 #if USE_SYSTEM_MALLOC
-  cpcellsd((void *)ASP, (void *)LOCAL_OldASP, (CELL *)LOCAL_OldTR - LOCAL_OldASP);
+  cpcellsd((void *)ASP, (void *)REMOTE_OldASP(worker_id), (CELL *)REMOTE_OldTR(worker_id) - REMOTE_OldASP(worker_id));
 #endif
 }
 
 static void
 IncrementalCopyStacksFromWorker( USES_REGS1 )
 {
-  memmove((void *) PtoGloAdjust((CELL *)LOCAL_start_global_copy),
-	 (void *) (LOCAL_start_global_copy),
-	 (size_t) (LOCAL_end_global_copy - LOCAL_start_global_copy));
-  memmove((void *) PtoLocAdjust((CELL *)LOCAL_start_local_copy),
-	 (void *) LOCAL_start_local_copy,
-	 (size_t) (LOCAL_end_local_copy - LOCAL_start_local_copy));
-  memmove((void *) PtoTRAdjust((tr_fr_ptr)LOCAL_start_trail_copy),
-	 (void *) (LOCAL_start_trail_copy),
-	 (size_t) (LOCAL_end_trail_copy - LOCAL_start_trail_copy));
+  memmove((void *) PtoGloAdjust((CELL *)REMOTE_start_global_copy(worker_id)),
+	 (void *) (REMOTE_start_global_copy(worker_id)),
+	 (size_t) (REMOTE_end_global_copy(worker_id) - REMOTE_start_global_copy(worker_id)));
+  memmove((void *) PtoLocAdjust((CELL *)REMOTE_start_local_copy(worker_id)),
+	 (void *) REMOTE_start_local_copy(worker_id),
+	 (size_t) (REMOTE_end_local_copy(worker_id) - REMOTE_start_local_copy(worker_id)));
+  memmove((void *) PtoTRAdjust((tr_fr_ptr)REMOTE_start_trail_copy(worker_id)),
+	 (void *) (REMOTE_start_trail_copy(worker_id)),
+	 (size_t) (REMOTE_end_trail_copy(worker_id) - REMOTE_start_trail_copy(worker_id)));
 }
 
 #ifndef TABLING
@@ -238,9 +238,9 @@ RestoreTrail(int worker_p USES_REGS)
 {
   tr_fr_ptr aux_tr;
 
-  /* install fase --> TR and LOCAL_top_cp->cp_tr are equal */
-  aux_tr = ((choiceptr) LOCAL_start_local_copy)->cp_tr;
-  TR = ((choiceptr) LOCAL_end_local_copy)->cp_tr;
+  /* install fase --> TR and REMOTE_top_cp(worker_id)->cp_tr are equal */
+  aux_tr = ((choiceptr) REMOTE_start_local_copy(worker_id))->cp_tr;
+  TR = ((choiceptr) REMOTE_end_local_copy(worker_id))->cp_tr;
   if (TR == aux_tr)
     return;
   if (aux_tr < TR){
@@ -250,9 +250,9 @@ RestoreTrail(int worker_p USES_REGS)
   while (TR != aux_tr) {
     CELL aux_cell = TrailTerm(--aux_tr);
     if (IsVarTerm(aux_cell)) {
-      if (aux_cell < LOCAL_start_global_copy || EQUAL_OR_YOUNGER_CP((choiceptr)LOCAL_end_local_copy, (choiceptr)aux_cell)) {
+      if (aux_cell < REMOTE_start_global_copy(worker_id) || EQUAL_OR_YOUNGER_CP((choiceptr)REMOTE_end_local_copy(worker_id), (choiceptr)aux_cell)) {
 	YAPOR_ERROR_CHECKING((CELL *)aux_cell < H0, "RestoreTrail: aux_cell < H0");
-	YAPOR_ERROR_CHECKING((ADDR)aux_cell > LOCAL_LocalBase, "RestoreTrail: aux_cell > LocalBase");
+	YAPOR_ERROR_CHECKING((ADDR)aux_cell > REMOTE_LocalBase(worker_id), "RestoreTrail: aux_cell > LocalBase");
 #ifdef TABLING
         *((CELL *) aux_cell) = TrailVal(aux_tr);
 #else
@@ -263,15 +263,15 @@ RestoreTrail(int worker_p USES_REGS)
     } else if (IsPairTerm(aux_cell)) {
       /* avoid frozen segments */
       aux_cell = (CELL) RepPair(aux_cell);
-      if (IN_BETWEEN(LOCAL_TrailBase, aux_cell, LOCAL_TrailTop)) {
+      if (IN_BETWEEN(REMOTE_TrailBase(worker_id), aux_cell, REMOTE_TrailTop(worker_id))) {
         aux_tr = (tr_fr_ptr) aux_cell;
       }
 #endif /* TABLING */
 #ifdef MULTI_ASSIGNMENT_VARIABLES
     } else if (IsApplTerm(aux_cell)) {
       CELL *cell_ptr = RepAppl(aux_cell);
-      if (((CELL *)aux_cell < Get_LOCAL_top_cp()->cp_h ||
-	   EQUAL_OR_YOUNGER_CP(Get_LOCAL_top_cp(), (choiceptr)aux_cell)) &&
+      if (((CELL *)aux_cell < Get_REMOTE_top_cp(worker_id)()->cp_h ||
+	   EQUAL_OR_YOUNGER_CP(Get_REMOTE_top_cp(worker_id)(), (choiceptr)aux_cell)) &&
 	  !Yap_lookup_ma_var(cell_ptr PASS_REGS)) {
 	/* first time we found the variable, let's put the new value */
 #ifdef TABLING
@@ -296,7 +296,7 @@ MoveGlobal( USES_REGS1 )
    * cpcellsd(To,From,NOfCells) - copy the cells downwards - in
    * absmi.asm
    */
-   cpcellsd((CELL *)LOCAL_GlobalBase, (CELL *)LOCAL_OldGlobalBase, LOCAL_OldH - (CELL *)LOCAL_OldGlobalBase);
+   cpcellsd((CELL *)REMOTE_GlobalBase(worker_id), (CELL *)REMOTE_OldGlobalBase(worker_id), REMOTE_OldH(worker_id) - (CELL *)REMOTE_OldGlobalBase(worker_id));
 }
 
 static void
@@ -306,7 +306,7 @@ MoveExpandedGlobal( USES_REGS1 )
    * cpcellsd(To,From,NOfCells) - copy the cells downwards - in
    * absmi.asm
    */
-  cpcellsd((CELL *)(LOCAL_GlobalBase+(LOCAL_GDiff-LOCAL_BaseDiff)), (CELL *)LOCAL_GlobalBase, LOCAL_OldH - (CELL *)LOCAL_OldGlobalBase);
+  cpcellsd((CELL *)(REMOTE_GlobalBase(worker_id)+(REMOTE_GDiff(worker_id)-REMOTE_BaseDiff(worker_id))), (CELL *)REMOTE_GlobalBase(worker_id), REMOTE_OldH(worker_id) - (CELL *)REMOTE_OldGlobalBase(worker_id));
 }
 
 static void
@@ -317,9 +317,9 @@ MoveGlobalWithHole( USES_REGS1 )
    * absmi.asm
    */
 #if USE_SYSTEM_MALLOC
-  cpcellsd((CELL *)((char *)LOCAL_GlobalBase+(LOCAL_GDiff0-LOCAL_BaseDiff)), (CELL *)LOCAL_GlobalBase, LOCAL_OldH - (CELL *)LOCAL_OldGlobalBase);
+  cpcellsd((CELL *)((char *)REMOTE_GlobalBase(worker_id)+(REMOTE_GDiff0(worker_id)-REMOTE_BaseDiff(worker_id))), (CELL *)REMOTE_GlobalBase(worker_id), REMOTE_OldH(worker_id) - (CELL *)REMOTE_OldGlobalBase(worker_id));
 #else
-  cpcellsd((CELL *)((char *)LOCAL_OldGlobalBase+LOCAL_GDiff0), (CELL *)LOCAL_OldGlobalBase, LOCAL_OldH - (CELL *)LOCAL_OldGlobalBase);
+  cpcellsd((CELL *)((char *)REMOTE_OldGlobalBase(worker_id)+REMOTE_GDiff0(worker_id)), (CELL *)REMOTE_OldGlobalBase(worker_id), REMOTE_OldH(worker_id) - (CELL *)REMOTE_OldGlobalBase(worker_id));
 #endif
 }
 
@@ -330,8 +330,8 @@ MoveHalfGlobal(CELL *OldPt, size_t request USES_REGS)
 	 * cpcellsd(To,From,NOfCells) - copy the cells downwards - in
 	 * absmi.asm
 	 */
-  UInt diff = LOCAL_OldH-OldPt;
-  CELL *IntPt = (CELL *)((char*)OldPt+LOCAL_GDiff0);
+  UInt diff = REMOTE_OldH(worker_id)-OldPt;
+  CELL *IntPt = (CELL *)((char*)OldPt+REMOTE_GDiff0(worker_id));
   CELL *NewPt = IntPt+request/sizeof(CELL);
   cpcellsd(NewPt, IntPt, diff);
 }
@@ -376,12 +376,12 @@ AdjustPair(register CELL t0 USES_REGS)
 static void
 AdjustTrail(bool adjusting_heap, bool thread_copying USES_REGS)
 {
-  volatile tr_fr_ptr ptt, tr_base = (tr_fr_ptr)LOCAL_TrailBase;
+  volatile tr_fr_ptr ptt, tr_base = (tr_fr_ptr)REMOTE_TrailBase(worker_id);
 
 #if defined(YAPOR_THREADS)
   if (thread_copying == STACK_INCREMENTAL_COPYING) {
-    ptt =  (tr_fr_ptr)(LOCAL_end_trail_copy);
-    tr_base =  (tr_fr_ptr)(LOCAL_start_trail_copy);
+    ptt =  (tr_fr_ptr)(REMOTE_end_trail_copy(worker_id));
+    tr_base =  (tr_fr_ptr)(REMOTE_start_trail_copy(worker_id));
   } else {
 #endif
     ptt = TR;
@@ -437,7 +437,7 @@ fixPointerCells(CELL *pt, CELL *pt_bot, bool thread_copying USES_REGS)
   while (pt > pt_bot) {
     CELL reg = *--pt;
     //    if (pt-pt_bot> 4300 && pt-pt_bot < 4500)
-    //  printf("%d %d %lx\n", pt-pt_bot, pt-LOCAL_GSplit, reg);
+    //  printf("%d %d %lx\n", pt-pt_bot, pt-REMOTE_GSplit(worker_id), reg);
     if (IsVarTerm(reg)) {
       if (IsOldLocal(reg))
 	*pt = LocalAdjust(reg);
@@ -461,8 +461,8 @@ fixPointerCells(CELL *pt, CELL *pt_bot, bool thread_copying USES_REGS)
 static void
 AdjustSlots(bool thread_copying USES_REGS)
 {
-  CELL *pt = LOCAL_SlotBase+LOCAL_CurSlot;
-  CELL *pt_bot = LOCAL_SlotBase;
+  CELL *pt = REMOTE_SlotBase(worker_id)+REMOTE_CurSlot(worker_id);
+  CELL *pt_bot = REMOTE_SlotBase(worker_id);
   fixPointerCells( pt, pt_bot, thread_copying PASS_REGS);
 }
 
@@ -474,8 +474,8 @@ AdjustLocal(bool thread_copying USES_REGS)
   /* Adjusting the local */
 #if defined(YAPOR_THREADS)
   if (thread_copying == STACK_INCREMENTAL_COPYING) {
-    pt =  (CELL *) (LOCAL_end_local_copy);
-    pt_bot =  (CELL *) (LOCAL_start_local_copy);
+    pt =  (CELL *) (REMOTE_end_local_copy(worker_id));
+    pt_bot =  (CELL *) (REMOTE_start_local_copy(worker_id));
   } else {
 #endif
     pt = LCL0;
@@ -512,9 +512,9 @@ static void
 AdjustGlobal(Int sz, bool thread_copying USES_REGS)
 {
   CELL *pt, *pt_max;
-  ArrayEntry *al = LOCAL_DynamicArrays;
-  StaticArrayEntry *sal = LOCAL_StaticArrays;
-  GlobalEntry *gl = LOCAL_GlobalVariables;
+  ArrayEntry *al = REMOTE_DynamicArrays(worker_id);
+  StaticArrayEntry *sal = REMOTE_StaticArrays(worker_id);
+  GlobalEntry *gl = REMOTE_GlobalVariables(worker_id);
 
   while (al) {
     al->ValueOfVE = AdjustGlobTerm(al->ValueOfVE PASS_REGS);
@@ -547,8 +547,8 @@ AdjustGlobal(Int sz, bool thread_copying USES_REGS)
    */
 #if defined(YAPOR_THREADS)
   if (thread_copying == STACK_INCREMENTAL_COPYING) {
-    pt =  (CELL *) (LOCAL_start_global_copy);
-    pt_max =  (CELL *) (LOCAL_end_global_copy);
+    pt =  (CELL *) (REMOTE_start_global_copy(worker_id));
+    pt_max =  (CELL *) (REMOTE_end_global_copy(worker_id));
   } else {
 #endif
     pt = H0;
@@ -729,27 +729,27 @@ static_growheap(size_t esize, bool fix_code, struct intermediates *cip USES_REGS
   if (size < YAP_ALLOC_SIZE)
     size = YAP_ALLOC_SIZE;
   size = AdjustPageSize(size);
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   if (!Yap_ExtendWorkSpace(size)) {
-    Int min_size = AdjustPageSize(((CELL)LOCAL_TrailTop-(CELL)LOCAL_GlobalBase)+MinHeapGap);
+    Int min_size = AdjustPageSize(((CELL)REMOTE_TrailTop(worker_id)-(CELL)REMOTE_GlobalBase(worker_id))+MinHeapGap);
 
-    LOCAL_ErrorMessage = NULL;
+    REMOTE_ActiveError(worker_id)->errorMsg = NULL;
     if (size < min_size) size = min_size;
     minimal_request = size;
     size = Yap_ExtendWorkSpaceThroughHole(size);
     if (size < 0) {
-      LOCAL_ErrorMessage = "Database crashed against Stacks";
+      REMOTE_ActiveError(worker_id)->errorMsg = "Database crashed against Stacks";
       return FALSE;
     }
   }
   start_growth_time = Yap_cputime();
   gc_verbose = Yap_is_gc_verbose();
-  LOCAL_heap_overflows++;
+  REMOTE_heap_overflows(worker_id)++;
   if (gc_verbose) {
 #if  defined(YAPOR_THREADS)
     fprintf( stderr, "%% Worker Id %d:\n", worker_id);
 #endif
-    fprintf( stderr, "%% Database Overflow %d\n", LOCAL_heap_overflows);
+    fprintf( stderr, "%% Database Overflow %d\n", REMOTE_heap_overflows(worker_id));
     fprintf( stderr, "%%   growing the heap " Int_FORMAT " bytes\n", size);
   }
   /* CreepFlag is set to force heap expansion */
@@ -757,17 +757,17 @@ static_growheap(size_t esize, bool fix_code, struct intermediates *cip USES_REGS
     CalculateStackGap( PASS_REGS1 );
   }
   ASP -= 256;
-  LOCAL_TrDiff = LOCAL_LDiff = LOCAL_GDiff = LOCAL_GDiff0 = LOCAL_DelayDiff = LOCAL_BaseDiff = size;
-  LOCAL_XDiff = LOCAL_HDiff = 0;
-  LOCAL_GSplit = NULL;
+  REMOTE_TrDiff(worker_id) = REMOTE_LDiff(worker_id) = REMOTE_GDiff(worker_id) = REMOTE_GDiff0(worker_id) = REMOTE_DelayDiff(worker_id) = REMOTE_BaseDiff(worker_id) = size;
+  REMOTE_XDiff(worker_id) = REMOTE_HDiff(worker_id) = 0;
+  REMOTE_GSplit(worker_id) = NULL;
   YAPEnterCriticalSection();
   SetHeapRegs(FALSE PASS_REGS);
   MoveLocalAndTrail( PASS_REGS1 );
   if (fix_code) {
-    CELL *SaveOldH = LOCAL_OldH;
-    LOCAL_OldH = (CELL *)cip->freep;
+    CELL *SaveOldH = REMOTE_OldH(worker_id);
+    REMOTE_OldH(worker_id) = (CELL *)cip->freep;
     MoveGlobal( PASS_REGS1 );
-    LOCAL_OldH = SaveOldH;
+    REMOTE_OldH(worker_id) = SaveOldH;
   } else {
     MoveGlobal( PASS_REGS1 );
   }
@@ -778,31 +778,32 @@ static_growheap(size_t esize, bool fix_code, struct intermediates *cip USES_REGS
     Yap_AllocHole(minimal_request, size);
   YAPLeaveCriticalSection();
   growth_time = Yap_cputime()-start_growth_time;
-  LOCAL_total_heap_overflow_time += growth_time;
+  REMOTE_total_heap_overflow_time(worker_id) += growth_time;
   if (gc_verbose) {
     fprintf(stderr, "%%   took %g sec\n", (double)growth_time/1000);
-    fprintf(stderr, "%% Total of %g sec expanding Database\n", (double)LOCAL_total_heap_overflow_time/1000);
+    fprintf(stderr, "%% Total of %g sec expanding Database\n", (double)REMOTE_total_heap_overflow_time(worker_id)/1000);
   }
   return(TRUE);
 }
 
 static size_t expand_stacks( size_t *minimal_requestp, size_t request) {
+    CACHE_REGS
     if (request < YAP_ALLOC_SIZE)
         request = YAP_ALLOC_SIZE;
     request = AdjustPageSize(request);
     if (!GLOBAL_AllowGlobalExpansion) {
-        LOCAL_ErrorMessage = "Global Stack crashed against Local Stack";
+        REMOTE_ActiveError(worker_id)->errorMsg = "Global Stack crashed against Local Stack";
         LeaveGrowMode(GrowStackMode);
         return 0;
     }
     if (!GLOBAL_AllowGlobalExpansion || !Yap_ExtendWorkSpace(request)) {
 /* always fails when using malloc */
-        LOCAL_ErrorMessage = NULL;
-        request += AdjustPageSize(((CELL) LOCAL_TrailTop - (CELL) LOCAL_GlobalBase) + MinHeapGap);
+        REMOTE_ActiveError(worker_id)->errorMsg = NULL;
+        request += AdjustPageSize(((CELL) REMOTE_TrailTop(worker_id) - (CELL) REMOTE_GlobalBase(worker_id)) + MinHeapGap);
         *minimal_requestp = request;
         request = Yap_ExtendWorkSpaceThroughHole(request);
         if (request < 0) {
-            LOCAL_ErrorMessage = "Global Stack crashed against Local Stack";
+            REMOTE_ActiveError(worker_id)->errorMsg = "Global Stack crashed against Local Stack";
             LeaveGrowMode(GrowStackMode);
             return 0;
         }
@@ -812,26 +813,28 @@ static size_t expand_stacks( size_t *minimal_requestp, size_t request) {
 
 static void
 adjust_stack_ptrs(size_t request, size_t minimal_request, ADDR old_GlobalBase ) {
+    CACHE_REGS
 /* we got over a hole */
     if (minimal_request) {
 /* we require a realloc */
-        LOCAL_BaseDiff = request + ((CELL) LOCAL_TrailTop - (CELL) LOCAL_GlobalBase) - minimal_request;
-        LOCAL_LDiff = LOCAL_TrDiff = request;
+        REMOTE_BaseDiff(worker_id) = request + ((CELL) REMOTE_TrailTop(worker_id) - (CELL) REMOTE_GlobalBase(worker_id)) - minimal_request;
+        REMOTE_LDiff(worker_id) = REMOTE_TrDiff(worker_id) = request;
     } else {
 /* we may still have an overflow */
-        LOCAL_BaseDiff = LOCAL_GlobalBase - old_GlobalBase;
+        REMOTE_BaseDiff(worker_id) = REMOTE_GlobalBase(worker_id) - old_GlobalBase;
 /* if we grow, we need to move the stacks */
-        LOCAL_LDiff = LOCAL_TrDiff = LOCAL_BaseDiff + request;
+        REMOTE_LDiff(worker_id) = REMOTE_TrDiff(worker_id) = REMOTE_BaseDiff(worker_id) + request;
     }
 }
 
 static void stack_msg_in(CELL *hsplit, size_t request) {
+    CACHE_REGS
     char *vb_msg2 = "";
     vb_msg2 = "NB variable overflow ";
 #if  defined(YAPOR_THREADS)
     fprintf(stderr, "%% Worker Id %d:\n", worker_id);
 #endif
-    fprintf(stderr, "%% %s Overflow %d\n", vb_msg2, LOCAL_delay_overflows++);
+    fprintf(stderr, "%% %s Overflow %d\n", vb_msg2, REMOTE_delay_overflows(worker_id)++);
     fprintf(stderr, "%% Growing the stacks " UInt_FORMAT " bytes\n", request);
 }
 
@@ -842,7 +845,7 @@ static_growglobal(size_t request, CELL **ptr, CELL *hsplit USES_REGS)
 {
   UInt start_growth_time, growth_time;
   int gc_verbose;
-  ADDR old_GlobalBase = LOCAL_GlobalBase;
+  ADDR old_GlobalBase = REMOTE_GlobalBase(worker_id);
   UInt minimal_request = 0L;
   Int size = request/sizeof(CELL);
   bool do_grow = true;
@@ -869,8 +872,8 @@ static_growglobal(size_t request, CELL **ptr, CELL *hsplit USES_REGS)
   }
 
   /* adjust to a multiple of 256) */
-  LOCAL_ErrorMessage = NULL;
-  LOCAL_PrologMode |= GrowStackMode;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
+  REMOTE_PrologMode(worker_id) |= GrowStackMode;
   start_growth_time = Yap_cputime();
 
   if (do_grow) {
@@ -889,27 +892,27 @@ static_growglobal(size_t request, CELL **ptr, CELL *hsplit USES_REGS)
       adjust_stack_ptrs( request,  minimal_request,  old_GlobalBase );
       } else {
     /* stay still */
-    LOCAL_LDiff = LOCAL_TrDiff = 0;
-    LOCAL_BaseDiff = 0;
+    REMOTE_LDiff(worker_id) = REMOTE_TrDiff(worker_id) = 0;
+    REMOTE_BaseDiff(worker_id) = 0;
   }
   /* now, remember we have delay -- global with a hole in delay or a
      hole in global */
   if (!hsplit) {
     if (!do_grow) {
-      LOCAL_GDiff = LOCAL_GDiff0 = request;
+      REMOTE_GDiff(worker_id) = REMOTE_GDiff0(worker_id) = request;
       request = 0L;
     } else {
     /* we want to expand a hole for the delay stack */
-    LOCAL_GDiff = LOCAL_GDiff0 = LOCAL_LDiff;
+    REMOTE_GDiff(worker_id) = REMOTE_GDiff0(worker_id) = REMOTE_LDiff(worker_id);
     }
   } else {
     /* we want to expand a hole for the delay stack */
-    LOCAL_GDiff0 = LOCAL_BaseDiff;
-    LOCAL_GDiff = LOCAL_BaseDiff+request;
+    REMOTE_GDiff0(worker_id) = REMOTE_BaseDiff(worker_id);
+    REMOTE_GDiff(worker_id) = REMOTE_BaseDiff(worker_id)+request;
   }
-  LOCAL_GSplit = hsplit;
-  LOCAL_XDiff = LOCAL_HDiff = 0;
-  LOCAL_GlobalBase = old_GlobalBase;
+  REMOTE_GSplit(worker_id) = hsplit;
+  REMOTE_XDiff(worker_id) = REMOTE_HDiff(worker_id) = 0;
+  REMOTE_GlobalBase(worker_id) = old_GlobalBase;
  SetHeapRegs(FALSE PASS_REGS);
   if (do_grow) {
     MoveLocalAndTrail( PASS_REGS1 );
@@ -922,7 +925,7 @@ static_growglobal(size_t request, CELL **ptr, CELL *hsplit USES_REGS)
     MoveExpandedGlobal( PASS_REGS1 );
   }
   /* don't run through garbage */
-  if (hsplit && (LOCAL_OldH != hsplit)) {
+  if (hsplit && (REMOTE_OldH(worker_id) != hsplit)) {
     AdjustStacksAndTrail(request, FALSE PASS_REGS);
   } else {
     AdjustStacksAndTrail(0, FALSE PASS_REGS);
@@ -940,16 +943,16 @@ static_growglobal(size_t request, CELL **ptr, CELL *hsplit USES_REGS)
     Yap_AllocHole(minimal_request, request);
   }
   growth_time = Yap_cputime()-start_growth_time;
-  LOCAL_total_delay_overflow_time += growth_time;
+  REMOTE_total_delay_overflow_time(worker_id) += growth_time;
   if (gc_verbose) {
     fprintf(stderr, "%% H   took %g sec\n",  (double)growth_time/1000);
-    fprintf(stderr, "%% H Total of %g sec expanding stacks \n", (double)LOCAL_total_delay_overflow_time/1000);
+    fprintf(stderr, "%% H Total of %g sec expanding stacks \n", (double)REMOTE_total_delay_overflow_time(worker_id)/1000);
   }
   LeaveGrowMode(GrowStackMode);
   if (hsplit) {
     return request;
   } else {
-    return LOCAL_GDiff-LOCAL_GDiff0;
+    return REMOTE_GDiff(worker_id)-REMOTE_GDiff0(worker_id);
   }
 }
 
@@ -1157,7 +1160,7 @@ fix_tabling_info( USES_REGS1 )
   struct dependency_frame *df;
   struct subgoal_frame *sg;
 
-  df = LOCAL_top_dep_fr;
+  df = REMOTE_top_dep_fr(worker_id);
   while (df) {
     if (DepFr_backchain_cp(df))
       DepFr_backchain_cp(df) = ChoicePtrAdjust(DepFr_backchain_cp(df));
@@ -1167,7 +1170,7 @@ fix_tabling_info( USES_REGS1 )
       DepFr_cons_cp(df) = ConsumerChoicePtrAdjust(DepFr_cons_cp(df));
     df = DepFr_next(df);
   }
-  sg = LOCAL_top_sg_fr;
+  sg = REMOTE_top_sg_fr(worker_id);
   while (sg) {
     if (SgFr_gen_cp(sg))
       SgFr_gen_cp(sg) = GeneratorChoicePtrAdjust(SgFr_gen_cp(sg));
@@ -1180,7 +1183,7 @@ static int
 do_growheap(int fix_code, UInt in_size, struct intermediates *cip  USES_REGS)
 {
   unsigned long size = sizeof(CELL) * K16;
-  int shift_factor = (LOCAL_heap_overflows > 8 ? 8 : LOCAL_heap_overflows);
+  int shift_factor = (REMOTE_heap_overflows(worker_id) > 8 ? 8 : REMOTE_heap_overflows(worker_id));
   unsigned long sz =  size << shift_factor;
 
   if (sz < in_size) {
@@ -1282,12 +1285,12 @@ growatomtable( USES_REGS1 )
 #endif
       return FALSE;
   }
-  LOCAL_atom_table_overflows ++;
+  REMOTE_atom_table_overflows(worker_id) ++;
   if (gc_verbose) {
 #if  defined(YAPOR_THREADS)
     fprintf(stderr, "%% Worker Id %d:\n", worker_id);
 #endif
-    fprintf(stderr, "%% Atom Table Overflow %d\n", LOCAL_atom_table_overflows );
+    fprintf(stderr, "%% Atom Table Overflow %d\n", REMOTE_atom_table_overflows(worker_id) );
     fprintf(stderr, "%%    growing the atom table to %ld entries\n", (long int)(nsize));
   }
   YAPEnterCriticalSection();
@@ -1298,10 +1301,10 @@ growatomtable( USES_REGS1 )
   AtomHashTableSize = nsize;
   YAPLeaveCriticalSection();
   growth_time = Yap_cputime()-start_growth_time;
-  LOCAL_total_atom_table_overflow_time += growth_time;
+  REMOTE_total_atom_table_overflow_time(worker_id) += growth_time;
   if (gc_verbose) {
     fprintf(stderr, "%%   took %g sec\n", (double)growth_time/1000);
-    fprintf(stderr, "%% Total of %g sec expanding atom table \n", (double)LOCAL_total_atom_table_overflow_time/1000);
+    fprintf(stderr, "%% Total of %g sec expanding atom table \n", (double)REMOTE_total_atom_table_overflow_time(worker_id)/1000);
   }
 #if USE_SYSTEM_MALLOC
   return TRUE;
@@ -1449,7 +1452,7 @@ Yap_locked_growstack(size_t size)
   CACHE_REGS
   int res;
 
-  LOCAL_PrologMode |= GrowStackMode;
+  REMOTE_PrologMode(worker_id) |= GrowStackMode;
   res=growstack(size PASS_REGS);
   LeaveGrowMode(GrowStackMode);
   return res;
@@ -1461,7 +1464,7 @@ Yap_growstack(size_t size)
   CACHE_REGS
   int res;
 
-  LOCAL_PrologMode |= GrowStackMode;
+  REMOTE_PrologMode(worker_id) |= GrowStackMode;
   res=growstack(size PASS_REGS);
   LeaveGrowMode(GrowStackMode);
   return res;
@@ -1473,55 +1476,55 @@ execute_growstack(size_t esize0, bool from_trail, bool in_parser USES_REGS)
   UInt minimal_request = 0L;
   Int size0 = esize0;
   Int size = size0;
-  ADDR old_LOCAL_GlobalBase = LOCAL_GlobalBase;
+  ADDR old_LOCAL_GlobalBase = REMOTE_GlobalBase(worker_id);
 
   if (!GLOBAL_AllowGlobalExpansion) {
-    LOCAL_ErrorMessage = "Database crashed against stacks";
+    REMOTE_ActiveError(worker_id)->errorMsg = "Database crashed against stacks";
     return FALSE;
   }
   if (!Yap_ExtendWorkSpace(size)) {
     /* make sure stacks and trail are contiguous */
 
-    LOCAL_ErrorMessage = NULL;
-    minimal_request = AdjustPageSize(((CELL)LOCAL_TrailTop-(CELL)LOCAL_GlobalBase)+4*MinHeapGap+size0);
+    REMOTE_ActiveError(worker_id)->errorMsg = NULL;
+    minimal_request = AdjustPageSize(((CELL)REMOTE_TrailTop(worker_id)-(CELL)REMOTE_GlobalBase(worker_id))+4*MinHeapGap+size0);
 
     size = Yap_ExtendWorkSpaceThroughHole(minimal_request);
     if (size < 0) {
-      LOCAL_ErrorMessage = "Database crashed against stacks";
+      REMOTE_ActiveError(worker_id)->errorMsg = "Database crashed against stacks";
       return FALSE;
     }
     YAPEnterCriticalSection();
-    LOCAL_GDiff = LOCAL_DelayDiff = LOCAL_BaseDiff = size-size0;
+    REMOTE_GDiff(worker_id) = REMOTE_DelayDiff(worker_id) = REMOTE_BaseDiff(worker_id) = size-size0;
   } else {
     YAPEnterCriticalSection();
-    LOCAL_GDiff = LOCAL_BaseDiff = LOCAL_DelayDiff = LOCAL_GlobalBase-old_LOCAL_GlobalBase;
-    LOCAL_GlobalBase=old_LOCAL_GlobalBase;
+    REMOTE_GDiff(worker_id) = REMOTE_BaseDiff(worker_id) = REMOTE_DelayDiff(worker_id) = REMOTE_GlobalBase(worker_id)-old_LOCAL_GlobalBase;
+    REMOTE_GlobalBase(worker_id)=old_LOCAL_GlobalBase;
   }
-  LOCAL_XDiff = LOCAL_HDiff = 0;
-  LOCAL_GDiff0=LOCAL_GDiff;
+  REMOTE_XDiff(worker_id) = REMOTE_HDiff(worker_id) = 0;
+  REMOTE_GDiff0(worker_id)=REMOTE_GDiff(worker_id);
 #if USE_SYSTEM_MALLOC
   if (from_trail) {
-    LOCAL_TrDiff = LOCAL_LDiff = LOCAL_GDiff;
+    REMOTE_TrDiff(worker_id) = REMOTE_LDiff(worker_id) = REMOTE_GDiff(worker_id);
   } else {
-    LOCAL_TrDiff = LOCAL_LDiff = size+LOCAL_GDiff;
+    REMOTE_TrDiff(worker_id) = REMOTE_LDiff(worker_id) = size+REMOTE_GDiff(worker_id);
   }
 #else
   if (from_trail) {
-    LOCAL_TrDiff = LOCAL_LDiff = size-size0;
+    REMOTE_TrDiff(worker_id) = REMOTE_LDiff(worker_id) = size-size0;
   } else {
-    LOCAL_TrDiff = LOCAL_LDiff = size;
+    REMOTE_TrDiff(worker_id) = REMOTE_LDiff(worker_id) = size;
   }
 #endif
   ASP -= 256;
   SetHeapRegs(FALSE PASS_REGS);
   if (from_trail) {
-    LOCAL_TrailTop += size0;
-    CurrentTrailTop = (tr_fr_ptr)(LOCAL_TrailTop-MinTrailGap);
+    REMOTE_TrailTop(worker_id) += size0;
+    CurrentTrailTop = (tr_fr_ptr)(REMOTE_TrailTop(worker_id)-MinTrailGap);
   }
-  if (LOCAL_LDiff) {
+  if (REMOTE_LDiff(worker_id)) {
     MoveLocalAndTrail( PASS_REGS1 );
   }
-  if (LOCAL_GDiff) {
+  if (REMOTE_GDiff(worker_id)) {
 #if !USE_SYSTEM_MALLOC
     /* That is done by realloc */
     MoveGlobal( PASS_REGS1 );
@@ -1531,7 +1534,7 @@ execute_growstack(size_t esize0, bool from_trail, bool in_parser USES_REGS)
 #ifdef TABLING
     fix_tabling_info( PASS_REGS1 );
 #endif /* TABLING */
-  } else if (LOCAL_LDiff) {
+  } else if (REMOTE_LDiff(worker_id)) {
       AdjustGrowStack( PASS_REGS1 );
  
     AdjustRegs(MaxTemps PASS_REGS);
@@ -1557,28 +1560,28 @@ growstack(size_t size USES_REGS)
   if (size < YAP_ALLOC_SIZE)
     size = YAP_ALLOC_SIZE;
   size = AdjustPageSize(size);
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   start_growth_time = Yap_cputime();
   gc_verbose = Yap_is_gc_verbose();
-  LOCAL_stack_overflows++;
+  REMOTE_stack_overflows(worker_id)++;
   if (gc_verbose) {
 #if  defined(YAPOR) || defined(THREADS)
     fprintf(stderr, "%% Worker Id %d:\n", worker_id);
 #endif
-    fprintf(stderr, "%% Stack Overflow %d\n", LOCAL_stack_overflows);
-    fprintf(stderr, "%%   Global: %8ld cells (%p-%p)\n", (unsigned long int)(HR-(CELL *)LOCAL_GlobalBase),LOCAL_GlobalBase,HR);
+    fprintf(stderr, "%% Stack Overflow %d\n", REMOTE_stack_overflows(worker_id));
+    fprintf(stderr, "%%   Global: %8ld cells (%p-%p)\n", (unsigned long int)(HR-(CELL *)REMOTE_GlobalBase(worker_id)),REMOTE_GlobalBase(worker_id),HR);
     fprintf(stderr, "%%   Local:%8ld cells (%p-%p)\n", (unsigned long int)(LCL0-ASP),LCL0,ASP);
     fprintf(stderr, "%%   Trail:%8ld cells (%p-%p)\n",
-	       (unsigned long int)(TR-(tr_fr_ptr)LOCAL_TrailBase),LOCAL_TrailBase,TR);
+	       (unsigned long int)(TR-(tr_fr_ptr)REMOTE_TrailBase(worker_id)),REMOTE_TrailBase(worker_id),TR);
     fprintf(stderr, "%% Growing the stacks " UInt_FORMAT " bytes\n", (UInt) size);
   }
   if (!execute_growstack(size, FALSE, FALSE PASS_REGS))
     return FALSE;
   growth_time = Yap_cputime()-start_growth_time;
-  LOCAL_total_stack_overflow_time += growth_time;
+  REMOTE_total_stack_overflow_time(worker_id) += growth_time;
   if (gc_verbose) {
     fprintf(stderr, "%%   took %g sec\n", (double)growth_time/1000);
-    fprintf(stderr, "%% Total of %g sec expanding stacks \n", (double)LOCAL_total_stack_overflow_time/1000);
+    fprintf(stderr, "%% Total of %g sec expanding stacks \n", (double)REMOTE_total_stack_overflow_time(worker_id)/1000);
   }
   return TRUE;
 }
@@ -1592,22 +1595,22 @@ Yap_growstack_in_parser(void)
   UInt start_growth_time, growth_time;
   bool gc_verbose;
 
-  LOCAL_PrologMode |= GrowStackMode;
+  REMOTE_PrologMode(worker_id) |= GrowStackMode;
   /* adjust to a multiple of 256) */
-  size = AdjustPageSize((ADDR)LCL0-LOCAL_GlobalBase);
-  LOCAL_ErrorMessage = NULL;
+  size = AdjustPageSize((ADDR)LCL0-REMOTE_GlobalBase(worker_id));
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   start_growth_time = Yap_cputime();
   gc_verbose = Yap_is_gc_verbose();
-  LOCAL_stack_overflows++;
+  REMOTE_stack_overflows(worker_id)++;
   if (gc_verbose) {
 #if  defined(YAPOR) || defined(THREADS)
     fprintf(stderr, "%% Worker Id %d:\n", worker_id);
 #endif
-    fprintf(stderr, "%% Stack Overflow %d\n", LOCAL_stack_overflows);
-    fprintf(stderr, "%%   Global: %8ld cells (%p-%p)\n", (unsigned long int)(HR-(CELL *)LOCAL_GlobalBase),LOCAL_GlobalBase,HR);
+    fprintf(stderr, "%% Stack Overflow %d\n", REMOTE_stack_overflows(worker_id));
+    fprintf(stderr, "%%   Global: %8ld cells (%p-%p)\n", (unsigned long int)(HR-(CELL *)REMOTE_GlobalBase(worker_id)),REMOTE_GlobalBase(worker_id),HR);
     fprintf(stderr, "%%   Local:%8ld cells (%p-%p)\n", (unsigned long int)(LCL0-ASP),LCL0,ASP);
     fprintf(stderr, "%%   Trail:%8ld cells (%p-%p)\n",
-	       (unsigned long int)(TR-(tr_fr_ptr)LOCAL_TrailBase),LOCAL_TrailBase,TR);
+	       (unsigned long int)(TR-(tr_fr_ptr)REMOTE_TrailBase(worker_id)),REMOTE_TrailBase(worker_id),TR);
     fprintf(stderr, "%% Growing the stacks %ld bytes\n", (unsigned long int)size);
   }
   if (!execute_growstack(size, FALSE, TRUE PASS_REGS)) {
@@ -1615,10 +1618,10 @@ Yap_growstack_in_parser(void)
     return FALSE;
   }
   growth_time = Yap_cputime()-start_growth_time;
-  LOCAL_total_stack_overflow_time += growth_time;
+  REMOTE_total_stack_overflow_time(worker_id) += growth_time;
   if (gc_verbose) {
     fprintf(stderr, "%%   took %g sec\n", (double)growth_time/1000);
-    fprintf(stderr, "%% Total of %g sec expanding stacks \n", (double)LOCAL_total_stack_overflow_time/1000);
+    fprintf(stderr, "%% Total of %g sec expanding stacks \n", (double)REMOTE_total_stack_overflow_time(worker_id)/1000);
   }
   LeaveGrowMode(GrowStackMode);
   return TRUE;
@@ -1637,7 +1640,7 @@ static int do_growtrail(size_t esize, bool contiguous_only, bool in_parser USES_
 #endif
   /* at least 64K for trail */
   if (!size)
-    size = ((ADDR)TR-LOCAL_TrailBase);
+    size = ((ADDR)TR-REMOTE_TrailBase(worker_id));
   size *= 2;
   if (size < YAP_ALLOC_SIZE)
     size = YAP_ALLOC_SIZE;
@@ -1647,23 +1650,23 @@ static int do_growtrail(size_t esize, bool contiguous_only, bool in_parser USES_
     size=size0;
   /* adjust to a multiple of 256) */
   size = AdjustPageSize(size);
-  LOCAL_trail_overflows++;
+  REMOTE_trail_overflows(worker_id)++;
   if (gc_verbose) {
 #if defined(YAPOR) || defined(THREADS)
     fprintf(stderr, "%% Worker Id %d:\n", worker_id);
 #endif
-    fprintf(stderr, "%% Trail Overflow %d\n", LOCAL_trail_overflows);
+    fprintf(stderr, "%% Trail Overflow %d\n", REMOTE_trail_overflows(worker_id));
 #if USE_SYSTEM_MALLOC
-    fprintf(stderr, "%%  Heap: %8ld cells (%p-%p)\n", (unsigned long int)(HR-(CELL *)LOCAL_GlobalBase),(CELL *)LOCAL_GlobalBase,HR);
+    fprintf(stderr, "%%  Heap: %8ld cells (%p-%p)\n", (unsigned long int)(HR-(CELL *)REMOTE_GlobalBase(worker_id)),(CELL *)REMOTE_GlobalBase(worker_id),HR);
     fprintf(stderr, "%%  Local:%8ld cells (%p-%p)\n", (unsigned long int)(LCL0-ASP),LCL0,ASP);
     fprintf(stderr, "%%  Trail:%8ld cells (%p-%p)\n",
-	       (unsigned long int)(TR-(tr_fr_ptr)LOCAL_TrailBase),LOCAL_TrailBase,TR);
+	       (unsigned long int)(TR-(tr_fr_ptr)REMOTE_TrailBase(worker_id)),REMOTE_TrailBase(worker_id),TR);
 #endif
     fprintf(stderr, "%% growing the trail " UInt_FORMAT " bytes\n", size);
   }
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
   if (!GLOBAL_AllowTrailExpansion) {
-    LOCAL_ErrorMessage = "Trail Overflow";
+    REMOTE_ActiveError(worker_id)->errorMsg = "Trail Overflow";
     return FALSE;
   }
 #if USE_SYSTEM_MALLOC
@@ -1672,28 +1675,28 @@ static int do_growtrail(size_t esize, bool contiguous_only, bool in_parser USES_
   YAPEnterCriticalSection();
   if (!Yap_ExtendWorkSpace(size)) {
     YAPLeaveCriticalSection();
-    LOCAL_ErrorMessage = NULL;
+    REMOTE_ActiveError(worker_id)->errorMsg = NULL;
     if (contiguous_only) {
       /* I can't expand in this case */
-      LOCAL_trail_overflows--;
+      REMOTE_trail_overflows(worker_id)--;
       return FALSE;
     }
     execute_growstack(size, TRUE, in_parser PASS_REGS);
   } else {
     if (in_parser) {
-      LOCAL_TrDiff = LOCAL_LDiff = LOCAL_GDiff = LOCAL_BaseDiff = LOCAL_DelayDiff = LOCAL_XDiff = LOCAL_HDiff = LOCAL_GDiff0 = 0;
+      REMOTE_TrDiff(worker_id) = REMOTE_LDiff(worker_id) = REMOTE_GDiff(worker_id) = REMOTE_BaseDiff(worker_id) = REMOTE_DelayDiff(worker_id) = REMOTE_XDiff(worker_id) = REMOTE_HDiff(worker_id) = REMOTE_GDiff0(worker_id) = 0;
       AdjustScannerStacks(tksp, vep PASS_REGS);
     }
-    LOCAL_TrailTop += size;
-    CurrentTrailTop = (tr_fr_ptr)(LOCAL_TrailTop-MinTrailGap);
+    REMOTE_TrailTop(worker_id) += size;
+    CurrentTrailTop = (tr_fr_ptr)(REMOTE_TrailTop(worker_id)-MinTrailGap);
     YAPLeaveCriticalSection();
   }
 #endif
   growth_time = Yap_cputime()-start_growth_time;
-  LOCAL_total_trail_overflow_time += growth_time;
+  REMOTE_total_trail_overflow_time(worker_id) += growth_time;
   if (gc_verbose) {
     fprintf(stderr, "%%  took %g sec\n", (double)growth_time/1000);
-    fprintf(stderr, "%% Total of %g sec expanding trail \n", (double)LOCAL_total_trail_overflow_time/1000);
+    fprintf(stderr, "%% Total of %g sec expanding trail \n", (double)REMOTE_total_trail_overflow_time(worker_id)/1000);
   }
   Yap_get_signal( YAP_TROVF_SIGNAL );
   return TRUE;
@@ -1770,8 +1773,8 @@ Yap_shift_visit(CELL **to_visit, CELL ***to_visit_maxp, CELL ***to_visit_base)
 static Int
 p_inform_trail_overflows( USES_REGS1 )
 {
-  Term tn = MkIntTerm(LOCAL_trail_overflows);
-  Term tt = MkIntegerTerm(LOCAL_total_trail_overflow_time);
+  Term tn = MkIntTerm(REMOTE_trail_overflows(worker_id));
+  Term tt = MkIntegerTerm(REMOTE_total_trail_overflow_time(worker_id));
 
   return(Yap_unify(tn, ARG1) && Yap_unify(tt, ARG2));
 }
@@ -1800,8 +1803,8 @@ p_growheap( USES_REGS1 )
 static Int
 p_inform_heap_overflows( USES_REGS1 )
 {
-  Term tn = MkIntTerm(LOCAL_heap_overflows);
-  Term tt = MkIntegerTerm(LOCAL_total_heap_overflow_time);
+  Term tn = MkIntTerm(REMOTE_heap_overflows(worker_id));
+  Term tt = MkIntegerTerm(REMOTE_total_heap_overflow_time(worker_id));
 
   return(Yap_unify(tn, ARG1) && Yap_unify(tt, ARG2));
 }
@@ -1829,58 +1832,58 @@ Yap_CopyThreadStacks(int worker_q, int worker_p, bool incremental)
     }
     start_growth_time = Yap_cputime();
     gc_verbose = Yap_is_gc_verbose();
-    LOCAL_stack_overflows++;
+    REMOTE_stack_overflows(worker_id)++;
     if (gc_verbose) {
 #if  defined(YAPOR) || defined(THREADS)
       fprintf(stderr, "%% Worker Id %d:\n", worker_id);
 #endif
-      fprintf(stderr, "%% Stack Overflow %d\n", LOCAL_stack_overflows);
-      fprintf(stderr, "%%   Stack: %8ld cells (%p-%p)\n", (unsigned long int)(LCL0-(CELL *)LOCAL_GlobalBase),LOCAL_GlobalBase,LCL0);
+      fprintf(stderr, "%% Stack Overflow %d\n", REMOTE_stack_overflows(worker_id));
+      fprintf(stderr, "%%   Stack: %8ld cells (%p-%p)\n", (unsigned long int)(LCL0-(CELL *)REMOTE_GlobalBase(worker_id)),REMOTE_GlobalBase(worker_id),LCL0);
       fprintf(stderr, "%%   Trail:%8ld cells (%p-%p)\n",
-	      (unsigned long int)(TR-(tr_fr_ptr)LOCAL_TrailBase),LOCAL_TrailBase,TR);
+	      (unsigned long int)(TR-(tr_fr_ptr)REMOTE_TrailBase(worker_id)),REMOTE_TrailBase(worker_id),TR);
       fprintf(stderr, "%% Growing the stacks %ld bytes\n", diff);
     }
-    LOCAL_GDiff = LOCAL_GDiff0 = LOCAL_DelayDiff = LOCAL_BaseDiff = (newq-oldq);
-    LOCAL_TrDiff = LOCAL_LDiff = diff + LOCAL_GDiff;
-    LOCAL_XDiff = LOCAL_HDiff = 0;
-    LOCAL_GSplit = NULL;
+    REMOTE_GDiff(worker_id) = REMOTE_GDiff0(worker_id) = REMOTE_DelayDiff(worker_id) = REMOTE_BaseDiff(worker_id) = (newq-oldq);
+    REMOTE_TrDiff(worker_id) = REMOTE_LDiff(worker_id) = diff + REMOTE_GDiff(worker_id);
+    REMOTE_XDiff(worker_id) = REMOTE_HDiff(worker_id) = 0;
+    REMOTE_GSplit(worker_id) = NULL;
     YAPEnterCriticalSection();
     SetHeapRegs(FALSE PASS_REGS);
     {
         choiceptr imageB;
 
-	LOCAL_OldLCL0 = LCL0;
+	REMOTE_OldLCL0(worker_id) = LCL0;
 	LCL0 = REMOTE_ThreadHandle(0).current_yaam_regs->LCL0_;
 	imageB = Get_GLOBAL_root_cp();
 	/* we know B */
 	B->cp_tr = TR =
-	  (tr_fr_ptr)((CELL)(imageB->cp_tr)+((CELL)LOCAL_OldLCL0-(CELL)LCL0));
-	LCL0 = LOCAL_OldLCL0;
+	  (tr_fr_ptr)((CELL)(imageB->cp_tr)+((CELL)REMOTE_OldLCL0(worker_id)-(CELL)LCL0));
+	LCL0 = REMOTE_OldLCL0(worker_id);
 	B->cp_h = H0;
 	B->cp_ap = GETWORK;
 	B->cp_or_fr = GLOBAL_root_or_fr;
     }
     YAPLeaveCriticalSection();
     growth_time = Yap_cputime()-start_growth_time;
-    LOCAL_total_stack_overflow_time += growth_time;
+    REMOTE_total_stack_overflow_time(worker_id) += growth_time;
     if (gc_verbose) {
       fprintf(stderr, "%%   took %g sec\n", (double)growth_time/1000);
-      fprintf(stderr, "%% Total of %g sec expanding stacks \n", (double)LOCAL_total_stack_overflow_time/1000);
+      fprintf(stderr, "%% Total of %g sec expanding stacks \n", (double)REMOTE_total_stack_overflow_time(worker_id)/1000);
     }
   }
 
   REMOTE_ThreadHandle(worker_q).ssize = REMOTE_ThreadHandle(worker_p).ssize;
   REMOTE_ThreadHandle(worker_q).tsize = REMOTE_ThreadHandle(worker_p).tsize;
   /* compute offset indicators */
-  LOCAL_GlobalBase = REMOTE_GlobalBase(worker_p);
-  LOCAL_LocalBase = REMOTE_LocalBase(worker_p);
-  LOCAL_TrailBase = REMOTE_TrailBase(worker_p);
-  LOCAL_TrailTop = REMOTE_TrailTop(worker_p);
-  CurrentTrailTop = (tr_fr_ptr)(LOCAL_TrailTop-MinTrailGap);
+  REMOTE_GlobalBase(worker_id) = REMOTE_GlobalBase(worker_p);
+  REMOTE_LocalBase(worker_id) = REMOTE_LocalBase(worker_p);
+  REMOTE_TrailBase(worker_id) = REMOTE_TrailBase(worker_p);
+  REMOTE_TrailTop(worker_id) = REMOTE_TrailTop(worker_p);
+  CurrentTrailTop = (tr_fr_ptr)(REMOTE_TrailTop(worker_id)-MinTrailGap);
   size = REMOTE_ThreadHandle(worker_q).stack_address-REMOTE_ThreadHandle(worker_p).stack_address;
-  LOCAL_TrDiff = LOCAL_LDiff = LOCAL_GDiff = LOCAL_GDiff0 = LOCAL_DelayDiff = LOCAL_BaseDiff = size;
-  LOCAL_XDiff = LOCAL_HDiff = 0;
-  LOCAL_GSplit = NULL;
+  REMOTE_TrDiff(worker_id) = REMOTE_LDiff(worker_id) = REMOTE_GDiff(worker_id) = REMOTE_GDiff0(worker_id) = REMOTE_DelayDiff(worker_id) = REMOTE_BaseDiff(worker_id) = size;
+  REMOTE_XDiff(worker_id) = REMOTE_HDiff(worker_id) = 0;
+  REMOTE_GSplit(worker_id) = NULL;
   HR = REMOTE_ThreadHandle(worker_p).current_yaam_regs->H_;
   H0 = REMOTE_ThreadHandle(worker_p).current_yaam_regs->H0_;
   B = REMOTE_ThreadHandle(worker_p).current_yaam_regs->B_;
@@ -1892,27 +1895,27 @@ Yap_CopyThreadStacks(int worker_q, int worker_p, bool incremental)
     ASP = CellPtr(B);
   LCL0 = REMOTE_ThreadHandle(worker_p).current_yaam_regs->LCL0_;
   Yap_REGS.CUT_C_TOP = REMOTE_ThreadHandle(worker_p).current_yaam_regs->CUT_C_TOP;
-  LOCAL_DynamicArrays = NULL;
-  LOCAL_StaticArrays = NULL;
-  LOCAL_GlobalVariables = NULL;
+  REMOTE_DynamicArrays(worker_id) = NULL;
+  REMOTE_StaticArrays(worker_id) = NULL;
+  REMOTE_GlobalVariables(worker_id) = NULL;
   SetHeapRegs(TRUE PASS_REGS);
   if (incremental) {
     IncrementalCopyStacksFromWorker( PASS_REGS1 );
-    LOCAL_start_global_copy =
-      (CELL)PtoGloAdjust((CELL *)LOCAL_start_global_copy);
-    LOCAL_end_global_copy =
-      (CELL)PtoGloAdjust((CELL *)LOCAL_end_global_copy);
-    LOCAL_start_local_copy =
-      (CELL)PtoLocAdjust((CELL *)LOCAL_start_local_copy);
-    LOCAL_end_local_copy =
-      (CELL)PtoLocAdjust((CELL *)LOCAL_end_local_copy);
-    LOCAL_start_trail_copy =
-      (CELL)PtoTRAdjust((tr_fr_ptr)LOCAL_start_trail_copy);
-    LOCAL_end_trail_copy =
-      (CELL)PtoTRAdjust((tr_fr_ptr)LOCAL_end_trail_copy);
+    REMOTE_start_global_copy(worker_id) =
+      (CELL)PtoGloAdjust((CELL *)REMOTE_start_global_copy(worker_id));
+    REMOTE_end_global_copy(worker_id) =
+      (CELL)PtoGloAdjust((CELL *)REMOTE_end_global_copy(worker_id));
+    REMOTE_start_local_copy(worker_id) =
+      (CELL)PtoLocAdjust((CELL *)REMOTE_start_local_copy(worker_id));
+    REMOTE_end_local_copy(worker_id) =
+      (CELL)PtoLocAdjust((CELL *)REMOTE_end_local_copy(worker_id));
+    REMOTE_start_trail_copy(worker_id) =
+      (CELL)PtoTRAdjust((tr_fr_ptr)REMOTE_start_trail_copy(worker_id));
+    REMOTE_end_trail_copy(worker_id) =
+      (CELL)PtoTRAdjust((tr_fr_ptr)REMOTE_end_trail_copy(worker_id));
     AdjustStacksAndTrail(0, STACK_INCREMENTAL_COPYING PASS_REGS);
     RestoreTrail(worker_p PASS_REGS);
-    TR = (tr_fr_ptr) LOCAL_end_trail_copy;
+    TR = (tr_fr_ptr) REMOTE_end_trail_copy(worker_id);
   } else {
     CopyLocalAndTrail( PASS_REGS1 );
     MoveGlobal( PASS_REGS1 );
@@ -1945,8 +1948,8 @@ p_growstack( USES_REGS1 )
 static Int
 p_inform_stack_overflows( USES_REGS1 )
 {				/*  */
-  Term tn = MkIntTerm(LOCAL_stack_overflows);
-  Term tt = MkIntegerTerm(LOCAL_total_stack_overflow_time);
+  Term tn = MkIntTerm(REMOTE_stack_overflows(worker_id));
+  Term tt = MkIntegerTerm(REMOTE_total_stack_overflow_time(worker_id));
 
   return(Yap_unify(tn, ARG1) && Yap_unify(tt, ARG2));
 
@@ -1956,9 +1959,9 @@ Int
 Yap_total_stack_shift_time(void)
 {
   CACHE_REGS
-  return(LOCAL_total_heap_overflow_time+
-	 LOCAL_total_stack_overflow_time+
-	 LOCAL_total_trail_overflow_time);
+  return(REMOTE_total_heap_overflow_time(worker_id)+
+	 REMOTE_total_stack_overflow_time(worker_id)+
+	 REMOTE_total_trail_overflow_time(worker_id));
 }
 
 void

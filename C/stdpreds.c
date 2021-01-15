@@ -362,9 +362,9 @@ static Int p_runtime(USES_REGS1) {
   now -= gc_time;
   ss_time = Yap_total_stack_shift_time();
   now -= ss_time;
-  interval -= (gc_time - LOCAL_LastGcTime) + (ss_time - LOCAL_LastSSTime);
-  LOCAL_LastGcTime = gc_time;
-  LOCAL_LastSSTime = ss_time;
+  interval -= (gc_time - REMOTE_LastGcTime(worker_id)) + (ss_time - REMOTE_LastSSTime(worker_id));
+  REMOTE_LastGcTime(worker_id) = gc_time;
+  REMOTE_LastSSTime(worker_id) = ss_time;
   tnow = MkIntegerTerm(now);
   tinterval = MkIntegerTerm(interval);
   return (Yap_unify_constant(ARG1, tnow) &&
@@ -390,7 +390,7 @@ static Int p_walltime(USES_REGS1) {
   uint64_t now, interval;
   uint64_t t = Yap_walltime();
   now = t - Yap_StartOfWTimes;
-  interval = t - LOCAL_LastWTime;
+  interval = t - REMOTE_LastWTime(worker_id);
   return (Yap_unify_constant(ARG1, MkIntegerTerm(now / 1000)) &&
           Yap_unify_constant(ARG2, MkIntegerTerm(interval / 1000)));
 }
@@ -470,7 +470,7 @@ static Int p_univ(USES_REGS1) { /* A =.. L			 */
         /* restore space */
         HR = Ar;
         if (!Yap_gcl((ASP - HR) * sizeof(CELL), 2, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
         twork = TailOfTerm(Deref(ARG2));
@@ -538,7 +538,7 @@ static Int p_univ(USES_REGS1) { /* A =.. L			 */
       twork = Yap_ArrayToList(CellPtr(TR), argno - 1);
       while (IsIntTerm(twork)) {
         if (!Yap_gc(2, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return (FALSE);
         }
         twork = Yap_ArrayToList(CellPtr(TR), argno - 1);
@@ -548,7 +548,7 @@ static Int p_univ(USES_REGS1) { /* A =.. L			 */
     {
       while (HR + arity * 2 > ASP - 1024) {
         if (!Yap_gcl((arity * 2) * sizeof(CELL), 2, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return (FALSE);
         }
         tin = Deref(ARG1);
@@ -1118,8 +1118,8 @@ void Yap_show_statistics(void) {
   fprintf(
       stderr, "Trail Space: " UInt_FORMAT " (" UInt_FORMAT " used).\n",
       Unsigned(sizeof(tr_fr_ptr) *
-               (Unsigned(LOCAL_TrailTop) - Unsigned(LOCAL_TrailBase))),
-      Unsigned(sizeof(tr_fr_ptr) * (Unsigned(TR) - Unsigned(LOCAL_TrailBase))));
+               (Unsigned(REMOTE_TrailTop(worker_id)) - Unsigned(REMOTE_TrailBase(worker_id)))),
+      Unsigned(sizeof(tr_fr_ptr) * (Unsigned(TR) - Unsigned(REMOTE_TrailBase(worker_id)))));
   fprintf(stderr, "Runtime: " UInt_FORMAT "\n", runtime(PASS_REGS1));
   fprintf(stderr, "Cputime:  " UInt_FORMAT "\n", Yap_cputime());
 
@@ -1142,19 +1142,19 @@ static Int TrailTide = -1, LocalTide = -1, GlobalTide = -1;
 static Int TrailMax(void) {
   CACHE_REGS
   Int i;
-  Int TrWidth = Unsigned(LOCAL_TrailTop) - Unsigned(LOCAL_TrailBase);
+  Int TrWidth = Unsigned(REMOTE_TrailTop(worker_id)) - Unsigned(REMOTE_TrailBase(worker_id));
   CELL *pt;
 
   if (TrailTide != TrWidth) {
     pt = (CELL *)TR;
-    while (pt + 2 < (CELL *)LOCAL_TrailTop) {
+    while (pt + 2 < (CELL *)REMOTE_TrailTop(worker_id)) {
       if (pt[0] == 0 && pt[1] == 0 && pt[2] == 0)
         break;
       else
         pt++;
     }
-    if (pt + 2 < (CELL *)LOCAL_TrailTop)
-      i = Unsigned(pt) - Unsigned(LOCAL_TrailBase);
+    if (pt + 2 < (CELL *)REMOTE_TrailTop(worker_id))
+      i = Unsigned(pt) - Unsigned(REMOTE_TrailBase(worker_id));
     else
       i = TrWidth;
   } else
@@ -1247,12 +1247,12 @@ static Int p_statistics_heap_info(USES_REGS1) {
 #if USE_SYSTEM_MALLOC && HAVE_MALLINFO
   struct mallinfo mi = mallinfo();
 
-  UInt sstack = Yap_HoleSize + (LOCAL_TrailTop - LOCAL_GlobalBase);
+  UInt sstack = Yap_HoleSize + (REMOTE_TrailTop(worker_id) - REMOTE_GlobalBase(worker_id));
   UInt mmax = (mi.arena + mi.hblkhd);
   Term tmax = MkIntegerTerm(mmax - sstack);
   tusage = MkIntegerTerm(mmax - (mi.fordblks + sstack));
 #else
-  Term tmax = MkIntegerTerm((LOCAL_GlobalBase - Yap_HeapBase) - Yap_HoleSize);
+  Term tmax = MkIntegerTerm((REMOTE_GlobalBase(worker_id) - Yap_HeapBase) - Yap_HoleSize);
 #endif
 
   return (Yap_unify(tmax, ARG1) && Yap_unify(tusage, ARG2));
@@ -1269,8 +1269,8 @@ static Int p_statistics_stacks_info(USES_REGS1) {
 
 static Int p_statistics_trail_info(USES_REGS1) {
   Term tmax =
-      MkIntegerTerm(Unsigned(LOCAL_TrailTop) - Unsigned(LOCAL_TrailBase));
-  Term tusage = MkIntegerTerm(Unsigned(TR) - Unsigned(LOCAL_TrailBase));
+      MkIntegerTerm(Unsigned(REMOTE_TrailTop(worker_id)) - Unsigned(REMOTE_TrailBase(worker_id)));
+  Term tusage = MkIntegerTerm(Unsigned(TR) - Unsigned(REMOTE_TrailBase(worker_id)));
 
   return (Yap_unify(tmax, ARG1) && Yap_unify(tusage, ARG2));
 }
@@ -1354,7 +1354,7 @@ static Int p_executable(USES_REGS1) {
 
     Yap_AbsoluteFile(GLOBAL_argv[0], true);
     if (!tmp || tmp[0] == '\0' ) {
-      tmp = Malloc(YAP_FILENAME_MAX + 1);
+      tmp = Malloc(YAP_FILENAME_MAX + 1 PASS_REGS);
       strncpy((char *)tmp, Yap_FindExecutable(), YAP_FILENAME_MAX);
     }
   Atom at = Yap_LookupAtom(tmp);
@@ -1366,16 +1366,16 @@ static Int p_system_mode(USES_REGS1) {
   Term t1 = Deref(ARG1);
 
   if (IsVarTerm(t1)) {
-    if (LOCAL_PrologMode & SystemMode)
+    if (REMOTE_PrologMode(worker_id) & SystemMode)
       return Yap_unify(t1, MkAtomTerm(AtomTrue));
     else
       return Yap_unify(t1, MkAtomTerm(AtomFalse));
   } else {
     Atom at = AtomOfTerm(t1);
     if (at == AtomFalse)
-      LOCAL_PrologMode &= ~SystemMode;
+      REMOTE_PrologMode(worker_id) &= ~SystemMode;
     else
-      LOCAL_PrologMode |= SystemMode;
+      REMOTE_PrologMode(worker_id) |= SystemMode;
   }
   return TRUE;
 }
@@ -1391,16 +1391,16 @@ static Int p_unlock_system(USES_REGS1) {
 }
 
 static Int enter_undefp(USES_REGS1) {
-  if (LOCAL_DoingUndefp) {
+  if (REMOTE_DoingUndefp(worker_id)) {
     return FALSE;
   }
-  LOCAL_DoingUndefp = TRUE;
+  REMOTE_DoingUndefp(worker_id) = TRUE;
   return TRUE;
 }
 
 static Int exit_undefp(USES_REGS1) {
-  if (LOCAL_DoingUndefp) {
-    LOCAL_DoingUndefp = FALSE;
+  if (REMOTE_DoingUndefp(worker_id)) {
+    REMOTE_DoingUndefp(worker_id) = FALSE;
     return TRUE;
   }
   return FALSE;
@@ -1441,11 +1441,11 @@ static Int p_loop(USES_REGS1) {
 static Int p_break(USES_REGS1) {
   Atom at = AtomOfTerm(Deref(ARG1));
   if (at == AtomTrue) {
-    LOCAL_BreakLevel++;
+    REMOTE_BreakLevel(worker_id)++;
     return TRUE;
   }
   if (at == AtomFalse) {
-    LOCAL_BreakLevel--;
+    REMOTE_BreakLevel(worker_id)--;
     return TRUE;
   }
   return FALSE;

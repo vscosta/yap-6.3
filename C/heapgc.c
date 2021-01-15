@@ -96,8 +96,8 @@ typedef struct RB_red_blk_node {
 } rb_red_blk_node;
 
 #ifdef EASY_SHUNTING
-#undef LOCAL_cont_top0
-#define LOCAL_cont_top0 (cont *)LOCAL_sTR
+#undef REMOTE_cont_top0(worker_id)
+#define REMOTE_cont_top0(worker_id) (cont *)REMOTE_sTR(worker_id)
 #endif
 
 /* support for hybrid garbage collection scheme */
@@ -111,53 +111,53 @@ yamop *Yap_gcP(void) {
 
 static void gc_growtrail(int committed, tr_fr_ptr begsTR,
                          cont *old_cont_top0 USES_REGS) {
-  UInt sz = LOCAL_TrailTop - (ADDR)LOCAL_OldTR;
+  UInt sz = REMOTE_TrailTop(worker_id) - (ADDR)REMOTE_OldTR(worker_id);
   /* ask for double the size */
   sz = 2 * sz;
 
   if (!Yap_locked_growtrail(sz, TRUE)) {
 #ifdef EASY_SHUNTING
     if (begsTR) {
-      LOCAL_sTR = (tr_fr_ptr)old_cont_top0;
+      REMOTE_sTR(worker_id) = (tr_fr_ptr)old_cont_top0;
       while (begsTR != NULL) {
         tr_fr_ptr newsTR = (tr_fr_ptr)TrailTerm(begsTR);
-        TrailTerm(LOCAL_sTR) = TrailTerm(begsTR + 1);
-        TrailTerm(LOCAL_sTR + 1) = TrailTerm(begsTR + 2);
+        TrailTerm(REMOTE_sTR(worker_id)) = TrailTerm(begsTR + 1);
+        TrailTerm(REMOTE_sTR(worker_id) + 1) = TrailTerm(begsTR + 2);
         begsTR = newsTR;
-        LOCAL_sTR += 2;
+        REMOTE_sTR(worker_id) += 2;
       }
     }
-    set_conditionals(LOCAL_sTR PASS_REGS);
+    set_conditionals(REMOTE_sTR(worker_id) PASS_REGS);
 #endif
     /* could not find more trail */
     save_machine_regs();
-    siglongjmp(LOCAL_gc_restore, 2);
+    siglongjmp(REMOTE_gc_restore(worker_id), 2);
   }
 }
 
 inline static void PUSH_CONTINUATION(CELL *v, int nof USES_REGS) {
   cont *x;
-  x = LOCAL_cont_top;
+  x = REMOTE_cont_top(worker_id);
   x++;
-  if ((ADDR)x > LOCAL_TrailTop - 1024) {
+  if ((ADDR)x > REMOTE_TrailTop(worker_id) - 1024) {
     gc_growtrail(TRUE, NULL, NULL PASS_REGS);
   }
   x->v = v;
   x->nof = nof;
-  LOCAL_cont_top = x;
+  REMOTE_cont_top(worker_id) = x;
 }
 
 #define POP_CONTINUATION()                                                     \
   {                                                                            \
-    if (LOCAL_cont_top == LOCAL_cont_top0)                                     \
+    if (REMOTE_cont_top(worker_id) == REMOTE_cont_top0(worker_id))                                     \
       return;                                                                  \
     else {                                                                     \
-      int nof = LOCAL_cont_top->nof;                                           \
-      cont *x = LOCAL_cont_top;                                                \
+      int nof = REMOTE_cont_top(worker_id)->nof;                                           \
+      cont *x = REMOTE_cont_top(worker_id);                                                \
                                                                                \
       current = x->v;                                                          \
       if (nof == 1)                                                            \
-        LOCAL_cont_top = --x;                                                  \
+        REMOTE_cont_top(worker_id) = --x;                                                  \
       else {                                                                   \
         x->nof = nof - 1;                                                      \
         x->v = current + 1;                                                    \
@@ -169,27 +169,27 @@ inline static void PUSH_CONTINUATION(CELL *v, int nof USES_REGS) {
 #ifdef HYBRID_SCHEME
 
 inline static void PUSH_POINTER(CELL *v USES_REGS) {
-  if (LOCAL_iptop >= (CELL_PTR *)ASP)
+  if (REMOTE_iptop(worker_id) >= (CELL_PTR *)ASP)
     return;
-  *LOCAL_iptop++ = v;
+  *REMOTE_iptop(worker_id)++ = v;
 }
 
 #ifdef EASY_SHUNTING
 inline static void POP_POINTER(USES_REGS1) {
-  if (LOCAL_iptop >= (CELL_PTR *)ASP)
+  if (REMOTE_iptop(worker_id) >= (CELL_PTR *)ASP)
     return;
-  --LOCAL_iptop;
+  --REMOTE_iptop(worker_id);
 }
 #endif
 
 inline static void POPSWAP_POINTER(CELL_PTR *vp, CELL_PTR v USES_REGS) {
-  if (LOCAL_iptop >= (CELL_PTR *)ASP || LOCAL_iptop == vp)
+  if (REMOTE_iptop(worker_id) >= (CELL_PTR *)ASP || REMOTE_iptop(worker_id) == vp)
     return;
   if (*vp != v)
     return;
-  --LOCAL_iptop;
-  if (vp != LOCAL_iptop)
-    *vp = *LOCAL_iptop;
+  --REMOTE_iptop(worker_id);
+  if (vp != REMOTE_iptop(worker_id))
+    *vp = *REMOTE_iptop(worker_id);
 }
 
 /*
@@ -292,15 +292,15 @@ static inline unsigned int GC_MAVAR_HASH(CELL *addr) {
 }
 
 static inline gc_ma_hash_entry *GC_ALLOC_NEW_MASPACE(USES_REGS1) {
-  gc_ma_hash_entry *new = LOCAL_gc_ma_h_top;
-  if ((char *)LOCAL_gc_ma_h_top > LOCAL_TrailTop - 1024)
+  gc_ma_hash_entry *new = REMOTE_gc_ma_h_top(worker_id);
+  if ((char *)REMOTE_gc_ma_h_top(worker_id) > REMOTE_TrailTop(worker_id) - 1024)
     gc_growtrail(FALSE, NULL, NULL PASS_REGS);
-  LOCAL_gc_ma_h_top++;
-  LOCAL_cont_top = (cont *)LOCAL_gc_ma_h_top;
+  REMOTE_gc_ma_h_top(worker_id)++;
+  REMOTE_cont_top(worker_id) = (cont *)REMOTE_gc_ma_h_top(worker_id);
 #ifdef EASY_SHUNTING
-  LOCAL_sTR = LOCAL_sTR0 = (tr_fr_ptr)LOCAL_cont_top;
+  REMOTE_sTR(worker_id) = REMOTE_sTR0(worker_id) = (tr_fr_ptr)REMOTE_cont_top(worker_id);
 #else
-  LOCAL_cont_top0 = LOCAL_cont_top;
+  REMOTE_cont_top0(worker_id) = REMOTE_cont_top(worker_id);
 #endif
   return new;
 }
@@ -310,18 +310,18 @@ static inline gc_ma_hash_entry *gc_lookup_ma_var(CELL *addr,
   unsigned int i = GC_MAVAR_HASH(addr);
   gc_ma_hash_entry *nptr, *optr = NULL;
 
-  if (LOCAL_gc_ma_hash_table[i].timestmp != LOCAL_gc_timestamp) {
-    LOCAL_gc_ma_hash_table[i].timestmp = LOCAL_gc_timestamp;
-    LOCAL_gc_ma_hash_table[i].addr = addr;
+  if (REMOTE_gc_ma_hash_table(worker_id)[i].timestmp != REMOTE_gc_timestamp(worker_id)) {
+    REMOTE_gc_ma_hash_table(worker_id)[i].timestmp = REMOTE_gc_timestamp(worker_id);
+    REMOTE_gc_ma_hash_table(worker_id)[i].addr = addr;
 #if TABLING
-    LOCAL_gc_ma_hash_table[i].loc = trp;
-    LOCAL_gc_ma_hash_table[i].more = LOCAL_gc_ma_h_list;
-    LOCAL_gc_ma_h_list = LOCAL_gc_ma_hash_table + i;
+    REMOTE_gc_ma_hash_table(worker_id)[i].loc = trp;
+    REMOTE_gc_ma_hash_table(worker_id)[i].more = REMOTE_gc_ma_h_list(worker_id);
+    REMOTE_gc_ma_h_list(worker_id) = REMOTE_gc_ma_hash_table(worker_id) + i;
 #endif /* TABLING */
-    LOCAL_gc_ma_hash_table[i].next = NULL;
+    REMOTE_gc_ma_hash_table(worker_id)[i].next = NULL;
     return NULL;
   }
-  nptr = LOCAL_gc_ma_hash_table + i;
+  nptr = REMOTE_gc_ma_hash_table(worker_id) + i;
   while (nptr) {
     optr = nptr;
     if (nptr->addr == addr) {
@@ -341,31 +341,31 @@ static inline gc_ma_hash_entry *gc_lookup_ma_var(CELL *addr,
   nptr->addr = addr;
 #if TABLING
   nptr->loc = trp;
-  nptr->more = LOCAL_gc_ma_h_list;
+  nptr->more = REMOTE_gc_ma_h_list(worker_id);
 #endif /* TABLING */
   nptr->next = NULL;
-  LOCAL_gc_ma_h_list = nptr;
+  REMOTE_gc_ma_h_list(worker_id) = nptr;
   return NULL;
 }
 
 static inline void GC_NEW_MAHASH(gc_ma_hash_entry *top USES_REGS) {
-  UInt time = ++LOCAL_gc_timestamp;
+  UInt time = ++REMOTE_gc_timestamp(worker_id);
 
-  LOCAL_gc_ma_h_list = NULL;
+  REMOTE_gc_ma_h_list(worker_id) = NULL;
   if (time == 0) {
     unsigned int i;
 
     /* damn, we overflowed */
     for (i = 0; i < GC_MAVARS_HASH_SIZE; i++)
-      LOCAL_gc_ma_hash_table[i].timestmp = 0L;
-    time = ++LOCAL_gc_timestamp;
+      REMOTE_gc_ma_hash_table(worker_id)[i].timestmp = 0L;
+    time = ++REMOTE_gc_timestamp(worker_id);
   }
-  LOCAL_gc_ma_h_top = top;
-  LOCAL_cont_top = (cont *)LOCAL_gc_ma_h_top;
+  REMOTE_gc_ma_h_top(worker_id) = top;
+  REMOTE_cont_top(worker_id) = (cont *)REMOTE_gc_ma_h_top(worker_id);
 #ifdef EASY_SHUNTING
-  LOCAL_sTR = (tr_fr_ptr)LOCAL_cont_top;
+  REMOTE_sTR(worker_id) = (tr_fr_ptr)REMOTE_cont_top(worker_id);
 #else
-  LOCAL_cont_top0 = LOCAL_cont_top;
+  REMOTE_cont_top0(worker_id) = REMOTE_cont_top(worker_id);
 #endif
 }
 
@@ -374,12 +374,12 @@ static inline void GC_NEW_MAHASH(gc_ma_hash_entry *top USES_REGS) {
 /* find all accessible objects on the heap and squeeze out all the rest */
 
 static tr_fr_ptr check_pr_trail(tr_fr_ptr rc USES_REGS) {
-  if ((tr_fr_ptr)LOCAL_TrailTop - TR < 1024) {
+  if ((tr_fr_ptr)REMOTE_TrailTop(worker_id) - TR < 1024) {
     size_t n = TR - rc;
     if (!Yap_locked_growtrail(0, TRUE) || TRUE) {
       /* could not find more trail */
       save_machine_regs();
-      siglongjmp(LOCAL_gc_restore, 2);
+      siglongjmp(REMOTE_gc_restore(worker_id), 2);
     }
     rc = TR - n;
   }
@@ -390,13 +390,13 @@ static tr_fr_ptr check_pr_trail(tr_fr_ptr rc USES_REGS) {
 
 static tr_fr_ptr push_registers(Int num_regs, yamop *nextop USES_REGS) {
   int i;
-  StaticArrayEntry *sal = LOCAL_StaticArrays;
+  StaticArrayEntry *sal = REMOTE_StaticArrays(worker_id);
   tr_fr_ptr ret = TR;
 
   /* push array entries first */
-  ArrayEntry *al = LOCAL_DynamicArrays;
-  GlobalEntry *gl = LOCAL_GlobalVariables;
-  TrailTerm(TR++) = LOCAL_GlobalArena;
+  ArrayEntry *al = REMOTE_DynamicArrays(worker_id);
+  GlobalEntry *gl = REMOTE_GlobalVariables(worker_id);
+  TrailTerm(TR++) = REMOTE_GlobalArena(worker_id);
   while (al) {
     ret = check_pr_trail(ret PASS_REGS);
  //   printf("al %p\n", TR);
@@ -429,28 +429,28 @@ static tr_fr_ptr push_registers(Int num_regs, yamop *nextop USES_REGS) {
     sal = sal->NextAE;
   }
   ret = check_pr_trail(ret PASS_REGS);
-  TrailTerm(TR) = LOCAL_GcGeneration;
+  TrailTerm(TR) = REMOTE_GcGeneration(worker_id);
  //   printf("GcG %p\n", TR);
   TR++;
   //  printf("GcGP %p\n", TR);
-  TrailTerm(TR) = LOCAL_GcPhase;
+  TrailTerm(TR) = REMOTE_GcPhase(worker_id);
   TR++;
 #ifdef COROUTINING
  //   printf("WP %p\n", TR);
-    TrailTerm(TR) = LOCAL_WokenGoals;
-  TrailTerm(TR + 1) = LOCAL_AttsMutableList;
+    TrailTerm(TR) = REMOTE_WokenGoals(worker_id);
+  TrailTerm(TR + 1) = REMOTE_AttsMutableList(worker_id);
   TR += 2;
 #endif
   {
-    CELL *curslot = LOCAL_SlotBase, *topslot = LOCAL_SlotBase + LOCAL_CurSlot;
+    CELL *curslot = REMOTE_SlotBase(worker_id), *topslot = REMOTE_SlotBase(worker_id) + REMOTE_CurSlot(worker_id);
     while (curslot < topslot) {
       // printf("%p <- %p\n", TR, topslot);
       ret = check_pr_trail(ret PASS_REGS);
     if (!IsVarTerm(*curslot) &&
-          ((*curslot<(CELL)LOCAL_GlobalBase && * curslot>(CELL) HR))) {
+          ((*curslot<(CELL)REMOTE_GlobalBase(worker_id) && * curslot>(CELL) HR))) {
         *curslot = TermFreeTerm;
       }
- //     printf("Sl %p %ld\n", TR, curslot-LOCAL_SlotBase);
+ //     printf("Sl %p %ld\n", TR, curslot-REMOTE_SlotBase(worker_id));
       TrailTerm(TR++) = *curslot++;
     }
   }
@@ -490,31 +490,31 @@ static tr_fr_ptr push_registers(Int num_regs, yamop *nextop USES_REGS) {
 static void pop_registers(Int num_regs, yamop *nextop USES_REGS) {
   int i;
   tr_fr_ptr ptr = TR;
-  StaticArrayEntry *sal = LOCAL_StaticArrays;
+  StaticArrayEntry *sal = REMOTE_StaticArrays(worker_id);
 
   /* pop info on opaque variables */
-  while (LOCAL_extra_gc_cells > LOCAL_extra_gc_cells_base) {
+  while (REMOTE_extra_gc_cells(worker_id) > REMOTE_extra_gc_cells_base(worker_id)) {
     YAP_Opaque_CallOnGCRelocate f;
-    CELL *ptr = LOCAL_extra_gc_cells - 1;
+    CELL *ptr = REMOTE_extra_gc_cells(worker_id) - 1;
     size_t n = ptr[0], t = ptr[-1];
 
-    LOCAL_extra_gc_cells -= (n + 1);
+    REMOTE_extra_gc_cells(worker_id) -= (n + 1);
     if ((f = Yap_blob_gc_relocate_handler(t))) {
-      int out = (f)(Yap_BlobTag(t), Yap_BlobInfo(t), LOCAL_extra_gc_cells, n);
+      int out = (f)(Yap_BlobTag(t), Yap_BlobInfo(t), REMOTE_extra_gc_cells(worker_id), n);
       if (out < 0) {
         /* error: we don't have enough room */
         /* could not find more trail */
         save_machine_regs();
-        siglongjmp(LOCAL_gc_restore, 4);
+        siglongjmp(REMOTE_gc_restore(worker_id), 4);
       }
     }
   }
 
   /* pop array entries first */
-  ArrayEntry *al = LOCAL_DynamicArrays;
-  GlobalEntry *gl = LOCAL_GlobalVariables;
+  ArrayEntry *al = REMOTE_DynamicArrays(worker_id);
+  GlobalEntry *gl = REMOTE_GlobalVariables(worker_id);
 
-  LOCAL_GlobalArena = TrailTerm(ptr++);
+  REMOTE_GlobalArena(worker_id) = TrailTerm(ptr++);
   while (al) {
     al->ValueOfVE = TrailTerm(ptr++);
     al = al->NextAE;
@@ -527,7 +527,7 @@ static void pop_registers(Int num_regs, yamop *nextop USES_REGS) {
     }
     gl = gl->NextGE;
   }
-  sal = LOCAL_StaticArrays;
+  sal = REMOTE_StaticArrays(worker_id);
   while (sal) {
     if (sal->ArrayType == array_of_nb_terms) {
       UInt arity = -sal->ArrayEArity;
@@ -541,18 +541,18 @@ static void pop_registers(Int num_regs, yamop *nextop USES_REGS) {
     }
     sal = sal->NextAE;
   }
-   LOCAL_GcGeneration = TrailTerm(ptr++);
-  LOCAL_GcPhase = TrailTerm(ptr++);
+   REMOTE_GcGeneration(worker_id) = TrailTerm(ptr++);
+  REMOTE_GcPhase(worker_id) = TrailTerm(ptr++);
 #ifdef COROUTINING
 #ifdef MULTI_ASSIGNMENT_VARIABLES
-  LOCAL_WokenGoals = TrailTerm(ptr++);
-  LOCAL_AttsMutableList = TrailTerm(ptr++);
+  REMOTE_WokenGoals(worker_id) = TrailTerm(ptr++);
+  REMOTE_AttsMutableList(worker_id) = TrailTerm(ptr++);
 #endif
 #endif
 
   // copy slots back
   {
-    CELL *curslot = LOCAL_SlotBase, *topslot = LOCAL_SlotBase + LOCAL_CurSlot;
+    CELL *curslot = REMOTE_SlotBase(worker_id), *topslot = REMOTE_SlotBase(worker_id) + REMOTE_CurSlot(worker_id);
     while (curslot < topslot) {
       *curslot++ = TrailTerm(ptr++);
     }
@@ -600,10 +600,10 @@ static int count_cells_marked(void) {
 #endif
 
 static rb_red_blk_node *RBMalloc(UInt size USES_REGS) {
-  ADDR new = LOCAL_db_vec;
+  ADDR new = REMOTE_db_vec(worker_id);
 
-  LOCAL_db_vec += size;
-  if ((ADDR)LOCAL_db_vec > LOCAL_TrailTop - 1024) {
+  REMOTE_db_vec(worker_id) += size;
+  if ((ADDR)REMOTE_db_vec(worker_id) > REMOTE_TrailTop(worker_id) - 1024) {
     gc_growtrail(FALSE, NULL, NULL PASS_REGS);
   }
   return (rb_red_blk_node *)new;
@@ -615,12 +615,12 @@ static rb_red_blk_node *RBTreeCreate(void) {
 
   /*  see the comment in the rb_red_blk_tree structure in red_black_tree.h */
   /*  for information on nil and root */
-  temp = LOCAL_db_nil = RBMalloc(sizeof(rb_red_blk_node) PASS_REGS);
+  temp = REMOTE_db_nil(worker_id) = RBMalloc(sizeof(rb_red_blk_node) PASS_REGS);
   temp->parent = temp->left = temp->right = temp;
   temp->red = 0;
   temp->key = NULL;
   temp = RBMalloc(sizeof(rb_red_blk_node) PASS_REGS);
-  temp->parent = temp->left = temp->right = LOCAL_db_nil;
+  temp->parent = temp->left = temp->right = REMOTE_db_nil(worker_id);
   temp->key = NULL;
   temp->red = 0;
   return temp;
@@ -647,7 +647,7 @@ static rb_red_blk_node *RBTreeCreate(void) {
 
 static void LeftRotate(rb_red_blk_node *x USES_REGS) {
   rb_red_blk_node *y;
-  rb_red_blk_node *rb_nil = LOCAL_db_nil;
+  rb_red_blk_node *rb_nil = REMOTE_db_nil(worker_id);
 
   /*  I originally wrote this function to use the sentinel for */
   /*  nil to avoid checking for nil.  However this introduces a */
@@ -679,7 +679,7 @@ static void LeftRotate(rb_red_blk_node *x USES_REGS) {
   x->parent = y;
 
 #ifdef DEBUG_ASSERT
-  Assert(!LOCAL_db_nil->red, "nil not red in LeftRotate");
+  Assert(!REMOTE_db_nil(worker_id)->red, "nil not red in LeftRotate");
 #endif
 }
 
@@ -702,7 +702,7 @@ static void LeftRotate(rb_red_blk_node *x USES_REGS) {
 
 static void RightRotate(rb_red_blk_node *y USES_REGS) {
   rb_red_blk_node *x;
-  rb_red_blk_node *rb_nil = LOCAL_db_nil;
+  rb_red_blk_node *rb_nil = REMOTE_db_nil(worker_id);
 
   /*  I originally wrote this function to use the sentinel for */
   /*  nil to avoid checking for nil.  However this introduces a */
@@ -733,7 +733,7 @@ static void RightRotate(rb_red_blk_node *y USES_REGS) {
   y->parent = x;
 
 #ifdef DEBUG_ASSERT
-  Assert(!LOCAL_db_nil->red, "nil not red in RightRotate");
+  Assert(!REMOTE_db_nil(worker_id)->red, "nil not red in RightRotate");
 #endif
 }
 
@@ -756,11 +756,11 @@ static void TreeInsertHelp(rb_red_blk_node *z USES_REGS) {
   /*  This function should only be called by InsertRBTree (see above) */
   rb_red_blk_node *x;
   rb_red_blk_node *y;
-  rb_red_blk_node *rb_nil = LOCAL_db_nil;
+  rb_red_blk_node *rb_nil = REMOTE_db_nil(worker_id);
 
   z->left = z->right = rb_nil;
-  y = LOCAL_db_root;
-  x = LOCAL_db_root->left;
+  y = REMOTE_db_root(worker_id);
+  x = REMOTE_db_root(worker_id)->left;
   while (x != rb_nil) {
     y = x;
     if (x->key < z->key) { /* x.key > z.key */
@@ -770,14 +770,14 @@ static void TreeInsertHelp(rb_red_blk_node *z USES_REGS) {
     }
   }
   z->parent = y;
-  if ((y == LOCAL_db_root) || (y->key < z->key)) { /* y.key > z.key */
+  if ((y == REMOTE_db_root(worker_id)) || (y->key < z->key)) { /* y.key > z.key */
     y->left = z;
   } else {
     y->right = z;
   }
 
 #ifdef DEBUG_ASSERT
-  Assert(!LOCAL_db_nil->red, "nil not red in TreeInsertHelp");
+  Assert(!REMOTE_db_nil(worker_id)->red, "nil not red in TreeInsertHelp");
 #endif
 }
 
@@ -851,12 +851,12 @@ static rb_red_blk_node *RBTreeInsert(CODEADDR key, CODEADDR end,
       }
     }
   }
-  LOCAL_db_root->left->red = 0;
+  REMOTE_db_root(worker_id)->left->red = 0;
   return newNode;
 
 #ifdef DEBUG_ASSERT
-  Assert(!LOCAL_db_nil->red, "nil not red in RBTreeInsert");
-  Assert(!LOCAL_db_root->red, "root not red in RBTreeInsert");
+  Assert(!REMOTE_db_nil(worker_id)->red, "nil not red in RBTreeInsert");
+  Assert(!REMOTE_db_root(worker_id)->red, "root not red in RBTreeInsert");
 #endif
 }
 
@@ -868,9 +868,9 @@ static void store_in_dbtable(CODEADDR entry, CODEADDR end,
 
 /* find an element in the dbentries table */
 static rb_red_blk_node *find_ref_in_dbtable(CODEADDR entry USES_REGS) {
-  rb_red_blk_node *current = LOCAL_db_root->left;
+  rb_red_blk_node *current = REMOTE_db_root(worker_id)->left;
 
-  while (current != LOCAL_db_nil) {
+  while (current != REMOTE_db_nil(worker_id)) {
     if (current->key <= entry && current->lim > entry) {
       return current;
     }
@@ -897,7 +897,7 @@ static void mark_db_fixed(CELL *ptr USES_REGS) {
   rb_red_blk_node *el;
 
   el = find_ref_in_dbtable((CODEADDR)ptr PASS_REGS);
-  if (el != LOCAL_db_nil) {
+  if (el != REMOTE_db_nil(worker_id)) {
     el->in_use = TRUE;
   }
 }
@@ -907,14 +907,14 @@ static void init_dbtable(tr_fr_ptr trail_ptr USES_REGS) {
   MegaClause *mc = DeadMegaClauses;
   StaticIndex *si = DeadStaticIndices;
 
-  LOCAL_extra_gc_cells = LOCAL_extra_gc_cells_base = (CELL *)TR;
-  LOCAL_extra_gc_cells_top =
-      LOCAL_extra_gc_cells_base + LOCAL_extra_gc_cells_size;
-  if ((char *)LOCAL_extra_gc_cells_top > LOCAL_TrailTop - 1024)
+  REMOTE_extra_gc_cells(worker_id) = REMOTE_extra_gc_cells_base(worker_id) = (CELL *)TR;
+  REMOTE_extra_gc_cells_top(worker_id) =
+      REMOTE_extra_gc_cells_base(worker_id) + REMOTE_extra_gc_cells_size(worker_id);
+  if ((char *)REMOTE_extra_gc_cells_top(worker_id) > REMOTE_TrailTop(worker_id) - 1024)
     gc_growtrail(FALSE, NULL, NULL PASS_REGS);
-  LOCAL_db_vec0 = LOCAL_db_vec = (ADDR)LOCAL_extra_gc_cells_top;
-  LOCAL_db_root = RBTreeCreate();
-  while (trail_ptr > (tr_fr_ptr)LOCAL_TrailBase) {
+  REMOTE_db_vec0(worker_id) = REMOTE_db_vec(worker_id) = (ADDR)REMOTE_extra_gc_cells_top(worker_id);
+  REMOTE_db_root(worker_id) = RBTreeCreate();
+  while (trail_ptr > (tr_fr_ptr)REMOTE_TrailBase(worker_id)) {
     register CELL trail_cell;
 
     trail_ptr--;
@@ -932,7 +932,7 @@ static void init_dbtable(tr_fr_ptr trail_ptr USES_REGS) {
 #ifdef YAPOR_SBA
           (ADDR)pt0 >= HeapTop
 #else
-          (ADDR)pt0 >= LOCAL_TrailBase && (ADDR)pt0 < LOCAL_TrailTop
+          (ADDR)pt0 >= REMOTE_TrailBase(worker_id) && (ADDR)pt0 < REMOTE_TrailTop(worker_id)
 #endif
       ) {
         continue;
@@ -980,9 +980,9 @@ static void init_dbtable(tr_fr_ptr trail_ptr USES_REGS) {
                      dcl_entry PASS_REGS);
     mc = mc->ClNext;
   }
-  if (LOCAL_db_vec == LOCAL_db_vec0) {
+  if (REMOTE_db_vec(worker_id) == REMOTE_db_vec0(worker_id)) {
     /* could not find any entries: probably using LOG UPD semantics */
-    LOCAL_db_vec0 = NULL;
+    REMOTE_db_vec0(worker_id) = NULL;
   }
 }
 
@@ -1107,8 +1107,8 @@ static void check_global(void) {
     if (IsVarTerm(ccurr)) {
       if (IsBlobFunctor((Functor)ccurr))
         vars[gc_num]++;
-      else if (ccurr != 0 && (ccurr < (CELL)LOCAL_GlobalBase ||
-                              ccurr > (CELL)LOCAL_TrailTop)) {
+      else if (ccurr != 0 && (ccurr < (CELL)REMOTE_GlobalBase(worker_id) ||
+                              ccurr > (CELL)REMOTE_TrailTop(worker_id))) {
         /*	printf("%p: %s/%d\n", current,
                RepAtom(NameOfFunctor((Functor)ccurr))->StrOfAE,
                ArityOfFunctor((Functor)ccurr));*/
@@ -1155,7 +1155,7 @@ static void mark_variable(CELL_PTR current USES_REGS) {
   CELL_PTR next;
   register CELL ccur;
   unsigned int arity;
-  char *local_bp = LOCAL_bp;
+  char *local_bp = REMOTE_bp(worker_id);
 
 begin:
   if (current == 0 || UNMARKED_MARK(current, local_bp)) {
@@ -1163,9 +1163,9 @@ begin:
   }
   if (current >= H0 && current < HR) {
     // fprintf(stderr,"%p M\n", current);
-    LOCAL_total_marked++;
-    if (current < LOCAL_HGEN) {
-      LOCAL_total_oldies++;
+    REMOTE_total_marked(worker_id)++;
+    if (current < REMOTE_HGEN(worker_id)) {
+      REMOTE_total_oldies(worker_id)++;
     } else {
       DEBUG_printf0("%p 1\n", current);
     }
@@ -1175,15 +1175,15 @@ begin:
   next = GET_NEXT(ccur);
 
   if (IsVarTerm(ccur)) {
-    if (IN_BETWEEN(LOCAL_GlobalBase, current, HR) && GlobalIsAttVar(current) &&
+    if (IN_BETWEEN(REMOTE_GlobalBase(worker_id), current, HR) && GlobalIsAttVar(current) &&
         current == next) {
       if (next < H0)
         POP_CONTINUATION();
       if (!UNMARKED_MARK(next - 1, local_bp)) {
         // fprintf(stderr,"%p M\n", next-1);
-        LOCAL_total_marked++;
-        if (next - 1 < LOCAL_HGEN) {
-          LOCAL_total_oldies++;
+        REMOTE_total_marked(worker_id)++;
+        if (next - 1 < REMOTE_HGEN(worker_id)) {
+          REMOTE_total_oldies(worker_id)++;
         } else {
           DEBUG_printf0("%p 1\n", next - 1);
         }
@@ -1201,8 +1201,8 @@ begin:
       if (!MARKED_PTR(next)) {
         if (IsVarTerm(cnext) && (CELL)next == cnext) {
           /* new global variable to new global variable */
-          if (next > current && current < LOCAL_prev_HB && current >= HB &&
-              next >= HB && next < LOCAL_prev_HB) {
+          if (next > current && current < REMOTE_prev_HB(worker_id) && current >= HB &&
+              next >= HB && next < REMOTE_prev_HB(worker_id)) {
 #ifdef INSTRUMENT_GC
             inc_var(current, current);
 #endif
@@ -1225,9 +1225,9 @@ begin:
             *current = cnext;
             if (current >= H0 && current < HR) {
               // fprintf(stderr,"%p M\n", current-1);
-              LOCAL_total_marked--;
-              if (current < LOCAL_HGEN) {
-                LOCAL_total_oldies--;
+              REMOTE_total_marked(worker_id)--;
+              if (current < REMOTE_HGEN(worker_id)) {
+                REMOTE_total_oldies(worker_id)--;
               } else {
                 DEBUG_printf0("%p-1\n", next - 1);
               }
@@ -1248,9 +1248,9 @@ begin:
         UNMARK(current);
         if (current >= H0 && current < HR) {
           // fprintf(stderr,"%p M\n", current);
-          LOCAL_total_marked--;
-          if (current < LOCAL_HGEN) {
-            LOCAL_total_oldies--;
+          REMOTE_total_marked(worker_id)--;
+          if (current < REMOTE_HGEN(worker_id)) {
+            REMOTE_total_oldies(worker_id)--;
           } else {
             DEBUG_printf0("%p-1\n", next - 1);
           }
@@ -1267,8 +1267,8 @@ begin:
       }
       goto begin;
 #ifdef DEBUG
-    } else if (next < (CELL *)LOCAL_GlobalBase ||
-               next > (CELL *)LOCAL_TrailTop) {
+    } else if (next < (CELL *)REMOTE_GlobalBase(worker_id) ||
+               next > (CELL *)REMOTE_TrailTop(worker_id)) {
       fprintf(stderr,
               "OOPS in GC: marking, TR=%p, current=%p, *current=" UInt_FORMAT
               " next=%p\n",
@@ -1276,7 +1276,7 @@ begin:
 #endif
     } else {
 #ifdef COROUTING
-      LOCAL_totalmarked++;
+      REMOTE_totalmarked(worker_id)++;
 #endif
 #ifdef INSTRUMENT_GC
       inc_var(current, next);
@@ -1300,9 +1300,9 @@ begin:
       if (IsAtomOrIntTerm(*next)) {
         if (!UNMARKED_MARK(next, local_bp)) {
           // fprintf(stderr,"%p M\n", next);
-          LOCAL_total_marked++;
-          if (next < LOCAL_HGEN) {
-            LOCAL_total_oldies++;
+          REMOTE_total_marked(worker_id)++;
+          if (next < REMOTE_HGEN(worker_id)) {
+            REMOTE_total_oldies(worker_id)++;
           } else {
             DEBUG_printf0("%p 1\n", next);
           }
@@ -1355,14 +1355,14 @@ begin:
       case (CELL)FunctorLongInt:
         MARK(next);
         MARK(next + 2);
-        if (next < LOCAL_HGEN) {
-          LOCAL_total_oldies += 3;
+        if (next < REMOTE_HGEN(worker_id)) {
+          REMOTE_total_oldies(worker_id) += 3;
         } else {
           DEBUG_printf0("%p 1\n", next);
           DEBUG_printf0("%p 3\n", next);
         }
         // fprintf(stderr,"%p M 3\n", next);
-        LOCAL_total_marked += 3;
+        REMOTE_total_marked(worker_id) += 3;
         PUSH_POINTER(next PASS_REGS);
         PUSH_POINTER(next + 2 PASS_REGS);
         POP_CONTINUATION();
@@ -1371,14 +1371,14 @@ begin:
         PUSH_POINTER(next PASS_REGS);
         {
           UInt sz = 1 + SIZEOF_DOUBLE / SIZEOF_INT_P;
-          if (next < LOCAL_HGEN) {
-            LOCAL_total_oldies += 1 + sz;
+          if (next < REMOTE_HGEN(worker_id)) {
+            REMOTE_total_oldies(worker_id) += 1 + sz;
           } else {
             DEBUG_printf0("%p 1\n", next);
             DEBUG_printf1("%p %ld\n", next, (long int)(sz + 1));
           }
           // fprintf(stderr,"%p M %d\n", next,1+sz);
-          LOCAL_total_marked += 1 + sz;
+          REMOTE_total_marked(worker_id) += 1 + sz;
           PUSH_POINTER(next + sz PASS_REGS);
           MARK(next + sz);
         }
@@ -1388,14 +1388,14 @@ begin:
         PUSH_POINTER(next PASS_REGS);
         {
           UInt sz = 2 + next[1];
-          if (next < LOCAL_HGEN) {
-            LOCAL_total_oldies += 1 + sz;
+          if (next < REMOTE_HGEN(worker_id)) {
+            REMOTE_total_oldies(worker_id) += 1 + sz;
           } else {
             DEBUG_printf0("%p 1\n", next);
             DEBUG_printf1("%p %ld\n", next, (long int)(sz + 1));
           }
           // fprintf(stderr,"%p M %d\n", next,1+sz);
-          LOCAL_total_marked += 1 + sz;
+          REMOTE_total_marked(worker_id) += 1 + sz;
           PUSH_POINTER(next + sz PASS_REGS);
           MARK(next + sz);
         }
@@ -1409,17 +1409,17 @@ begin:
 
         MARK(next);
         if ((f = Yap_blob_gc_mark_handler(t))) {
-          Int n = (f)(Yap_BlobTag(t), Yap_BlobInfo(t), LOCAL_extra_gc_cells,
-                      LOCAL_extra_gc_cells_top - (LOCAL_extra_gc_cells + 2));
+          Int n = (f)(Yap_BlobTag(t), Yap_BlobInfo(t), REMOTE_extra_gc_cells(worker_id),
+                      REMOTE_extra_gc_cells_top(worker_id) - (REMOTE_extra_gc_cells(worker_id) + 2));
           if (n < 0) {
             /* error: we don't have enough room */
             /* could not find more trail */
             save_machine_regs();
-            siglongjmp(LOCAL_gc_restore, 3);
+            siglongjmp(REMOTE_gc_restore(worker_id), 3);
           } else if (n > 0) {
-            CELL *ptr = LOCAL_extra_gc_cells;
+            CELL *ptr = REMOTE_extra_gc_cells(worker_id);
 
-            LOCAL_extra_gc_cells += n + 2;
+            REMOTE_extra_gc_cells(worker_id) += n + 2;
             PUSH_CONTINUATION(ptr, n + 1 PASS_REGS);
             ptr += n;
             ptr[0] = t;
@@ -1428,14 +1428,14 @@ begin:
         }
 
         /* size is given by functor + friends */
-        if (next < LOCAL_HGEN) {
-          LOCAL_total_oldies += 2 + sz;
+        if (next < REMOTE_HGEN(worker_id)) {
+          REMOTE_total_oldies(worker_id) += 2 + sz;
         } else {
           DEBUG_printf0("%p 1\n", next);
           DEBUG_printf1("%p %ld\n", next, (long int)(sz + 2));
         }
         // fprintf(stderr,"%p M %d\n", next,2+sz);
-        LOCAL_total_marked += 2 + sz;
+        REMOTE_total_marked(worker_id) += 2 + sz;
         PUSH_POINTER(next PASS_REGS);
         sz++;
 #if DEBUG
@@ -1462,9 +1462,9 @@ begin:
     arity = ArityOfFunctor((Functor)(cnext));
     MARK(next);
     // fprintf(stderr,"%p M\n", next);
-    ++LOCAL_total_marked;
-    if (next < LOCAL_HGEN) {
-      ++LOCAL_total_oldies;
+    ++REMOTE_total_marked(worker_id);
+    if (next < REMOTE_HGEN(worker_id)) {
+      ++REMOTE_total_oldies(worker_id);
     } else {
       DEBUG_printf0("%p 1\n", next);
     }
@@ -1474,9 +1474,9 @@ begin:
     while (arity && IsAtomOrIntTerm(*next)) {
       if (!UNMARKED_MARK(next, local_bp)) {
         // fprintf(stderr,"%p M\n", next);
-        LOCAL_total_marked++;
-        if (next < LOCAL_HGEN) {
-          LOCAL_total_oldies++;
+        REMOTE_total_marked(worker_id)++;
+        if (next < REMOTE_HGEN(worker_id)) {
+          REMOTE_total_oldies(worker_id)++;
         } else {
           DEBUG_printf0("%p 1\n", next);
         }
@@ -1523,11 +1523,11 @@ static void mark_external_reference(CELL *ptr USES_REGS) {
 
   if (ONHEAP(next)) {
 #ifdef HYBRID_SCHEME
-    CELL_PTR *old = LOCAL_iptop;
+    CELL_PTR *old = REMOTE_iptop(worker_id);
 #endif
     mark_variable(ptr PASS_REGS);
     POPSWAP_POINTER(old, ptr PASS_REGS);
-  } else if (next < H0 || next > (CELL *)LOCAL_TrailTop) {
+  } else if (next < H0 || next > (CELL *)REMOTE_TrailTop(worker_id)) {
     MARK(ptr);
     mark_code(ptr, next PASS_REGS);
   }
@@ -1576,6 +1576,7 @@ static inline void output_env_entry(CELL *gc_ENV, yamop *e_CP, UInt size) {
 static void
 mark_env_cells(CELL *gc_ENV, UInt size, CELL *pvbmap)
 {
+  CACHE_REGS
   CELL_PTR saved_var;
   UInt bmap, bit = 1;
   if (size <= EnvSizeInCells || pvbmap == NULL) {
@@ -1697,14 +1698,14 @@ static void mark_trail(tr_fr_ptr trail_ptr, tr_fr_ptr trail_base, CELL *gc_H,
                        choiceptr gc_B USES_REGS) {
 #ifdef EASY_SHUNTING
   tr_fr_ptr begsTR = NULL, endsTR = NULL;
-  tr_fr_ptr OldsTR0 = LOCAL_sTR0;
+  tr_fr_ptr OldsTR0 = REMOTE_sTR0(worker_id);
 #endif
 #ifdef COROUTINING
   CELL *detatt = NULL;
 #endif
-  cont *old_cont_top0 = LOCAL_cont_top0;
+  cont *old_cont_top0 = REMOTE_cont_top0(worker_id);
 
-  GC_NEW_MAHASH((gc_ma_hash_entry *)LOCAL_cont_top0 PASS_REGS);
+  GC_NEW_MAHASH((gc_ma_hash_entry *)REMOTE_cont_top0(worker_id) PASS_REGS);
   while (trail_base < trail_ptr) {
     register CELL trail_cell;
 
@@ -1719,39 +1720,39 @@ static void mark_trail(tr_fr_ptr trail_ptr, tr_fr_ptr trail_base, CELL *gc_H,
         /* perform early reset */
         /* reset term to be a variable */
         RESET_VARIABLE(hp);
-        LOCAL_discard_trail_entries++;
+        REMOTE_discard_trail_entries(worker_id)++;
         RESET_VARIABLE(&TrailTerm(trail_base));
 #ifdef FROZEN_STACKS
         RESET_VARIABLE(&TrailVal(trail_base));
 #endif
-      } else if (hp < (CELL *)LOCAL_GlobalBase || hp > (CELL *)LOCAL_TrailTop) {
+      } else if (hp < (CELL *)REMOTE_GlobalBase(worker_id) || hp > (CELL *)REMOTE_TrailTop(worker_id)) {
         /*  pointers from the Heap back into the trail are process in mark_regs.
          */
         /* do nothing !!! */
       } else if ((hp < (CELL *)gc_B && hp >= gc_H) ||
-                 hp > (CELL *)LOCAL_TrailBase) {
+                 hp > (CELL *)REMOTE_TrailBase(worker_id)) {
         /* clean the trail, avoid dangling pointers! */
         RESET_VARIABLE(&TrailTerm(trail_base));
 #ifdef FROZEN_STACKS
         RESET_VARIABLE(&TrailVal(trail_base));
 #endif
-        LOCAL_discard_trail_entries++;
+        REMOTE_discard_trail_entries(worker_id)++;
       } else {
         if (trail_cell == (CELL)trail_base)
-          LOCAL_discard_trail_entries++;
+          REMOTE_discard_trail_entries(worker_id)++;
         else {
           /* This is a bit of a mess: when I find an attributed variable that
              was bound nondeterministically, I know that after backtracking it
              will be back to be an unbound variable. The ideal solution would be
              to unbind all variables. The current solution is to
              remark it as an attributed variable */
-          if (IN_BETWEEN(LOCAL_GlobalBase, hp, HR) && GlobalIsAttVar(hp) &&
-              !UNMARKED_MARK(hp - 1, LOCAL_bp)) {
+          if (IN_BETWEEN(REMOTE_GlobalBase(worker_id), hp, HR) && GlobalIsAttVar(hp) &&
+              !UNMARKED_MARK(hp - 1, REMOTE_bp(worker_id))) {
             // fprintf(stderr,"%p M\n", hp);
-            LOCAL_total_marked++;
+            REMOTE_total_marked(worker_id)++;
             PUSH_POINTER(hp - 1 PASS_REGS);
-            if (hp - 1 < LOCAL_HGEN) {
-              LOCAL_total_oldies++;
+            if (hp - 1 < REMOTE_HGEN(worker_id)) {
+              REMOTE_total_oldies(worker_id)++;
             } else {
               DEBUG_printf0("%p 1\n", hp - 1);
             }
@@ -1764,10 +1765,10 @@ static void mark_trail(tr_fr_ptr trail_ptr, tr_fr_ptr trail_base, CELL *gc_H,
         }
 #ifdef EASY_SHUNTING
         if (hp < gc_H && hp >= H0 && !MARKED_PTR(hp)) {
-          tr_fr_ptr nsTR = (tr_fr_ptr)LOCAL_cont_top0;
+          tr_fr_ptr nsTR = (tr_fr_ptr)REMOTE_cont_top0(worker_id);
           CELL *cptr = (CELL *)trail_cell;
 
-          if ((ADDR)nsTR > LOCAL_TrailTop - 1024) {
+          if ((ADDR)nsTR > REMOTE_TrailTop(worker_id) - 1024) {
             gc_growtrail(TRUE, begsTR, old_cont_top0 PASS_REGS);
           }
           TrailTerm(nsTR) = (CELL)NULL;
@@ -1778,9 +1779,9 @@ static void mark_trail(tr_fr_ptr trail_ptr, tr_fr_ptr trail_base, CELL *gc_H,
           else
             TrailTerm(endsTR) = (CELL)nsTR;
           endsTR = nsTR;
-          LOCAL_cont_top = (cont *)(nsTR + 3);
-          LOCAL_sTR = (tr_fr_ptr)LOCAL_cont_top;
-          LOCAL_gc_ma_h_top = (gc_ma_hash_entry *)(nsTR + 3);
+          REMOTE_cont_top(worker_id) = (cont *)(nsTR + 3);
+          REMOTE_sTR(worker_id) = (tr_fr_ptr)REMOTE_cont_top(worker_id);
+          REMOTE_gc_ma_h_top(worker_id) = (gc_ma_hash_entry *)(nsTR + 3);
           RESET_VARIABLE(cptr);
           MARK(cptr);
         }
@@ -1789,7 +1790,7 @@ static void mark_trail(tr_fr_ptr trail_ptr, tr_fr_ptr trail_base, CELL *gc_H,
     } else if (IsPairTerm(trail_cell)) {
       /* cannot safely ignore this */
       CELL *cptr = RepPair(trail_cell);
-      if (IN_BETWEEN(LOCAL_GlobalBase, cptr, HR)) {
+      if (IN_BETWEEN(REMOTE_GlobalBase(worker_id), cptr, HR)) {
         if (GlobalIsAttVar(cptr)) {
           TrailTerm(trail_base) = (CELL)cptr;
           mark_external_reference(&TrailTerm(trail_base) PASS_REGS);
@@ -1866,11 +1867,11 @@ static void mark_trail(tr_fr_ptr trail_ptr, tr_fr_ptr trail_base, CELL *gc_H,
       remove_trash_entry:
         /* we can safely ignore this little monster */
 #ifdef FROZEN_STACKS
-        LOCAL_discard_trail_entries += 2;
+        REMOTE_discard_trail_entries(worker_id) += 2;
         RESET_VARIABLE(&TrailTerm(trail_base));
         RESET_VARIABLE(&TrailVal(trail_base));
 #else
-        LOCAL_discard_trail_entries += 3;
+        REMOTE_discard_trail_entries(worker_id) += 3;
         RESET_VARIABLE(&TrailTerm(trail_base));
         trail_base++;
         RESET_VARIABLE(&TrailTerm(trail_base));
@@ -1891,7 +1892,7 @@ static void mark_trail(tr_fr_ptr trail_ptr, tr_fr_ptr trail_base, CELL *gc_H,
      values until the very end
   */
   {
-    gc_ma_hash_entry *gl = LOCAL_gc_ma_h_list;
+    gc_ma_hash_entry *gl = REMOTE_gc_ma_h_list(worker_id);
     while (gl) {
       mark_external_reference(&(TrailVal(gl->loc + 1)) PASS_REGS);
       gl = gl->more;
@@ -1900,19 +1901,19 @@ static void mark_trail(tr_fr_ptr trail_ptr, tr_fr_ptr trail_base, CELL *gc_H,
 #endif /* TABLING */
 #ifdef EASY_SHUNTING
   /* set back old variables */
-  LOCAL_sTR = (tr_fr_ptr)old_cont_top0;
+  REMOTE_sTR(worker_id) = (tr_fr_ptr)old_cont_top0;
   while (begsTR != NULL) {
     tr_fr_ptr newsTR = (tr_fr_ptr)TrailTerm(begsTR);
-    TrailTerm(LOCAL_sTR) = TrailTerm(begsTR + 1);
-    TrailTerm(LOCAL_sTR + 1) = TrailTerm(begsTR + 2);
+    TrailTerm(REMOTE_sTR(worker_id)) = TrailTerm(begsTR + 1);
+    TrailTerm(REMOTE_sTR(worker_id) + 1) = TrailTerm(begsTR + 2);
     begsTR = newsTR;
-    LOCAL_sTR += 2;
+    REMOTE_sTR(worker_id) += 2;
   }
-  LOCAL_sTR0 = OldsTR0;
+  REMOTE_sTR0(worker_id) = OldsTR0;
 #else
-  LOCAL_cont_top0 = old_cont_top0;
+  REMOTE_cont_top0(worker_id) = old_cont_top0;
 #endif
-  LOCAL_cont_top = LOCAL_cont_top0;
+  REMOTE_cont_top(worker_id) = REMOTE_cont_top0(worker_id);
 }
 
 /*
@@ -1962,8 +1963,8 @@ static void mark_choicepoints(register choiceptr gc_B, tr_fr_ptr saved_TR,
         *lu_cle = NEXTOP(PredLogUpdClauseErase->CodeOfPred, Otapl),
         *su_cl = NEXTOP(PredStaticClause->CodeOfPred, Otapl);
 #ifdef TABLING
-  dep_fr_ptr depfr = LOCAL_top_dep_fr;
-  sg_fr_ptr aux_sg_fr = LOCAL_top_sg_fr;
+  dep_fr_ptr depfr = REMOTE_top_dep_fr(worker_id);
+  sg_fr_ptr aux_sg_fr = REMOTE_top_sg_fr(worker_id);
 #endif /* TABLING */
 
 #ifdef TABLING
@@ -1985,8 +1986,8 @@ static void mark_choicepoints(register choiceptr gc_B, tr_fr_ptr saved_TR,
 #endif /* DETERMINISTIC_TABLING */
       mark_db_fixed((CELL *)(gc_B->cp_cp)PASS_REGS);
 #ifdef EASY_SHUNTING
-    LOCAL_current_B = gc_B;
-    LOCAL_prev_HB = HB;
+    REMOTE_current_B(worker_id) = gc_B;
+    REMOTE_prev_HB(worker_id) = HB;
 #endif
     HB = gc_B->cp_h;
 #ifdef INSTRUMENT_GC
@@ -2018,29 +2019,29 @@ static void mark_choicepoints(register choiceptr gc_B, tr_fr_ptr saved_TR,
 #if defined(ANALYST) || 0
       if (pe == NULL) {
         fprintf(stderr, "%%       marked  " UInt_FORMAT " (%s)\n",
-                LOCAL_total_marked, Yap_op_names[opnum]);
+                REMOTE_total_marked(worker_id), Yap_op_names[opnum]);
       } else if (pe->ArityOfPE) {
         fprintf(stderr,
                 "%%       %s/" UInt_FORMAT " marked  " UInt_FORMAT " (%s)\n",
                 RepAtom(NameOfFunctor(pe->FunctorOfPred))->StrOfAE,
-                pe->ArityOfPE, LOCAL_total_marked, Yap_op_names[opnum]);
+                pe->ArityOfPE, REMOTE_total_marked(worker_id), Yap_op_names[opnum]);
       } else {
         fprintf(stderr, "%%       %s marked  " UInt_FORMAT " (%s)\n",
-                RepAtom((Atom)(pe->FunctorOfPred))->StrOfAE, LOCAL_total_marked,
+                RepAtom((Atom)(pe->FunctorOfPred))->StrOfAE, REMOTE_total_marked(worker_id),
                 Yap_op_names[opnum]);
       }
 #else
       if (pe == NULL) {
         fprintf(stderr, "%%       marked " Int_FORMAT " (%u)\n",
-                LOCAL_total_marked, (unsigned int)opnum);
+                REMOTE_total_marked(worker_id), (unsigned int)opnum);
       } else if (pe->ArityOfPE) {
         fprintf(stderr, "%%       %s/%lu marked " Int_FORMAT " (%u)\n",
                 RepAtom(NameOfFunctor(pe->FunctorOfPred))->StrOfAE,
-                (unsigned long int)pe->ArityOfPE, LOCAL_total_marked,
+                (unsigned long int)pe->ArityOfPE, REMOTE_total_marked(worker_id),
                 (unsigned int)opnum);
       } else {
         fprintf(stderr, "%%       %s marked " Int_FORMAT " (%u)\n",
-                RepAtom((Atom)(pe->FunctorOfPred))->StrOfAE, LOCAL_total_marked,
+                RepAtom((Atom)(pe->FunctorOfPred))->StrOfAE, REMOTE_total_marked(worker_id),
                 (unsigned int)opnum);
       }
 #endif
@@ -2500,15 +2501,15 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
   Int hp_entrs = 0, hp_erased = 0, hp_not_in_use = 0, hp_in_use_erased = 0,
       code_entries = 0;
 #endif
-  CELL *ptr = LOCAL_extra_gc_cells;
+  CELL *ptr = REMOTE_extra_gc_cells(worker_id);
 
-  while (ptr > LOCAL_extra_gc_cells_base) {
+  while (ptr > REMOTE_extra_gc_cells_base(worker_id)) {
     Int k = ptr[-1], i;
     ptr = ptr - 1;
 
     for (i = 0; i < k; i++) {
       ptr--;
-      if (IN_BETWEEN(LOCAL_GlobalBase, ptr[0], LOCAL_TrailTop) &&
+      if (IN_BETWEEN(REMOTE_GlobalBase(worker_id), ptr[0], REMOTE_TrailTop(worker_id)) &&
           MARKED_PTR(ptr)) {
         UNMARK(ptr);
         if (HEAP_PTR(ptr[0])) {
@@ -2536,7 +2537,7 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
     next = current;
     current = NULL;
     /* next, clean trail */
-    source = dest = (tr_fr_ptr)LOCAL_TrailBase;
+    source = dest = (tr_fr_ptr)REMOTE_TrailBase(worker_id);
     while (source < old_TR) {
       CELL trail_cell;
 
@@ -2566,7 +2567,7 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
   /* first, whatever we dumped on the trail. Easier just to do
      the registers separately?  */
   for (trail_ptr = old_TR; trail_ptr < TR; trail_ptr++) {
-    if (IN_BETWEEN(LOCAL_GlobalBase, TrailTerm(trail_ptr), LOCAL_TrailTop) &&
+    if (IN_BETWEEN(REMOTE_GlobalBase(worker_id), TrailTerm(trail_ptr), REMOTE_TrailTop(worker_id)) &&
         MARKED_PTR(&TrailTerm(trail_ptr))) {
       UNMARK(&TrailTerm(trail_ptr));
       if (HEAP_PTR(TrailTerm(trail_ptr))) {
@@ -2577,7 +2578,7 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
   }
 
   /* next, follows the real trail entries */
-  trail_ptr = (tr_fr_ptr)LOCAL_TrailBase;
+  trail_ptr = (tr_fr_ptr)REMOTE_TrailBase(worker_id);
   dest = trail_ptr;
   while (trail_ptr < old_TR) {
     register CELL trail_cell;
@@ -2619,7 +2620,7 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
         CELL *pt0 = RepPair(trail_cell);
         CELL flags;
 
-        if (IN_BETWEEN(LOCAL_GlobalBase, pt0, HR)) {
+        if (IN_BETWEEN(REMOTE_GlobalBase(worker_id), pt0, HR)) {
           if (GlobalIsAttVar(pt0)) {
             TrailTerm(dest) = trail_cell;
             /* be careful with partial gc */
@@ -2643,9 +2644,9 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
         /* process all segments */
         if (
 #ifdef YAPOR_SBA
-            (ADDR)pt0 >= LOCAL_GlobalBase
+            (ADDR)pt0 >= REMOTE_GlobalBase(worker_id)
 #else
-            (ADDR)pt0 >= LOCAL_TrailBase
+            (ADDR)pt0 >= REMOTE_TrailBase(worker_id)
 #endif
         ) {
           trail_ptr++;
@@ -2749,7 +2750,7 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
 #ifdef FROZEN_STACKS
           RESET_VARIABLE(&TrailVal(dest));
 #endif
-          LOCAL_discard_trail_entries++;
+          REMOTE_discard_trail_entries(worker_id)++;
         }
 #if MULTI_ASSIGNMENT_VARIABLES
       } else {
@@ -2830,14 +2831,14 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
       dest++;
     }
   }
-  LOCAL_new_TR = dest;
+  REMOTE_new_TR(worker_id) = dest;
   if (is_gc_verbose()) {
-    if (old_TR != (tr_fr_ptr)LOCAL_TrailBase)
+    if (old_TR != (tr_fr_ptr)REMOTE_TrailBase(worker_id))
       fprintf(stderr, "%%       Trail: discarded %d (%ld%%) cells out of %ld\n",
-              LOCAL_discard_trail_entries,
-              (unsigned long int)(LOCAL_discard_trail_entries * 100 /
-                                  (old_TR - (tr_fr_ptr)LOCAL_TrailBase)),
-              (unsigned long int)(old_TR - (tr_fr_ptr)LOCAL_TrailBase));
+              REMOTE_discard_trail_entries(worker_id),
+              (unsigned long int)(REMOTE_discard_trail_entries(worker_id) * 100 /
+                                  (old_TR - (tr_fr_ptr)REMOTE_TrailBase(worker_id))),
+              (unsigned long int)(old_TR - (tr_fr_ptr)REMOTE_TrailBase(worker_id)));
 #ifdef DEBUG
     if (hp_entrs > 0)
       fprintf(stderr,
@@ -2870,6 +2871,7 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
 static void
 sweep_env_cells(CELL *gc_ENV, UInt size, CELL *pvbmap)
 {
+  CACHE_REGS
   CELL_PTR saved_var;
   UInt bmap, bit = 1;
   if (size <= EnvSizeInCells || pvbmap == NULL) {
@@ -2976,8 +2978,8 @@ static void sweep_b(choiceptr gc_B, UInt arity USES_REGS) {
  */
 static void sweep_choicepoints(choiceptr gc_B USES_REGS) {
 #ifdef TABLING
-  dep_fr_ptr depfr = LOCAL_top_dep_fr;
-  sg_fr_ptr aux_sg_fr = LOCAL_top_sg_fr;
+  dep_fr_ptr depfr = REMOTE_top_dep_fr(worker_id);
+  sg_fr_ptr aux_sg_fr = REMOTE_top_sg_fr(worker_id);
 #endif /* TABLING */
 
 #ifdef TABLING
@@ -3403,7 +3405,7 @@ static void compact_heap(USES_REGS1) {
   CELL *next_hb;
   CELL *start_from = H0;
 #ifdef TABLING
-  dep_fr_ptr depfr = LOCAL_top_dep_fr;
+  dep_fr_ptr depfr = REMOTE_top_dep_fr(worker_id);
 #endif /* TABLING */
 
   /*
@@ -3419,7 +3421,7 @@ static void compact_heap(USES_REGS1) {
   }
 #endif /* TABLING */
   next_hb = set_next_hb(gc_B PASS_REGS);
-  dest = H0 + LOCAL_total_marked - 1;
+  dest = H0 + REMOTE_total_marked(worker_id) - 1;
 
   gc_B = update_B_H(gc_B, HR, dest + 1, dest + 2
 #ifdef TABLING
@@ -3500,11 +3502,11 @@ static void compact_heap(USES_REGS1) {
 #ifdef DEBUG
   if (dest != start_from - 1)
     fprintf(stderr, "%% Bad Dest (%lu): %p should be %p\n",
-            (unsigned long int)LOCAL_GcCalls, dest, start_from - 1);
-  if (LOCAL_total_marked != found_marked)
+            (unsigned long int)REMOTE_GcCalls(worker_id), dest, start_from - 1);
+  if (REMOTE_total_marked(worker_id) != found_marked)
     fprintf(stderr, "%% Upward (%lu): %lu total against %lu found\n",
-            (unsigned long int)LOCAL_GcCalls,
-            (unsigned long int)LOCAL_total_marked,
+            (unsigned long int)REMOTE_GcCalls(worker_id),
+            (unsigned long int)REMOTE_total_marked(worker_id),
             (unsigned long int)found_marked);
   found_marked = start_from - H0;
 #endif
@@ -3531,11 +3533,11 @@ static void compact_heap(USES_REGS1) {
         *old_dest = *current;
         /* if we have are calling from the C-interface,
            we may have an open array when we start the gc */
-        if (LOCAL_OpenArray) {
+        if (REMOTE_OpenArray(worker_id)) {
           CELL *start = current + (dest - old_dest);
-          if (LOCAL_OpenArray < current && LOCAL_OpenArray > start) {
-            UInt off = LOCAL_OpenArray - start;
-            LOCAL_OpenArray = old_dest + off;
+          if (REMOTE_OpenArray(worker_id) < current && REMOTE_OpenArray(worker_id) > start) {
+            UInt off = REMOTE_OpenArray(worker_id) - start;
+            REMOTE_OpenArray(worker_id) = old_dest + off;
           }
         }
         *dest++ = EndSpecials;
@@ -3567,10 +3569,10 @@ static void compact_heap(USES_REGS1) {
     }
   }
 #ifdef DEBUG
-  if (LOCAL_total_marked != found_marked)
+  if (REMOTE_total_marked(worker_id) != found_marked)
     fprintf(stderr, "%% Downward (%lu): %lu total against %lu found\n",
-            (unsigned long int)LOCAL_GcCalls,
-            (unsigned long int)LOCAL_total_marked,
+            (unsigned long int)REMOTE_GcCalls(worker_id),
+            (unsigned long int)REMOTE_total_marked(worker_id),
             (unsigned long int)found_marked);
 #endif
 
@@ -3597,7 +3599,7 @@ static void icompact_heap(USES_REGS1) {
   Int found_marked = 0;
 #endif /* DEBUG */
 #ifdef TABLING
-  dep_fr_ptr depfr = LOCAL_top_dep_fr;
+  dep_fr_ptr depfr = REMOTE_top_dep_fr(worker_id);
 #endif /* TABLING */
   choiceptr gc_B = B;
 
@@ -3614,14 +3616,14 @@ static void icompact_heap(USES_REGS1) {
   }
 #endif /* TABLING */
   next_hb = set_next_hb(gc_B PASS_REGS);
-  dest = (CELL_PTR)H0 + LOCAL_total_marked - 1;
+  dest = (CELL_PTR)H0 + REMOTE_total_marked(worker_id) - 1;
   gc_B = update_B_H(gc_B, HR, dest + 1, dest + 2
 #ifdef TABLING
                     ,
                     &depfr
 #endif /* TABLING */
   );
-  for (iptr = LOCAL_iptop - 1; iptr >= ibase; iptr--) {
+  for (iptr = REMOTE_iptop(worker_id) - 1; iptr >= ibase; iptr--) {
     CELL ccell;
     CELL_PTR current;
 
@@ -3677,11 +3679,11 @@ static void icompact_heap(USES_REGS1) {
 #ifdef DEBUG
   if (dest != H0 - 1)
     fprintf(stderr, "%% Bad Dest (%lu): %p should be %p\n",
-            (unsigned long int)LOCAL_GcCalls, dest, H0 - 1);
-  if (LOCAL_total_marked != found_marked)
+            (unsigned long int)REMOTE_GcCalls(worker_id), dest, H0 - 1);
+  if (REMOTE_total_marked(worker_id) != found_marked)
     fprintf(stderr, "%% Upward (%lu): %lu total against %lu found\n",
-            (unsigned long int)LOCAL_GcCalls,
-            (unsigned long int)LOCAL_total_marked,
+            (unsigned long int)REMOTE_GcCalls(worker_id),
+            (unsigned long int)REMOTE_total_marked(worker_id),
             (unsigned long int)found_marked);
   found_marked = 0;
 #endif
@@ -3693,7 +3695,7 @@ static void icompact_heap(USES_REGS1) {
    */
 
   dest = H0;
-  for (iptr = ibase; iptr < LOCAL_iptop; iptr++) {
+  for (iptr = ibase; iptr < REMOTE_iptop(worker_id); iptr++) {
     CELL_PTR next;
     CELL *current = *iptr;
     CELL ccur = *current;
@@ -3735,13 +3737,13 @@ static void icompact_heap(USES_REGS1) {
     }
   }
 #ifdef DEBUG
-  if (H0 + LOCAL_total_marked != dest)
+  if (H0 + REMOTE_total_marked(worker_id) != dest)
     fprintf(stderr, "%% Downward (%lu): %p total against %p found\n",
-            (unsigned long int)LOCAL_GcCalls, H0 + LOCAL_total_marked, dest);
-  if (LOCAL_total_marked != found_marked)
+            (unsigned long int)REMOTE_GcCalls(worker_id), H0 + REMOTE_total_marked(worker_id), dest);
+  if (REMOTE_total_marked(worker_id) != found_marked)
     fprintf(stderr, "%% Downward (%lu): %lu total against %lu found\n",
-            (unsigned long int)LOCAL_GcCalls,
-            (unsigned long int)LOCAL_total_marked,
+            (unsigned long int)REMOTE_GcCalls(worker_id),
+            (unsigned long int)REMOTE_total_marked(worker_id),
             (unsigned long int)found_marked);
 #endif
 
@@ -3758,13 +3760,13 @@ static void icompact_heap(USES_REGS1) {
 
 #ifdef EASY_SHUNTING
 static void set_conditionals(tr_fr_ptr str USES_REGS) {
-  while (str != LOCAL_sTR0) {
+  while (str != REMOTE_sTR0(worker_id)) {
     CELL *cptr;
     str -= 2;
     cptr = (CELL *)TrailTerm(str + 1);
     *cptr = TrailTerm(str);
   }
-  LOCAL_sTR = LOCAL_sTR0 = NULL;
+  REMOTE_sTR(worker_id) = REMOTE_sTR0(worker_id) = NULL;
 }
 #endif
 
@@ -3777,18 +3779,18 @@ static void marking_phase(tr_fr_ptr old_TR, CELL *current_env,
                           yamop *curp USES_REGS) {
 
 #ifdef EASY_SHUNTING
-  LOCAL_current_B = B;
-  LOCAL_prev_HB = H;
+  REMOTE_current_B(worker_id) = B;
+  REMOTE_prev_HB(worker_id) = H;
 #endif
   init_dbtable(old_TR PASS_REGS);
 #ifdef EASY_SHUNTING
-  LOCAL_sTR0 = (tr_fr_ptr)LOCAL_db_vec;
-  LOCAL_sTR = (tr_fr_ptr)LOCAL_db_vec;
+  REMOTE_sTR0(worker_id) = (tr_fr_ptr)REMOTE_db_vec(worker_id);
+  REMOTE_sTR(worker_id) = (tr_fr_ptr)REMOTE_db_vec(worker_id);
   /* make sure we set HB before we do any variable shunting!!! */
 #else
-  LOCAL_cont_top0 = (cont *)LOCAL_db_vec;
+  REMOTE_cont_top0(worker_id) = (cont *)REMOTE_db_vec(worker_id);
 #endif
-  LOCAL_cont_top = (cont *)LOCAL_db_vec;
+  REMOTE_cont_top(worker_id) = (cont *)REMOTE_db_vec(worker_id);
   /* These two must be marked first so that our trail optimisation won't lose
      values */
   mark_regs(old_TR PASS_REGS); /* active registers & trail */
@@ -3798,13 +3800,13 @@ static void marking_phase(tr_fr_ptr old_TR, CELL *current_env,
                     is_gc_very_verbose()
                         PASS_REGS); /* choicepoints, and environs  */
 #ifdef EASY_SHUNTING
-  set_conditionals(LOCAL_sTR PASS_REGS);
+  set_conditionals(REMOTE_sTR(worker_id) PASS_REGS);
 #endif
 }
 
 static void sweep_oldgen(CELL *max, CELL *base USES_REGS) {
   CELL *ptr = base;
-  char *bpb = LOCAL_bp + (base - (CELL *)LOCAL_GlobalBase);
+  char *bpb = REMOTE_bp(worker_id) + (base - (CELL *)REMOTE_GlobalBase(worker_id));
 
   while (ptr < max) {
     if (*bpb) {
@@ -3827,19 +3829,19 @@ static void compaction_phase(tr_fr_ptr old_TR, CELL *current_env,
   CELL *CurrentH0 = NULL;
 
   int icompact =
-      (LOCAL_iptop < (CELL_PTR *)ASP && 10 * LOCAL_total_marked < HR - H0);
+      (REMOTE_iptop(worker_id) < (CELL_PTR *)ASP && 10 * REMOTE_total_marked(worker_id) < HR - H0);
 
   if (icompact) {
     /* we are going to reuse the total space */
-    if (LOCAL_HGEN != H0) {
+    if (REMOTE_HGEN(worker_id) != H0) {
       /* undo optimisation */
-      LOCAL_total_marked += LOCAL_total_oldies;
+      REMOTE_total_marked(worker_id) += REMOTE_total_oldies(worker_id);
     }
   } else {
-    if (LOCAL_HGEN != H0) {
+    if (REMOTE_HGEN(worker_id) != H0) {
       CurrentH0 = H0;
-      H0 = LOCAL_HGEN;
-      sweep_oldgen(LOCAL_HGEN, CurrentH0 PASS_REGS);
+      H0 = REMOTE_HGEN(worker_id);
+      sweep_oldgen(REMOTE_HGEN(worker_id), CurrentH0 PASS_REGS);
     }
   }
   sweep_environments(current_env, EnvSize(curp), EnvBMap(curp), curp PASS_REGS);
@@ -3849,26 +3851,26 @@ static void compaction_phase(tr_fr_ptr old_TR, CELL *current_env,
   if (icompact) {
 #ifdef DEBUG
     /*
-    if (LOCAL_total_marked
+    if (REMOTE_total_marked(worker_id)
 #ifdef COROUTINING
-        -LOCAL_total_smarked
+        -REMOTE_total_smarked(worker_id)
 #endif
-        != LOCAL_iptop-(CELL_PTR *)H && LOCAL_iptop < (CELL_PTR *)ASP -1024)
-      fprintf(stderr,"%% Oops on LOCAL_iptop-H (%ld) vs %ld\n", (unsigned long
-int)(LOCAL_iptop-(CELL_PTR *)HR), LOCAL_total_marked);
+        != REMOTE_iptop(worker_id)-(CELL_PTR *)H && REMOTE_iptop(worker_id) < (CELL_PTR *)ASP -1024)
+      fprintf(stderr,"%% Oops on REMOTE_iptop(worker_id)-H (%ld) vs %ld\n", (unsigned long
+int)(REMOTE_iptop(worker_id)-(CELL_PTR *)HR), REMOTE_total_marked(worker_id));
     */
 #endif
 #if DEBUGX
-    int effectiveness = (((H - H0) - LOCAL_total_marked) * 100) / (H - H0);
+    int effectiveness = (((H - H0) - REMOTE_total_marked(worker_id)) * 100) / (H - H0);
     fprintf(stderr, "%% using pointers (%d)\n", effectiveness);
 #endif
     if (CurrentH0) {
       H0 = CurrentH0;
-      LOCAL_HGEN = H0;
-      LOCAL_total_marked += LOCAL_total_oldies;
+      REMOTE_HGEN(worker_id) = H0;
+      REMOTE_total_marked(worker_id) += REMOTE_total_oldies(worker_id);
       CurrentH0 = NULL;
     }
-    quicksort((CELL_PTR *)HR, 0, (LOCAL_iptop - (CELL_PTR *)HR) - 1);
+    quicksort((CELL_PTR *)HR, 0, (REMOTE_iptop(worker_id) - (CELL_PTR *)HR) - 1);
     icompact_heap(PASS_REGS1);
   } else
 #endif /* HYBRID_SCHEME */
@@ -3876,9 +3878,9 @@ int)(LOCAL_iptop-(CELL_PTR *)HR), LOCAL_total_marked);
 #ifdef DEBUG
     /*
 #ifdef HYBRID_SCHEME
-    int effectiveness = (((H-H0)-LOCAL_total_marked)*100)/(H-H0);
+    int effectiveness = (((H-H0)-REMOTE_total_marked(worker_id))*100)/(H-H0);
     fprintf(stderr,"%% not using pointers (%d) ASP: %p, ip %p (expected %p) \n",
-effectiveness, ASP, LOCAL_iptop, H+LOCAL_total_marked);
+effectiveness, ASP, REMOTE_iptop(worker_id), H+REMOTE_total_marked(worker_id));
 
 #endif
     */
@@ -3911,7 +3913,7 @@ static int do_gc(Int predarity, CELL *current_env, yamop *nextop USES_REGS) {
   gc_verbose = is_gc_verbose();
   effectiveness = 0;
   gc_trace = false;
-  LOCAL_GcCalls++;
+  REMOTE_GcCalls(worker_id)++;
 #ifdef INSTRUMENT_GC
   {
     int i;
@@ -3944,20 +3946,20 @@ static int do_gc(Int predarity, CELL *current_env, yamop *nextop USES_REGS) {
     fprintf(stderr, "%% Worker Id %d:\n", worker_id);
 #endif
     fprintf(stderr, "%% Start of garbage collection %lu:\n",
-            (unsigned long int)LOCAL_GcCalls);
+            (unsigned long int)REMOTE_GcCalls(worker_id));
     fprintf(stderr, "%%       Global: %8ld cells (%p-%p)\n",
             (long int)heap_cells, H0, HR);
     fprintf(stderr, "%%       Local:%8ld cells (%p-%p)\n",
             (unsigned long int)(LCL0 - ASP), LCL0, ASP);
     fprintf(stderr, "%%       Trail:%8ld cells (%p-%p)\n",
-            (unsigned long int)(TR - (tr_fr_ptr)LOCAL_TrailBase),
-            LOCAL_TrailBase, TR);
+            (unsigned long int)(TR - (tr_fr_ptr)REMOTE_TrailBase(worker_id)),
+            REMOTE_TrailBase(worker_id), TR);
   }
 #if !USE_SYSTEM_MALLOC
-  if (HeapTop >= LOCAL_GlobalBase - MinHeapGap) {
+  if (HeapTop >= REMOTE_GlobalBase(worker_id) - MinHeapGap) {
     *--ASP = (CELL)current_env;
     if (!Yap_locked_growheap(FALSE, MinHeapGap, NULL)) {
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return -1;
     }
     current_env = (CELL *)*ASP;
@@ -3971,91 +3973,91 @@ static int do_gc(Int predarity, CELL *current_env, yamop *nextop USES_REGS) {
 
     /* we cannot recover, fail system */
     restore_machine_regs();
-    sz = LOCAL_TrailTop - (ADDR)LOCAL_OldTR;
+    sz = REMOTE_TrailTop(worker_id) - (ADDR)REMOTE_OldTR(worker_id);
     /* ask for double the size */
     sz = 2 * sz;
-    TR = LOCAL_OldTR;
+    TR = REMOTE_OldTR(worker_id);
 
     *--ASP = (CELL)current_env;
     if (!Yap_locked_growtrail(sz, FALSE)) {
       Yap_Error(RESOURCE_ERROR_TRAIL, TermNil, "out of %lB during gc", sz);
       return -1;
     } else {
-      LOCAL_total_marked = 0;
-      LOCAL_total_oldies = 0;
+      REMOTE_total_marked(worker_id) = 0;
+      REMOTE_total_oldies(worker_id) = 0;
 #ifdef COROUTING
-      LOCAL_total_smarked = 0;
+      REMOTE_total_smarked(worker_id) = 0;
 #endif
-      LOCAL_discard_trail_entries = 0;
+      REMOTE_discard_trail_entries(worker_id) = 0;
       current_env = (CELL *)*ASP;
       ASP++;
     }
   } else if (jmp_res == 3) {
     /* we cannot recover, fail system */
     restore_machine_regs();
-    TR = LOCAL_OldTR;
+    TR = REMOTE_OldTR(worker_id);
 
-    LOCAL_total_marked = 0;
-    LOCAL_total_oldies = 0;
+    REMOTE_total_marked(worker_id) = 0;
+    REMOTE_total_oldies(worker_id) = 0;
 #ifdef COROUTING
-    LOCAL_total_smarked = 0;
+    REMOTE_total_smarked(worker_id) = 0;
 #endif
-    LOCAL_discard_trail_entries = 0;
-    if (LOCAL_extra_gc_cells_size < 1024 * 104) {
-      LOCAL_extra_gc_cells_size <<= 1;
+    REMOTE_discard_trail_entries(worker_id) = 0;
+    if (REMOTE_extra_gc_cells_size(worker_id) < 1024 * 104) {
+      REMOTE_extra_gc_cells_size(worker_id) <<= 1;
     } else {
-      LOCAL_extra_gc_cells_size += 1024 * 1024;
+      REMOTE_extra_gc_cells_size(worker_id) += 1024 * 1024;
     }
   } else if (jmp_res == 4) {
     /* we cannot recover, fail completely */
     Yap_exit(1);
   }
 #if EASY_SHUNTING
-  LOCAL_sTR0 = LOCAL_sTR = NULL;
+  REMOTE_sTR0(worker_id) = REMOTE_sTR(worker_id) = NULL;
 #endif
-  LOCAL_total_marked = 0;
-  LOCAL_total_oldies = 0;
+  REMOTE_total_marked(worker_id) = 0;
+  REMOTE_total_oldies(worker_id) = 0;
 #ifdef COROUTING
-  LOCAL_total_smarked = 0;
+  REMOTE_total_smarked(worker_id) = 0;
 #endif
-  LOCAL_discard_trail_entries = 0;
-  alloc_sz = (CELL *)LOCAL_TrailTop - (CELL *)LOCAL_GlobalBase;
-  LOCAL_bp = Yap_PreAllocCodeSpace();
-  while (IN_BETWEEN(LOCAL_bp, AuxSp, LOCAL_bp + alloc_sz)) {
+  REMOTE_discard_trail_entries(worker_id) = 0;
+  alloc_sz = (CELL *)REMOTE_TrailTop(worker_id) - (CELL *)REMOTE_GlobalBase(worker_id);
+  REMOTE_bp(worker_id) = Yap_PreAllocCodeSpace();
+  while (IN_BETWEEN(REMOTE_bp(worker_id), AuxSp, REMOTE_bp(worker_id) + alloc_sz)) {
     /* not enough space */
     *--ASP = (CELL)current_env;
-    LOCAL_bp = (char *)Yap_ExpandPreAllocCodeSpace(alloc_sz, NULL, TRUE);
-    if (!LOCAL_bp)
+    REMOTE_bp(worker_id) = (char *)Yap_ExpandPreAllocCodeSpace(alloc_sz, NULL, TRUE);
+    if (!REMOTE_bp(worker_id))
       return -1;
     current_env = (CELL *)*ASP;
     ASP++;
   }
-  memset((void *)LOCAL_bp, 0, alloc_sz);
+  memset((void *)REMOTE_bp(worker_id), 0, alloc_sz);
 #ifdef HYBRID_SCHEME
-  LOCAL_iptop = (CELL_PTR *)HR;
+  REMOTE_iptop(worker_id) = (CELL_PTR *)HR;
 #endif
   /* get the number of active registers */
-  LOCAL_HGEN = VarOfTerm(Yap_ReadTimedVar(LOCAL_GcGeneration));
+  REMOTE_HGEN(worker_id) = VarOfTerm(Yap_ReadTimedVar(REMOTE_GcGeneration(worker_id)));
 
-  gc_phase = (UInt)IntegerOfTerm(Yap_ReadTimedVar(LOCAL_GcPhase));
-  /* old LOCAL_HGEN are not very reliable, but still may have data to recover */
-  if (gc_phase != LOCAL_GcCurrentPhase) {
-    LOCAL_HGEN = H0;
+  gc_phase = (UInt)IntegerOfTerm(Yap_ReadTimedVar(REMOTE_GcPhase(worker_id)));
+  /* old REMOTE_HGEN(worker_id) are not very reliable, but still may have data to recover */
+  if (gc_phase != REMOTE_GcCurrentPhase(worker_id)) {
+    REMOTE_HGEN(worker_id) = H0;
   }
-  /*  fprintf(stderr,"LOCAL_HGEN is %ld, %p, %p/%p\n",
-   * IntegerOfTerm(Yap_ReadTimedVar(LOCAL_GcGeneration)), LOCAL_HGEN, H,H0);*/
-  LOCAL_OldTR = old_TR = push_registers(predarity, nextop PASS_REGS);
+  /*  fprintf(stderr,"REMOTE_HGEN(worker_id) is %ld, %p, %p/%p\n",
+   * IntegerOfTerm(Yap_ReadTimedVar(REMOTE_GcGeneration(worker_id))), REMOTE_HGEN(worker_id), H,H0);*/
+  REMOTE_OldTR(worker_id) = old_TR = push_registers(predarity, nextop PASS_REGS);
   /* make sure we clean bits after a reset */
   marking_phase(old_TR, current_env, nextop PASS_REGS);
-  if (LOCAL_total_oldies > ((LOCAL_HGEN - H0) * 8) / 10) {
-    LOCAL_total_marked -= LOCAL_total_oldies;
-    tot = LOCAL_total_marked + (LOCAL_HGEN - H0);
+  if (REMOTE_total_oldies(worker_id) > ((REMOTE_HGEN(worker_id) - H0) * 8) / 10) {
+    REMOTE_total_marked(worker_id) -= REMOTE_total_oldies(worker_id);
+    tot = REMOTE_total_marked(worker_id) + (REMOTE_HGEN(worker_id) - H0);
   } else {
-    if (LOCAL_HGEN != H0) {
-      LOCAL_HGEN = H0;
-      LOCAL_GcCurrentPhase++;
+    if (REMOTE_HGEN(worker_id) != H0) {
+      REMOTE_HGEN(worker_id) = H0;
+      REMOTE_GcCurrentPhase(worker_id)++;
     }
-    tot = LOCAL_total_marked;
+    tot = REMOTE_total_marked(worker_id);
   }
   m_time = Yap_cputime();
   gc_time = m_time - time_start;
@@ -4072,14 +4074,14 @@ static int do_gc(Int predarity, CELL *current_env, yamop *nextop USES_REGS) {
         "%%   Mark: Marked %ld cells of %ld (efficiency: %ld%%) in %g sec\n",
         (long int)tot, (long int)heap_cells, (long int)effectiveness,
         (double)(m_time - time_start) / 1000);
-    if (LOCAL_HGEN - H0)
+    if (REMOTE_HGEN(worker_id) - H0)
       fprintf(stderr,
               "%%       previous generation has size " UInt_FORMAT
               ", with " UInt_FORMAT " (" UInt_FORMAT "%%) unmarked\n",
-              (UInt)(LOCAL_HGEN - H0),
-              (UInt)((LOCAL_HGEN - H0) - LOCAL_total_oldies),
-              (UInt)(100 * ((LOCAL_HGEN - H0) - LOCAL_total_oldies) /
-                     (LOCAL_HGEN - H0)));
+              (UInt)(REMOTE_HGEN(worker_id) - H0),
+              (UInt)((REMOTE_HGEN(worker_id) - H0) - REMOTE_total_oldies(worker_id)),
+              (UInt)(100 * ((REMOTE_HGEN(worker_id) - H0) - REMOTE_total_oldies(worker_id)) /
+                     (REMOTE_HGEN(worker_id) - H0)));
 #ifdef INSTRUMENT_GC
     {
       int i;
@@ -4100,25 +4102,25 @@ static int do_gc(Int predarity, CELL *current_env, yamop *nextop USES_REGS) {
   compaction_phase(old_TR, current_env, nextop PASS_REGS);
   TR = old_TR;
   pop_registers(predarity, nextop PASS_REGS);
-  TR = LOCAL_new_TR;
-  /*  fprintf(stderr,"NEW LOCAL_HGEN %ld (%ld)\n", H-H0, LOCAL_HGEN-H0);*/
+  TR = REMOTE_new_TR(worker_id);
+  /*  fprintf(stderr,"NEW REMOTE_HGEN(worker_id) %ld (%ld)\n", H-H0, REMOTE_HGEN(worker_id)-H0);*/
   {
     Term t = MkVarTerm();
-    Yap_UpdateTimedVar(LOCAL_GcGeneration, t);
+    Yap_UpdateTimedVar(REMOTE_GcGeneration(worker_id), t);
   }
-  Yap_UpdateTimedVar(LOCAL_GcPhase, MkIntegerTerm(LOCAL_GcCurrentPhase));
+  Yap_UpdateTimedVar(REMOTE_GcPhase(worker_id), MkIntegerTerm(REMOTE_GcCurrentPhase(worker_id)));
   c_time = Yap_cputime();
   if (gc_verbose) {
     fprintf(stderr, "%%   Compress: took %g sec\n",
             (double)(c_time - time_start) / 1000);
   }
   gc_time += (c_time - time_start);
-  LOCAL_TotGcTime += gc_time;
-  LOCAL_TotGcRecovered += heap_cells - tot;
+  REMOTE_TotGcTime(worker_id) += gc_time;
+  REMOTE_TotGcRecovered(worker_id) += heap_cells - tot;
   if (gc_verbose) {
     fprintf(stderr, "%% GC %lu took %g sec, total of %g sec doing GC so far.\n",
-            (unsigned long int)LOCAL_GcCalls, (double)gc_time / 1000,
-            (double)LOCAL_TotGcTime / 1000);
+            (unsigned long int)REMOTE_GcCalls(worker_id), (double)gc_time / 1000,
+            (double)REMOTE_TotGcTime(worker_id) / 1000);
     fprintf(stderr, "%%  Left %ld cells free in stacks.\n",
             (unsigned long int)(ASP - HR));
   }
@@ -4128,7 +4130,7 @@ static int do_gc(Int predarity, CELL *current_env, yamop *nextop USES_REGS) {
 
 static bool is_gc_verbose(void) {
   CACHE_REGS
-  if (LOCAL_PrologMode == BootMode)
+  if (REMOTE_PrologMode(worker_id) == BootMode)
     return false;
 #ifdef INSTRUMENT_GC
   /* always give info when we are debugging gc */
@@ -4143,20 +4145,20 @@ bool Yap_is_gc_verbose(void) { return is_gc_verbose(); }
 
 static bool is_gc_very_verbose(void) {
   CACHE_REGS
-  if (LOCAL_PrologMode == BootMode)
+  if (REMOTE_PrologMode(worker_id) == BootMode)
     return false;
   return gcTrace() == TermVeryVerbose;
 }
 
 Int Yap_total_gc_time(void) {
   CACHE_REGS
-  return (LOCAL_TotGcTime);
+  return (REMOTE_TotGcTime(worker_id));
 }
 
 static Int p_inform_gc(USES_REGS1) {
-  Term tn = MkIntegerTerm(LOCAL_TotGcTime);
-  Term tt = MkIntegerTerm(LOCAL_GcCalls);
-  Term ts = Yap_Mk64IntegerTerm((LOCAL_TotGcRecovered * sizeof(CELL)));
+  Term tn = MkIntegerTerm(REMOTE_TotGcTime(worker_id));
+  Term tt = MkIntegerTerm(REMOTE_GcCalls(worker_id));
+  Term ts = Yap_Mk64IntegerTerm((REMOTE_TotGcRecovered(worker_id) * sizeof(CELL)));
 
   return (Yap_unify(tn, ARG2) && Yap_unify(tt, ARG1) && Yap_unify(ts, ARG3));
 }
@@ -4185,23 +4187,23 @@ static int call_gc(UInt gc_lim, gc_entry_info_t *i USES_REGS) {
   } else {
     /* only go exponential for the first 6 calls, that would ask about 2MB
      * minimum */
-    if (LOCAL_GcCalls < 8)
-      gc_margin <<= LOCAL_GcCalls;
+    if (REMOTE_GcCalls(worker_id) < 8)
+      gc_margin <<= REMOTE_GcCalls(worker_id);
     else {
       /* next grow linearly */
       gc_margin <<= 8;
       /* don't do this: it forces the system to ask for ever more stack!!
-         gc_margin *= LOCAL_GcCalls;
+         gc_margin *= REMOTE_GcCalls(worker_id);
       */
     }
   }
   if (gc_margin < gc_lim)
     gc_margin = gc_lim;
-  LOCAL_HGEN = VarOfTerm(Yap_ReadTimedVar(LOCAL_GcGeneration));
-  if (gc_on && !(LOCAL_PrologMode & InErrorMode) &&
+  REMOTE_HGEN(worker_id) = VarOfTerm(Yap_ReadTimedVar(REMOTE_GcGeneration(worker_id)));
+  if (gc_on && !(REMOTE_PrologMode(worker_id) & InErrorMode) &&
       /* make sure there is a point in collecting the heap */
       (ASP - H0) * sizeof(CELL) > gc_lim &&
-      HR - LOCAL_HGEN > (LCL0 - ASP) / 2) {
+      HR - REMOTE_HGEN(worker_id) > (LCL0 - ASP) / 2) {
     effectiveness = do_gc(predarity, current_env, nextop PASS_REGS);
     if (effectiveness < 0)
       return FALSE;
@@ -4231,10 +4233,10 @@ static int call_gc(UInt gc_lim, gc_entry_info_t *i USES_REGS) {
 }
 
 static void LeaveGCMode(USES_REGS1) {
-  if (LOCAL_PrologMode & GCMode)
-    LOCAL_PrologMode &= ~GCMode;
-  if (LOCAL_PrologMode & AbortMode) {
-    LOCAL_PrologMode &= ~AbortMode;
+  if (REMOTE_PrologMode(worker_id) & GCMode)
+    REMOTE_PrologMode(worker_id) &= ~GCMode;
+  if (REMOTE_PrologMode(worker_id) & AbortMode) {
+    REMOTE_PrologMode(worker_id) &= ~AbortMode;
     /* in case someone mangles the P register */
     Yap_Error(ABORT_EVENT, TermNil, "abort from console");
     Yap_RestartYap(1);
@@ -4262,11 +4264,11 @@ int Yap_locked_gc(Int predarity, CELL *current_env, yamop *nextop) {
                   "YAPOR/copying ****\n\n\n");
   exit(1);
 #endif
-  LOCAL_PrologMode |= GCMode;
+  REMOTE_PrologMode(worker_id) |= GCMode;
   res = call_gc(4096, &info PASS_REGS);
   LeaveGCMode(PASS_REGS1);
-  if (LOCAL_PrologMode & GCMode)
-    LOCAL_PrologMode &= ~GCMode;
+  if (REMOTE_PrologMode(worker_id) & GCMode)
+    REMOTE_PrologMode(worker_id) &= ~GCMode;
   return res;
 }
 
@@ -4294,7 +4296,7 @@ int Yap_gcl(UInt gc_lim, Int predarity, CELL *current_env, yamop *nextop) {
 
   CalculateStackGap(PASS_REGS1);
   min = EventFlag * sizeof(CELL);
-  LOCAL_PrologMode |= GCMode;
+  REMOTE_PrologMode(worker_id) |= GCMode;
   if (gc_lim < min)
     gc_lim = min;
   res = call_gc(gc_lim, &info PASS_REGS);
@@ -4316,7 +4318,7 @@ int Yap_locked_gcl(UInt gc_lim, Int predarity, CELL *current_env,
 
   CalculateStackGap(PASS_REGS1);
   min = EventFlag * sizeof(CELL);
-  LOCAL_PrologMode |= GCMode;
+  REMOTE_PrologMode(worker_id) |= GCMode;
   if (gc_lim < min)
     gc_lim = min;
   res = call_gc(gc_lim, &info PASS_REGS);
@@ -4326,7 +4328,7 @@ int Yap_locked_gcl(UInt gc_lim, Int predarity, CELL *current_env,
 
 static Int p_gc(USES_REGS1) {
   int res;
-  LOCAL_PrologMode |= GCMode;
+  REMOTE_PrologMode(worker_id) |= GCMode;
   if (P->opc == Yap_opcode(_execute_cpred))
     res = do_gc(0, ENV, CP PASS_REGS) >= 0;
   else
@@ -4342,6 +4344,6 @@ void Yap_init_gc(void) {
 
 void Yap_inc_mark_variable() {
   CACHE_REGS
-  LOCAL_total_marked++;
+  REMOTE_total_marked(worker_id)++;
 }
  

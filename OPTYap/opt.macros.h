@@ -106,10 +106,10 @@ extern size_t Yap_page_size;
         PgEnt_strs_in_use(FROM_PG_ENT) = 0
 #define DETACH_PAGES(_PG_ENT)                                                              \
         LOCK(PgEnt_lock(GLOBAL##_PG_ENT));                                                 \
-        MOVE_PAGES(LOCAL##_PG_ENT, GLOBAL##_PG_ENT);                                       \
+        MOVE_PAGES(REMOTE##_PG_ENT(worker_id), GLOBAL##_PG_ENT);                                       \
         UNLOCK(PgEnt_lock(GLOBAL##_PG_ENT))
 #define ATTACH_PAGES(_PG_ENT)                                                              \
-        MOVE_PAGES(GLOBAL##_PG_ENT, LOCAL##_PG_ENT)
+        MOVE_PAGES(GLOBAL##_PG_ENT, REMOTE##_PG_ENT(worker_id))
 #define GET_FREE_STRUCT(STR, STR_TYPE, PG_ENT, EXTRA_PG_ENT)                               \
         LOCK_PAGE_ENTRY(PG_ENT);                                                           \
         UPDATE_STATS(PgEnt_strs_in_use(PG_ENT), 1);                                        \
@@ -419,9 +419,9 @@ extern size_t Yap_page_size;
 
 #if defined(THREADS) && defined(TABLING)
 #define ALLOC_STRUCT(STR, STR_TYPE, _PG_ENT)                          \
-        GET_FREE_STRUCT(STR, STR_TYPE, LOCAL##_PG_ENT, GLOBAL##_PG_ENT)
+        GET_FREE_STRUCT(STR, STR_TYPE, REMOTE##_PG_ENT(worker_id), GLOBAL##_PG_ENT)
 #define FREE_STRUCT(STR, STR_TYPE, _PG_ENT)                           \
-        PUT_FREE_STRUCT(STR, STR_TYPE, LOCAL##_PG_ENT)
+        PUT_FREE_STRUCT(STR, STR_TYPE, REMOTE##_PG_ENT(worker_id))
 #else
 #define ALLOC_STRUCT(STR, STR_TYPE, _PG_ENT)                          \
         GET_FREE_STRUCT(STR, STR_TYPE, GLOBAL##_PG_ENT, ___NOT_USED___)

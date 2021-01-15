@@ -43,10 +43,11 @@ static int ConsolePutc(int, int);
 
 
 bool Yap_DoPrompt(StreamDesc *s) {
+  CACHE_REGS
   if (s->status & Tty_Stream_f) {
-    if (GLOBAL_Stream[LOCAL_c_input_stream].status & Tty_Stream_f &&
-	GLOBAL_Stream[LOCAL_c_error_stream].status & Tty_Stream_f) {
-      return LOCAL_newline;
+    if (GLOBAL_Stream[REMOTE_c_input_stream(worker_id)].status & Tty_Stream_f &&
+	GLOBAL_Stream[REMOTE_c_error_stream(worker_id)].status & Tty_Stream_f) {
+      return REMOTE_newline(worker_id);
     }
   }
   return false;
@@ -55,31 +56,33 @@ bool Yap_DoPrompt(StreamDesc *s) {
 
 /* check if we read a newline or an EOF */
 int console_post_process_read_char(int ch, StreamDesc *s) {
+  CACHE_REGS
   /* the character is also going to be output by the console handler */
-  console_count_output_char(ch, GLOBAL_Stream + LOCAL_c_error_stream);
+  console_count_output_char(ch, GLOBAL_Stream + REMOTE_c_error_stream(worker_id));
   if (ch == '\r') {
     s->linepos = 0;
-    LOCAL_newline = true;
+    REMOTE_newline(worker_id) = true;
 } else
  if (ch == '\n') {
     CACHE_REGS
     ++s->linecount;
     ++s->charcount;
     s->linepos = 0;
-    LOCAL_newline = true;
+    REMOTE_newline(worker_id) = true;
   } else {
     CACHE_REGS
     ++s->charcount;
     ++s->linepos;
-    LOCAL_newline = false;
+    REMOTE_newline(worker_id) = false;
   }
   return ch;
 }
 
 bool is_same_tty(FILE *f1, FILE *f2) {
 #if HAVE_TTYNAME
-  return ttyname_r(fileno(f1), LOCAL_FileNameBuf, YAP_FILENAME_MAX - 1) ==
-         ttyname_r(fileno(f2), LOCAL_FileNameBuf, YAP_FILENAME_MAX - 1);
+  CACHE_REGS
+  return ttyname_r(fileno(f1), REMOTE_FileNameBuf(worker_id), YAP_FILENAME_MAX - 1) ==
+         ttyname_r(fileno(f2), REMOTE_FileNameBuf(worker_id), YAP_FILENAME_MAX - 1);
 #endif
   // assume a single console, for now
   return true;
@@ -111,6 +114,7 @@ void Yap_ConsoleOps(StreamDesc *s) {
 
 /* static */
 static int ConsolePutc(int sno, int ch) {
+  CACHE_REGS
   StreamDesc *s = &GLOBAL_Stream[sno];
   if (ch == 10) {
 #if MAC || _WIN32
@@ -118,7 +122,7 @@ static int ConsolePutc(int sno, int ch) {
 #else
     putc('\n', s->file);
 #endif
-    LOCAL_newline = true;
+    REMOTE_newline(worker_id) = true;
   } else
     putc(ch, s->file);
 #if MAC || _WIN32
@@ -140,36 +144,36 @@ restart:
      show it in silent mode */
   if (Yap_DoPrompt(s)) {
     if (!silentMode()) {
-      char *cptr = LOCAL_Prompt, ch;
+      char *cptr = REMOTE_Prompt(worker_id), ch;
     /* use the default routine */
       while ((ch = *cptr++) != '\0') {
         GLOBAL_Stream[StdErrStream].stream_putc(StdErrStream, ch);
       }
     }
-    Yap_clearInput(LOCAL_c_error_stream);
-    strncpy(LOCAL_Prompt, (char *)RepAtom(LOCAL_AtPrompt)->StrOfAE, MAX_PROMPT);
-    LOCAL_newline = FALSE;
+    Yap_clearInput(REMOTE_c_error_stream(worker_id));
+    strncpy(REMOTE_Prompt(worker_id), (char *)RepAtom(REMOTE_AtPrompt(worker_id))->StrOfAE, MAX_PROMPT);
+    REMOTE_newline(worker_id) = FALSE;
   }
 #if HAVE_SIGINTERRUPT
   siginterrupt(SIGINT, TRUE);
 #endif
-  LOCAL_PrologMode |= ConsoleGetcMode;
+  REMOTE_PrologMode(worker_id) |= ConsoleGetcMode;
   ch = fgetc(s->file);
 #if HAVE_SIGINTERRUPT
   siginterrupt(SIGINT, FALSE);
 #endif
-  if (LOCAL_PrologMode & InterruptMode) {
+  if (REMOTE_PrologMode(worker_id) & InterruptMode) {
     Yap_external_signal(0, YAP_INT_SIGNAL);
-    LOCAL_PrologMode &= ~ConsoleGetcMode;
-    LOCAL_newline = TRUE;
-    if (LOCAL_PrologMode & AbortMode) {
+    REMOTE_PrologMode(worker_id) &= ~ConsoleGetcMode;
+    REMOTE_newline(worker_id) = TRUE;
+    if (REMOTE_PrologMode(worker_id) & AbortMode) {
       Yap_Error(ABORT_EVENT, TermNil, "");
-      LOCAL_ErrorMessage = "Abort";
+      REMOTE_ActiveError(worker_id)->errorMsg = "Abort";
       return EOF;
     }
     goto restart;
   } else {
-    LOCAL_PrologMode &= ~ConsoleGetcMode;
+    REMOTE_PrologMode(worker_id) &= ~ConsoleGetcMode;
   }
   if (ch == EOF)
     return EOF;
@@ -189,13 +193,13 @@ static Int prompt1(USES_REGS1) { /* prompt1(Atom)                 */
   Atom a;
   if (IsVarTerm(t) || !IsAtomTerm(t))
     return (FALSE);
-  LOCAL_AtPrompt = a = AtomOfTerm(t);
+  REMOTE_AtPrompt(worker_id) = a = AtomOfTerm(t);
   if (strlen((char *)RepAtom(a)->StrOfAE) > MAX_PROMPT) {
     Yap_Error(SYSTEM_ERROR_INTERNAL, t, "prompt %s is too long",
               RepAtom(a)->StrOfAE);
     return (FALSE);
   }
-  strncpy(LOCAL_Prompt, (char *)RepAtom(a)->StrOfAE, MAX_PROMPT);
+  strncpy(REMOTE_Prompt(worker_id), (char *)RepAtom(a)->StrOfAE, MAX_PROMPT);
   return (TRUE);
 }
 
@@ -208,7 +212,7 @@ interaction.
 static Int prompt(USES_REGS1) { /* prompt(Old,New)       */
   Term t = Deref(ARG2);
   Atom a;
-  if (!Yap_unify_constant(ARG1, MkAtomTerm(LOCAL_AtPrompt)))
+  if (!Yap_unify_constant(ARG1, MkAtomTerm(REMOTE_AtPrompt(worker_id))))
     return (FALSE);
   if (IsVarTerm(t) || !IsAtomTerm(t))
     return (FALSE);
@@ -218,8 +222,8 @@ static Int prompt(USES_REGS1) { /* prompt(Old,New)       */
               RepAtom(a)->StrOfAE);
     return false;
   }
-  strncpy(LOCAL_Prompt, (char *)RepAtom(LOCAL_AtPrompt)->StrOfAE, MAX_PROMPT);
-  LOCAL_AtPrompt = a;
+  strncpy(REMOTE_Prompt(worker_id), (char *)RepAtom(REMOTE_AtPrompt(worker_id))->StrOfAE, MAX_PROMPT);
+  REMOTE_AtPrompt(worker_id) = a;
   return (TRUE);
 }
 
@@ -230,7 +234,7 @@ introduce a new line.
 
 */
 static Int ensure_prompting(USES_REGS1) { /* prompt(Old,New)       */
-  if (!LOCAL_newline) {
+  if (!REMOTE_newline(worker_id)) {
     GLOBAL_Stream[2].stream_wputc(2, 10); // hack!
   }
   return true;
@@ -250,14 +254,14 @@ int Yap_GetCharForSIGINT(void) {
     while ((fgetc(stdin)) != '\n')
       ;
   }
-  LOCAL_newline = TRUE;
+  REMOTE_newline(worker_id) = TRUE;
   fflush(NULL);
   return ch;
 }
 
 void Yap_InitConsole(void) {
   CACHE_REGS
-  LOCAL_newline = true;
+  REMOTE_newline(worker_id) = true;
   Yap_InitCPred("prompt", 1, prompt1, SafePredFlag | SyncPredFlag);
   Yap_InitCPred("prompt1", 1, prompt1, SafePredFlag | SyncPredFlag);
   Yap_InitCPred("$is_same_tty", 2, is_same_tty2,

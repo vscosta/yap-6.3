@@ -38,24 +38,25 @@ X_API bool do_init_python(void);
 }
 
 static void YAPCatchError() {
-  if (LOCAL_CommittedError != nullptr &&
-       LOCAL_CommittedError->errorNo != YAP_NO_ERROR) {
+  CACHE_REGS
+  if (REMOTE_CommittedError(worker_id) != nullptr &&
+       REMOTE_CommittedError(worker_id)->errorNo != YAP_NO_ERROR) {
     // Yap_PopTermFromDB(info->errorTerm);
     // throw  throw YAPError(  );
     Term es[2];
     es[0] = TermError;
-    es[1] = MkErrorTerm(LOCAL_CommittedError);
+    es[1] = MkErrorTerm(REMOTE_CommittedError(worker_id));
     Functor f = Yap_MkFunctor(Yap_LookupAtom("print_message"), 2);
     YAP_RunGoalOnce(Yap_MkApplTerm(f, 2, es));
     // Yap_PopTermFromDB(info->errorTerm);
     // throw  throw YAPError( SOURCE(), );
-  } else if (LOCAL_ActiveError != nullptr &&
-             LOCAL_ActiveError->errorNo != YAP_NO_ERROR) {
+  } else if (REMOTE_ActiveError(worker_id) != nullptr &&
+             REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     // Yap_PopTermFromDB(info->errorTerm);
     // throw  throw YAPError(  );
     Term es[2];
     es[0] = TermError;
-    es[1] = MkErrorTerm(LOCAL_ActiveError);
+    es[1] = MkErrorTerm(REMOTE_ActiveError(worker_id));
     Functor f = Yap_MkFunctor(Yap_LookupAtom("print_message"), 2);
     YAP_RunGoalOnce(Yap_MkApplTerm(f, 2, es));
     // Yap_PopTermFromDB(info->errorTerm);
@@ -130,7 +131,7 @@ YAPAtomTerm::YAPAtomTerm(char s[]) { // build string
 
   CACHE_REGS
   seq_tv_t inp, out;
-    inp.enc = LOCAL_encoding;
+    inp.enc = REMOTE_encoding(worker_id);
   inp.val.c = s;
   inp.type = YAP_STRING_CHARS;
   out.type = YAP_STRING_ATOM;
@@ -148,7 +149,7 @@ YAPAtomTerm::YAPAtomTerm(char *s, size_t len) { // build string
   seq_tv_t inp, out;
   inp.val.c = s;
   inp.type = YAP_STRING_CHARS;
-    inp.enc = LOCAL_encoding;
+    inp.enc = REMOTE_encoding(worker_id);
     out.type = YAP_STRING_ATOM | YAP_STRING_NCHARS | YAP_STRING_TRUNC;
   out.max = len;
   if (Yap_CVT_Text(&inp, &out PASS_REGS))
@@ -503,9 +504,10 @@ Term YAPListTerm::dup() {
 }
 
 intptr_t YAPTerm::numberVars(intptr_t i0, bool skip_singletons) {
+  CACHE_REGS
   BACKUP_MACHINE_REGS();
 
-  intptr_t i = Yap_NumberVars(gt(), i0, skip_singletons, nullptr);
+  intptr_t i = Yap_NumberVars(gt(), i0, skip_singletons, nullptr PASS_REGS);
 
   RECOVER_MACHINE_REGS();
   return i;
@@ -563,10 +565,12 @@ YAPListTerm::YAPListTerm(YAPTerm ts[], arity_t n) {
   }
 }
 
-const char *YAPAtom::getName(void) { return Yap_AtomToUTF8Text(a); }
+const char *YAPAtom::getName(void) {
+  CACHE_REGS
+  return Yap_AtomToUTF8Text(a PASS_REGS);
+}
 
 void YAPQuery::openQuery() {
-  CACHE_REGS
   if (ap == NULL || ap->OpcodeOfPred == UNDEF_OPCODE) {
     ap = rewriteUndefQuery();
   }
@@ -652,7 +656,7 @@ bool YAPEngine::mgoal(Term t, Term tmod, bool release) {
     HR = B->cp_h;
  ENV = LCL0-oenv;
  B = (choiceptr)(LCL0-oB);
-  CurrentModule = LOCAL_SourceModule = omod;
+  CurrentModule = REMOTE_SourceModule(worker_id) = omod;
   //      PyEval_RestoreThread(_save);
   RECOVER_MACHINE_REGS();
   return result;
@@ -662,6 +666,7 @@ bool YAPEngine::mgoal(Term t, Term tmod, bool release) {
  * @type {[type]}
  */
 void YAPEngine::release() {
+  CACHE_REGS
 
   BACKUP_MACHINE_REGS();
   HR = B->cp_h;
@@ -827,12 +832,12 @@ bool YAPQuery::next() {
   q_h.p = P;
   q_h.cp = CP;
 
-  sigjmp_buf buf, *oldp = LOCAL_RestartEnv;
+  sigjmp_buf buf, *oldp = REMOTE_RestartEnv(worker_id);
   e = nullptr;
   BACKUP_MACHINE_REGS();
   if (!q_open)
     return false;
-  LOCAL_RestartEnv = &buf;
+  REMOTE_RestartEnv(worker_id) = &buf;
   // don't forget, on success these guys may create slots
   __android_log_print(ANDROID_LOG_INFO, "YAPDroid", "exec  ");
 
@@ -840,7 +845,7 @@ bool YAPQuery::next() {
     // Yap_do_low_level_trace = 1;
     result = (bool)YAP_EnterGoal(ap, nullptr, &q_h);
   } else {
-    LOCAL_AllowRestart = q_open;
+    REMOTE_AllowRestart(worker_id) = q_open;
     result = (bool)YAP_RetryGoal(&q_h);
   }
   q_state = 1;
@@ -852,7 +857,7 @@ bool YAPQuery::next() {
   }
   YAPCatchError();
   RECOVER_MACHINE_REGS();
-  LOCAL_RestartEnv = oldp;
+  REMOTE_RestartEnv(worker_id) = oldp;
   return result;
 }
 
@@ -863,22 +868,22 @@ PredEntry *YAPQuery::rewriteUndefQuery() {
 
 PredEntry *YAPEngine::rewriteUndefEngineQuery(PredEntry *a, Term &tgoal,
                                               Term mod) {
+  CACHE_REGS
   tgoal = Yap_MkApplTerm(FunctorCall, 1, &tgoal);
-  LOCAL_ActiveError->errorNo = YAP_NO_ERROR;
+  REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
   return PredCall;
 
   // return YAPApplTerm(FunctorUndefinedQuery, ts);
 }
 
 void YAPQuery::cut() {
-  CACHE_REGS
 
   BACKUP_MACHINE_REGS();
   if (!q_open || q_state == 0)
     return;
   YAP_LeaveGoal(true, &q_h);
   q_open = false;
-  // LOCAL_execution = this;
+  // REMOTE_execution(worker_id) = this;
   RECOVER_MACHINE_REGS();
 }
 
@@ -899,7 +904,7 @@ void YAPQuery::close() {
   CACHE_REGS
 
   RECOVER_MACHINE_REGS();
-  Yap_ResetException(worker_id);
+  Yap_ResetException((yap_error_descriptor_t*)worker_id);
   /* need to implement backtracking here */
   if (q_open != true || q_state == 0) {
     RECOVER_MACHINE_REGS();
@@ -908,7 +913,7 @@ void YAPQuery::close() {
   YAP_LeaveGoal(false, &q_h);
   q_open = 0;
   Yap_CloseHandles(q_h.CurSlot);
-  // LOCAL_execution = this;
+  // REMOTE_execution(worker_id) = this;
   RECOVER_MACHINE_REGS();
 }
 
@@ -963,6 +968,7 @@ void Yap_displayWithJava(int c) {
 #endif
 
 void YAPEngine::doInit(YAP_file_type_t BootMode, YAPEngineArgs *engineArgs) {
+  CACHE_REGS
   if (init_done)
     return;
   init_done = true;
@@ -986,7 +992,7 @@ void YAPEngine::doInit(YAP_file_type_t BootMode, YAPEngineArgs *engineArgs) {
   //   initq.cut();
   // }
   CurrentModule = TermUser;
-  LOCAL_SourceModule = TermUser;
+  REMOTE_SourceModule(worker_id) = TermUser;
 }
 
 YAPEngine::YAPEngine(int argc, char *argv[],
@@ -1020,7 +1026,6 @@ YAPPredicate::YAPPredicate(YAPAtom at, uintptr_t arity) {
 
 /// auxiliary routine to find a predicate in the current module.
 PredEntry *YAPPredicate::getPred(Term &t, Term &m, CELL *&out) {
-  CACHE_REGS
   t = Yap_StripModule(t, &m);
 
   if (IsVarTerm(t) || IsNumTerm(t)) {
@@ -1070,7 +1075,7 @@ bool YAPPrologPredicate::assertClause(YAPTerm cl, bool last, YAPTerm source) {
       Yap_cclause(tt, ap->ArityOfPE, Yap_CurrentModule(),
                   sourcet); /* vsc: give the number of arguments
                                to cclause in case there is overflow */
-  if (LOCAL_ErrorMessage) {
+  if (REMOTE_ActiveError(worker_id)->errorMsg) {
     RECOVER_MACHINE_REGS();
     return false;
   }
@@ -1093,7 +1098,7 @@ bool YAPPrologPredicate::assertFact(YAPTerm *cl, bool last) {
   yamop *codeaddr = Yap_cclause(tt, ap->ArityOfPE, Yap_CurrentModule(),
                                 tt); /* vsc: give the number of arguments
                                         to cclause in case there is overflow */
-  if (LOCAL_ErrorMessage) {
+  if (REMOTE_ActiveError(worker_id)->errorMsg) {
     RECOVER_MACHINE_REGS();
     return false;
   }
@@ -1155,20 +1160,22 @@ std::stringstream s;
 }
 
 void YAPEngine::reSet() {
+  CACHE_REGS
   /* ignore flags  for now */
   if (B && B->cp_b && B->cp_ap != NOCODE)
     //    YAP_LeaveGoal(false, &q);
-  LOCAL_ActiveError->errorNo = YAP_NO_ERROR;
-  if (LOCAL_CommittedError) {
-    LOCAL_CommittedError->errorNo = YAP_NO_ERROR;
-    free(LOCAL_CommittedError);
-    LOCAL_CommittedError = NULL;
+  REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+  if (REMOTE_CommittedError(worker_id)) {
+    REMOTE_CommittedError(worker_id)->errorNo = YAP_NO_ERROR;
+    free(REMOTE_CommittedError(worker_id));
+    REMOTE_CommittedError(worker_id) = NULL;
   }
   pop_text_stack(0);
-  LOCAL_CurSlot = 0;
+  REMOTE_CurSlot(worker_id) = 0;
 }
 
 Term YAPEngine::top_level(std::string s) {
+  CACHE_REGS
   /// parse string s and make term with var names
   /// available.
   Term tp;
@@ -1190,6 +1197,7 @@ Term YAPEngine::top_level(std::string s) {
 }
 
 Term YAPEngine::next_answer(YAPQuery *&Q) {
+  CACHE_REGS
 
   /// parse string s and make term with var names
   /// available.

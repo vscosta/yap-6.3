@@ -93,65 +93,65 @@ Yap_Error__(false, __FILE__, __FUNCTION__, __LINE__, id, TermNil, __VA_ARGS__)
 
 #define JMP_LOCAL_ERROR(v, LAB)                                                \
   if (H + 2 * (v) > ASP - 1024) {                                              \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;                                   \
-    LOCAL_Error_Size = 2 * (v) * sizeof(CELL);                                 \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;                                   \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = 2 * (v) * sizeof(CELL);                                 \
     goto LAB;                                                                  \
   }
 
 #define LOCAL_ERROR(t, v)                                                      \
   if (HR + (v) > ASP - 1024) {                                                 \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;                                   \
-    LOCAL_Error_Size = 2 * (v) * sizeof(CELL);                                 \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;                                   \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = 2 * (v) * sizeof(CELL);                                 \
     return NULL;                                                               \
   }
 
 #define LOCAL_TERM_ERROR(t, v)                                                 \
   if (HR + (v) > ASP - 1024) {                                                 \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;                                   \
-    LOCAL_Error_Size = 2 * (v) * sizeof(CELL);                                 \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;                                   \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = 2 * (v) * sizeof(CELL);                                 \
     return 0L;                                                                 \
   }
 
 #define AUX_ERROR(t, n, s, TYPE)                                               \
   if (s + (n + 1) > (TYPE *)AuxSp) {                                           \
     pop_text_stack(lvl);                                                       \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_AUXILIARY_STACK;                         \
-    LOCAL_Error_Size = n * sizeof(TYPE);                                       \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_AUXILIARY_STACK;                         \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = n * sizeof(TYPE);                                       \
     return NULL;                                                               \
   }
 
 #define AUX_TERM_ERROR(t, n, s, TYPE)                                          \
   if (s + (n + 1) > (TYPE *)AuxSp) {                                           \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_AUXILIARY_STACK;                         \
-    LOCAL_Error_Size = n * sizeof(TYPE);                                       \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_AUXILIARY_STACK;                         \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = n * sizeof(TYPE);                                       \
     return 0L;                                                                 \
   }
 
 #define JMP_AUX_ERROR(n, s, t, TYPE, LAB)                                      \
   if (s + (n + 1) > (TYPE *)AuxSp) {                                           \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_AUXILIARY_STACK;                         \
-    LOCAL_Error_Size = n * sizeof(TYPE);                                       \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_AUXILIARY_STACK;                         \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = n * sizeof(TYPE);                                       \
     goto LAB;                                                                  \
   }
 
 #define HEAP_ERROR(a, TYPE)                                                    \
   if (a == NIL) {                                                              \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;                                    \
-    LOCAL_Error_Size = n * sizeof(TYPE);                                       \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_HEAP;                                    \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = n * sizeof(TYPE);                                       \
     return NULL;                                                               \
   }
 
 #define HEAP_TERM_ERROR(a, TYPE, n)                                            \
   if (a == NIL) {                                                              \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;                                    \
-    LOCAL_Error_Size = n * sizeof(TYPE);                                       \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_HEAP;                                    \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = n * sizeof(TYPE);                                       \
     return 0L;                                                                 \
   }
 
 #define JMP_HEAP_ERROR(a, n, t, TYPE, LAB)                                     \
   if (a == NIL) {                                                              \
-    LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;                                    \
-    LOCAL_Error_Size = n * sizeof(TYPE);                                       \
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_HEAP;                                    \
+    REMOTE_ActiveError(worker_id)->errorMsgLen = n * sizeof(TYPE);                                       \
     goto LAB;                                                                  \
   }
 

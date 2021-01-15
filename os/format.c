@@ -361,6 +361,7 @@ static Int format_copy_args(Term args, Term *targs, Int tsz) {
 static void
 
 format_clean_up(int sno, int sno0, format_info *finfo) {
+  CACHE_REGS
   if (sno >= 0 && sno != sno0) {
     sno = format_synch(sno, sno0, finfo);
     Yap_CloseStream(sno);
@@ -410,10 +411,10 @@ static Int doformat(volatile Term otail, volatile Term oargs,
   volatile int old_pos;
   Term fmod = CurrentModule;
   bool alloc_fstr = false;
-  LOCAL_Error_TYPE = YAP_NO_ERROR;
+  REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
   int l = push_text_stack();
-  tmp1 = Malloc(TMP_STRING_SIZE+1);
-  format_info *finfo = Malloc(sizeof(format_info));
+  tmp1 = Malloc(TMP_STRING_SIZE+1 PASS_REGS);
+  format_info *finfo = Malloc(sizeof(format_info) PASS_REGS);
   // it starts here
   finfo->gapi = 0;
   finfo->phys_start = 0;
@@ -429,7 +430,7 @@ static Int doformat(volatile Term otail, volatile Term oargs,
       restore_machine_regs();
       *HR++ = oargs;
       *HR++ = otail;
-      if (!Yap_growheap(FALSE, LOCAL_Error_Size, NULL)) {
+      if (!Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL)) {
 	pop_text_stack(l);
         Yap_ThrowError(RESOURCE_ERROR_HEAP, otail, "format/2");
         return false;
@@ -449,7 +450,7 @@ static Int doformat(volatile Term otail, volatile Term oargs,
     format_clean_up(sno0, sno, finfo );
     Yap_ThrowError(INSTANTIATION_ERROR, tail, "format/2");
     return (FALSE);
-  } else if ((fstr = Yap_TextToUTF8Buffer(tail))) {
+  } else if ((fstr = Yap_TextToUTF8Buffer(tail PASS_REGS))) {
     fptr = fstr;
     alloc_fstr = true;
   } else {
@@ -488,7 +489,7 @@ static Int doformat(volatile Term otail, volatile Term oargs,
   if (IsPairTerm(args)) {
     Int tsz = 16;
 
-    targs = Malloc(32*sizeof(Term));
+    targs = Malloc(32*sizeof(Term) PASS_REGS);
     do {
       tnum = format_copy_args(args, targs, tsz);
       if (tnum == FORMAT_COPY_ARGS_ERROR ||
@@ -499,13 +500,13 @@ static Int doformat(volatile Term otail, volatile Term oargs,
       }
       else if (tnum == tsz ) {
 	tnum += 32;
-	targs = Realloc(targs, tnum*sizeof(Term));
+	targs = Realloc(targs, tnum*sizeof(Term) PASS_REGS);
       }
       break;
     } while (true);      
   } else if (args != TermNil) {
     tnum = 1;
-     targs = Malloc(sizeof(Term));
+     targs = Malloc(sizeof(Term) PASS_REGS);
      targs[0] = args;
   } else {
     tnum = 0;
@@ -826,10 +827,10 @@ static Int doformat(volatile Term otail, volatile Term oargs,
 			      sl = Yap_InitSlots(tnum - targ, targs + targ);
 
 			    Int res;
-			    int os = LOCAL_c_output_stream;
-			    LOCAL_c_output_stream = sno;
+			    int os = REMOTE_c_output_stream(worker_id);
+			    REMOTE_c_output_stream(worker_id) = sno;
 			    res = Yap_execute_goal(t, 0, fmod, true);
-			    LOCAL_c_output_stream = os;
+			    REMOTE_c_output_stream(worker_id) = os;
 			    if (Yap_HasException())
 			      goto ex_handler;
 			    if (!res) {
@@ -965,27 +966,27 @@ static Int doformat(volatile Term otail, volatile Term oargs,
 					    } break;
 
 	    do_instantiation_error:
-					    LOCAL_Error_TYPE = INSTANTIATION_ERROR;
+					    REMOTE_ActiveError(worker_id)->errorNo = INSTANTIATION_ERROR;
 					    goto do_default_error;
 	    do_type_int_error:
-					    LOCAL_Error_TYPE = TYPE_ERROR_INTEGER;
+					    REMOTE_ActiveError(worker_id)->errorNo = TYPE_ERROR_INTEGER;
 					    goto do_default_error;
 	    do_type_number_error:
-					    LOCAL_Error_TYPE = TYPE_ERROR_NUMBER;
+					    REMOTE_ActiveError(worker_id)->errorNo = TYPE_ERROR_NUMBER;
 					    goto do_default_error;
 	    do_type_atom_error:
-					    LOCAL_Error_TYPE = TYPE_ERROR_ATOM;
+					    REMOTE_ActiveError(worker_id)->errorNo = TYPE_ERROR_ATOM;
 					    goto do_default_error;
 	    do_domain_not_less_zero_error:
-					    LOCAL_Error_TYPE = DOMAIN_ERROR_NOT_LESS_THAN_ZERO;
+					    REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_NOT_LESS_THAN_ZERO;
 					    goto do_default_error;
 	    do_domain_error_radix:
-					    LOCAL_Error_TYPE = DOMAIN_ERROR_RADIX;
+					    REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_RADIX;
 					    goto do_default_error;
 	    do_format_control_sequence_error:
-					    LOCAL_Error_TYPE = DOMAIN_ERROR_FORMAT_CONTROL_SEQUENCE;
+					    REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_FORMAT_CONTROL_SEQUENCE;
 					    default:
-					      LOCAL_Error_TYPE = YAP_NO_ERROR;
+					      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
 	    do_default_error:
 					      if (tnum <= 8)
 						targs = NULL;
@@ -997,7 +998,7 @@ static Int doformat(volatile Term otail, volatile Term oargs,
 						ta[0] = otail;
 						ta[1] = oargs;
 						format_clean_up(sno, sno0, finfo);
-						Yap_ThrowError(LOCAL_Error_TYPE,
+						Yap_ThrowError(REMOTE_ActiveError(worker_id)->errorNo,
 							  Yap_MkApplTerm(Yap_MkFunctor(AtomFormat, 2), 2, ta),
 							  "arguments to format");
 					      }
@@ -1010,7 +1011,7 @@ static Int doformat(volatile Term otail, volatile Term oargs,
 						targs = NULL;
 					      }
 					      format_clean_up(sno, sno0, finfo);
-					      LOCAL_Error_TYPE = YAP_NO_ERROR;
+					      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
 					      pop_text_stack(l);
 					      return false;
 	    }
@@ -1041,6 +1042,7 @@ static Int doformat(volatile Term otail, volatile Term oargs,
 }
 
 static Term memStreamToTerm(int output_stream, Functor f, Term inp) {
+  CACHE_REGS
   const char *s = Yap_MemExportStreamPtr(output_stream);
 
   encoding_t enc = GLOBAL_Stream[output_stream].encoding;
@@ -1109,7 +1111,7 @@ Create a list of one-character-atoms as a difference-list.
 
  */
 static Int with_output_to(USES_REGS1) {
-  int old_out = LOCAL_c_output_stream;
+  int old_out = REMOTE_c_output_stream(worker_id);
   int output_stream;
   Term tin = Deref(ARG1);
   Functor f;
@@ -1134,11 +1136,11 @@ static Int with_output_to(USES_REGS1) {
   if (output_stream == -1) {
     return false;
   }
-  LOCAL_c_output_stream = output_stream;
+  REMOTE_c_output_stream(worker_id) = output_stream;
   UNLOCK(GLOBAL_Stream[output_stream].streamlock);
   out = Yap_Execute(Deref(ARG2) PASS_REGS);
   LOCK(GLOBAL_Stream[output_stream].streamlock);
-  LOCAL_c_output_stream = old_out;
+  REMOTE_c_output_stream(worker_id) = old_out;
   if (mem_stream) {
     Term tat;
     Term inp = Yap_GetFromHandle(hdl);
@@ -1200,7 +1202,7 @@ static Int format(Term tf, Term tas, Term tout USES_REGS) {
 static Int format2(USES_REGS1) { /* 'format'(Stream,Control,Args)          */
   Int res;
 
-  res = doformat(Deref(ARG1), Deref(ARG2), LOCAL_c_output_stream PASS_REGS);
+  res = doformat(Deref(ARG1), Deref(ARG2), REMOTE_c_output_stream(worker_id) PASS_REGS);
   return res;
 }
 

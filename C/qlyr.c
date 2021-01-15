@@ -96,10 +96,10 @@ static void QLYR_ERROR__(const char *file, const char *function, int lineno,
 
 static Atom LookupAtom(Atom oat) {
   CACHE_REGS
-  CELL hash = (CELL)(oat) % LOCAL_ImportAtomHashTableSize;
+  CELL hash = (CELL)(oat) % REMOTE_ImportAtomHashTableSize(worker_id);
   import_atom_hash_entry_t *a;
 
-  a = LOCAL_ImportAtomHashChain[hash];
+  a = REMOTE_ImportAtomHashChain(worker_id)[hash];
   while (a) {
     if (a->oval == oat) {
       return a->val;
@@ -114,10 +114,10 @@ static Atom LookupAtom(Atom oat) {
 
 static void InsertAtom(Atom oat, Atom at) {
   CACHE_REGS
-  CELL hash = (CELL)(oat) % LOCAL_ImportAtomHashTableSize;
+  CELL hash = (CELL)(oat) % REMOTE_ImportAtomHashTableSize(worker_id);
   import_atom_hash_entry_t *a;
 
-  a = LOCAL_ImportAtomHashChain[hash];
+  a = REMOTE_ImportAtomHashChain(worker_id)[hash];
   while (a) {
     if (a->oval == oat) {
       return;
@@ -130,16 +130,16 @@ static void InsertAtom(Atom oat, Atom at) {
   }
   a->val = at;
   a->oval = oat;
-  a->next = LOCAL_ImportAtomHashChain[hash];
-  LOCAL_ImportAtomHashChain[hash] = a;
+  a->next = REMOTE_ImportAtomHashChain(worker_id)[hash];
+  REMOTE_ImportAtomHashChain(worker_id)[hash] = a;
 }
 
 static Functor LookupFunctor(Functor ofun) {
   CACHE_REGS
-  CELL hash = (CELL)(ofun) % LOCAL_ImportFunctorHashTableSize;
+  CELL hash = (CELL)(ofun) % REMOTE_ImportFunctorHashTableSize(worker_id);
   import_functor_hash_entry_t *f;
 
-  f = LOCAL_ImportFunctorHashChain[hash];
+  f = REMOTE_ImportFunctorHashChain(worker_id)[hash];
   while (f) {
     if (f->oval == ofun) {
       return f->val;
@@ -152,10 +152,10 @@ static Functor LookupFunctor(Functor ofun) {
 
 static void InsertFunctor(Functor ofun, Functor fun) {
   CACHE_REGS
-  CELL hash = (CELL)(ofun) % LOCAL_ImportFunctorHashTableSize;
+  CELL hash = (CELL)(ofun) % REMOTE_ImportFunctorHashTableSize(worker_id);
   import_functor_hash_entry_t *f;
 
-  f = LOCAL_ImportFunctorHashChain[hash];
+  f = REMOTE_ImportFunctorHashChain(worker_id)[hash];
   while (f) {
     if (f->oval == ofun) {
       return;
@@ -169,8 +169,8 @@ static void InsertFunctor(Functor ofun, Functor fun) {
   }
   f->val = fun;
   f->oval = ofun;
-  f->next = LOCAL_ImportFunctorHashChain[hash];
-  LOCAL_ImportFunctorHashChain[hash] = f;
+  f->next = REMOTE_ImportFunctorHashChain(worker_id)[hash];
+  REMOTE_ImportFunctorHashChain(worker_id)[hash] = f;
 }
 
 static PredEntry *LookupPredEntry(PredEntry *op) {
@@ -178,10 +178,10 @@ static PredEntry *LookupPredEntry(PredEntry *op) {
   CELL hash;
   import_pred_entry_hash_entry_t *p;
 
-  if (LOCAL_ImportPredEntryHashTableSize == 0)
+  if (REMOTE_ImportPredEntryHashTableSize(worker_id) == 0)
     return NULL;
-  hash = (CELL)(op) % LOCAL_ImportPredEntryHashTableSize;
-  p = LOCAL_ImportPredEntryHashChain[hash];
+  hash = (CELL)(op) % REMOTE_ImportPredEntryHashTableSize(worker_id);
+  p = REMOTE_ImportPredEntryHashChain(worker_id)[hash];
   while (p) {
     if (p->oval == op) {
       return p->val;
@@ -197,10 +197,10 @@ static void InsertPredEntry(PredEntry *op, PredEntry *pe) {
   CELL hash;
   import_pred_entry_hash_entry_t *p;
 
-  if (LOCAL_ImportPredEntryHashTableSize == 0)
+  if (REMOTE_ImportPredEntryHashTableSize(worker_id) == 0)
     return;
-  hash = (CELL)(op) % LOCAL_ImportPredEntryHashTableSize;
-  p = LOCAL_ImportPredEntryHashChain[hash];
+  hash = (CELL)(op) % REMOTE_ImportPredEntryHashTableSize(worker_id);
+  p = REMOTE_ImportPredEntryHashChain(worker_id)[hash];
   while (p) {
     if (p->oval == op) {
       return;
@@ -214,16 +214,16 @@ static void InsertPredEntry(PredEntry *op, PredEntry *pe) {
   }
   p->val = pe;
   p->oval = op;
-  p->next = LOCAL_ImportPredEntryHashChain[hash];
-  LOCAL_ImportPredEntryHashChain[hash] = p;
+  p->next = REMOTE_ImportPredEntryHashChain(worker_id)[hash];
+  REMOTE_ImportPredEntryHashChain(worker_id)[hash] = p;
 }
 
 static OPCODE LookupOPCODE(OPCODE op) {
   CACHE_REGS
-  CELL hash = (CELL)(op) % LOCAL_ImportOPCODEHashTableSize;
+  CELL hash = (CELL)(op) % REMOTE_ImportOPCODEHashTableSize(worker_id);
   import_opcode_hash_entry_t *f;
 
-  f = LOCAL_ImportOPCODEHashChain[hash];
+  f = REMOTE_ImportOPCODEHashChain(worker_id)[hash];
   while (f) {
     if (f->oval == op) {
       return f->val;
@@ -236,10 +236,10 @@ static OPCODE LookupOPCODE(OPCODE op) {
 
 static int OpcodeID(OPCODE op) {
   CACHE_REGS
-  CELL hash = (CELL)(op) % LOCAL_ImportOPCODEHashTableSize;
+  CELL hash = (CELL)(op) % REMOTE_ImportOPCODEHashTableSize(worker_id);
   import_opcode_hash_entry_t *f;
 
-  f = LOCAL_ImportOPCODEHashChain[hash];
+  f = REMOTE_ImportOPCODEHashChain(worker_id)[hash];
   while (f) {
     if (f->oval == op) {
       return f->id;
@@ -252,9 +252,9 @@ static int OpcodeID(OPCODE op) {
 
 static void InsertOPCODE(OPCODE op0, int i, OPCODE op) {
   CACHE_REGS
-  CELL hash = (CELL)(op0) % LOCAL_ImportOPCODEHashTableSize;
+  CELL hash = (CELL)(op0) % REMOTE_ImportOPCODEHashTableSize(worker_id);
   import_opcode_hash_entry_t *f;
-  f = LOCAL_ImportOPCODEHashChain[hash];
+  f = REMOTE_ImportOPCODEHashChain(worker_id)[hash];
   while (f) {
     if (f->oval == op0) {
       return;
@@ -268,8 +268,8 @@ static void InsertOPCODE(OPCODE op0, int i, OPCODE op) {
   f->val = op;
   f->oval = op0;
   f->id = i;
-  f->next = LOCAL_ImportOPCODEHashChain[hash];
-  LOCAL_ImportOPCODEHashChain[hash] = f;
+  f->next = REMOTE_ImportOPCODEHashChain(worker_id)[hash];
+  REMOTE_ImportOPCODEHashChain(worker_id)[hash] = f;
 }
 
 static DBRef LookupDBRef(DBRef dbr, int inc_ref) {
@@ -277,10 +277,10 @@ static DBRef LookupDBRef(DBRef dbr, int inc_ref) {
   CELL hash;
   import_dbref_hash_entry_t *p;
 
-  if (LOCAL_ImportDBRefHashTableSize == 0)
+  if (REMOTE_ImportDBRefHashTableSize(worker_id) == 0)
     return NULL;
-  hash = (CELL)(dbr) % LOCAL_ImportDBRefHashTableSize;
-  p = LOCAL_ImportDBRefHashChain[hash];
+  hash = (CELL)(dbr) % REMOTE_ImportDBRefHashTableSize(worker_id);
+  p = REMOTE_ImportDBRefHashChain(worker_id)[hash];
   while (p) {
     if (p->oval == dbr) {
       if (inc_ref) {
@@ -299,10 +299,10 @@ static LogUpdClause *LookupMayFailDBRef(DBRef dbr) {
   CELL hash;
   import_dbref_hash_entry_t *p;
 
-  if (LOCAL_ImportDBRefHashTableSize == 0)
+  if (REMOTE_ImportDBRefHashTableSize(worker_id) == 0)
     return NULL;
-  hash = (CELL)(dbr) % LOCAL_ImportDBRefHashTableSize;
-  p = LOCAL_ImportDBRefHashChain[hash];
+  hash = (CELL)(dbr) % REMOTE_ImportDBRefHashTableSize(worker_id);
+  p = REMOTE_ImportDBRefHashChain(worker_id)[hash];
   while (p) {
     if (p->oval == dbr) {
       p->count++;
@@ -315,10 +315,10 @@ static LogUpdClause *LookupMayFailDBRef(DBRef dbr) {
 
 static void InsertDBRef(DBRef dbr0, DBRef dbr) {
   CACHE_REGS
-  CELL hash = (CELL)(dbr0) % LOCAL_ImportDBRefHashTableSize;
+  CELL hash = (CELL)(dbr0) % REMOTE_ImportDBRefHashTableSize(worker_id);
   import_dbref_hash_entry_t *p;
 
-  p = LOCAL_ImportDBRefHashChain[hash];
+  p = REMOTE_ImportDBRefHashChain(worker_id)[hash];
   while (p) {
     if (p->oval == dbr0) {
       return;
@@ -332,67 +332,67 @@ static void InsertDBRef(DBRef dbr0, DBRef dbr) {
   p->val = dbr;
   p->oval = dbr0;
   p->count = 0;
-  p->next = LOCAL_ImportDBRefHashChain[hash];
-  LOCAL_ImportDBRefHashChain[hash] = p;
+  p->next = REMOTE_ImportDBRefHashChain(worker_id)[hash];
+  REMOTE_ImportDBRefHashChain(worker_id)[hash] = p;
 }
 
 static void InitHash(void) {
   CACHE_REGS
-  LOCAL_ImportOPCODEHashTableSize = EXPORT_OPCODE_TABLE_SIZE;
-  LOCAL_ImportOPCODEHashChain = (import_opcode_hash_entry_t **)calloc(
+  REMOTE_ImportOPCODEHashTableSize(worker_id) = EXPORT_OPCODE_TABLE_SIZE;
+  REMOTE_ImportOPCODEHashChain(worker_id) = (import_opcode_hash_entry_t **)calloc(
       1,
-      sizeof(import_opcode_hash_entry_t *) * LOCAL_ImportOPCODEHashTableSize);
+      sizeof(import_opcode_hash_entry_t *) * REMOTE_ImportOPCODEHashTableSize(worker_id));
 }
 
 static void CloseHash(void) {
   CACHE_REGS
   UInt i;
-  for (i = 0; i < LOCAL_ImportFunctorHashTableSize; i++) {
-    import_functor_hash_entry_t *a = LOCAL_ImportFunctorHashChain[i];
+  for (i = 0; i < REMOTE_ImportFunctorHashTableSize(worker_id); i++) {
+    import_functor_hash_entry_t *a = REMOTE_ImportFunctorHashChain(worker_id)[i];
     while (a) {
       import_functor_hash_entry_t *a0 = a;
       a = a->next;
       free(a0);
     }
   }
-  LOCAL_ImportFunctorHashTableSize = 0;
-  free(LOCAL_ImportFunctorHashChain);
-  LOCAL_ImportFunctorHashChain = NULL;
-  for (i = 0; i < LOCAL_ImportAtomHashTableSize; i++) {
-    import_atom_hash_entry_t *a = LOCAL_ImportAtomHashChain[i];
+  REMOTE_ImportFunctorHashTableSize(worker_id) = 0;
+  free(REMOTE_ImportFunctorHashChain(worker_id));
+  REMOTE_ImportFunctorHashChain(worker_id) = NULL;
+  for (i = 0; i < REMOTE_ImportAtomHashTableSize(worker_id); i++) {
+    import_atom_hash_entry_t *a = REMOTE_ImportAtomHashChain(worker_id)[i];
     while (a) {
       import_atom_hash_entry_t *a0 = a;
       a = a->next;
       free(a0);
     }
   }
-  LOCAL_ImportAtomHashTableSize = 0;
-  free(LOCAL_ImportAtomHashChain);
-  LOCAL_ImportAtomHashChain = NULL;
-  for (i = 0; i < LOCAL_ImportOPCODEHashTableSize; i++) {
-    import_opcode_hash_entry_t *a = LOCAL_ImportOPCODEHashChain[i];
+  REMOTE_ImportAtomHashTableSize(worker_id) = 0;
+  free(REMOTE_ImportAtomHashChain(worker_id));
+  REMOTE_ImportAtomHashChain(worker_id) = NULL;
+  for (i = 0; i < REMOTE_ImportOPCODEHashTableSize(worker_id); i++) {
+    import_opcode_hash_entry_t *a = REMOTE_ImportOPCODEHashChain(worker_id)[i];
     while (a) {
       import_opcode_hash_entry_t *a0 = a;
       a = a->next;
       free(a0);
     }
   }
-  LOCAL_ImportOPCODEHashTableSize = 0;
-  free(LOCAL_ImportOPCODEHashChain);
-  LOCAL_ImportOPCODEHashChain = NULL;
-  for (i = 0; i < LOCAL_ImportPredEntryHashTableSize; i++) {
-    import_pred_entry_hash_entry_t *a = LOCAL_ImportPredEntryHashChain[i];
+  REMOTE_ImportOPCODEHashTableSize(worker_id) = 0;
+  free(REMOTE_ImportOPCODEHashChain(worker_id));
+  REMOTE_ImportOPCODEHashChain(worker_id) = NULL;
+  for (i = 0; i < REMOTE_ImportPredEntryHashTableSize(worker_id); i++) {
+    import_pred_entry_hash_entry_t *a = REMOTE_ImportPredEntryHashChain(worker_id)[i];
     while (a) {
       import_pred_entry_hash_entry_t *a0 = a;
       a = a->next;
       free(a0);
     }
   }
-  LOCAL_ImportPredEntryHashTableSize = 0;
-  free(LOCAL_ImportPredEntryHashChain);
-  LOCAL_ImportPredEntryHashChain = NULL;
-  for (i = 0; i < LOCAL_ImportDBRefHashTableSize; i++) {
-    import_dbref_hash_entry_t *a = LOCAL_ImportDBRefHashChain[i];
+  REMOTE_ImportPredEntryHashTableSize(worker_id) = 0;
+  free(REMOTE_ImportPredEntryHashChain(worker_id));
+  REMOTE_ImportPredEntryHashChain(worker_id) = NULL;
+  for (i = 0; i < REMOTE_ImportDBRefHashTableSize(worker_id); i++) {
+    import_dbref_hash_entry_t *a = REMOTE_ImportDBRefHashChain(worker_id)[i];
     while (a) {
       import_dbref_hash_entry_t *a0 = a;
 #ifdef DEBUG
@@ -404,9 +404,9 @@ static void CloseHash(void) {
       free(a0);
     }
   }
-  LOCAL_ImportDBRefHashTableSize = 0;
-  free(LOCAL_ImportDBRefHashChain);
-  LOCAL_ImportDBRefHashChain = NULL;
+  REMOTE_ImportDBRefHashTableSize(worker_id) = 0;
+  free(REMOTE_ImportDBRefHashChain(worker_id));
+  REMOTE_ImportDBRefHashChain(worker_id) = NULL;
 }
 
 static inline Atom AtomAdjust(Atom a) { return LookupAtom(a); }
@@ -453,7 +453,7 @@ static inline Term TermToGlobalOrAtomAdjust(Term t) {
 static inline Term CodeVarAdjust__(Term var USES_REGS) {
   if (var == 0L)
     return var;
-  return (Term)(CharP(var) + LOCAL_HDiff);
+  return (Term)(CharP(var) + REMOTE_HDiff(worker_id));
 }
 
 #define ConstantAdjust(P) (P)
@@ -485,21 +485,21 @@ static inline Term ModuleAdjust(Term M) {
 #define BlobTermInCodeAdjust(P) BlobTermInCodeAdjust__(P PASS_REGS)
 #if TAGS_FAST_OPS
 static inline Term BlobTermInCodeAdjust__(Term t USES_REGS) {
-  return (Term)((char *)(t)-LOCAL_HDiff);
+  return (Term)((char *)(t)-REMOTE_HDiff(worker_id));
 }
 #else
 static inline Term BlobTermInCodeAdjust__(Term t USES_REGS) {
-  return (Term)((char *)(t) + LOCAL_HDiff);
+  return (Term)((char *)(t) + REMOTE_HDiff(worker_id));
 }
 #endif
 #define DBTermAdjust(P) DBTermAdjust__(P PASS_REGS)
 static inline DBTerm *DBTermAdjust__(DBTerm *dbtp USES_REGS) {
-  return (DBTerm *)(CharP(dbtp) + LOCAL_HDiff);
+  return (DBTerm *)(CharP(dbtp) + REMOTE_HDiff(worker_id));
 }
 
 #define CellPtoHeapAdjust(P) CellPtoHeapAdjust__(P PASS_REGS)
 static inline CELL *CellPtoHeapAdjust__(CELL *dbtp USES_REGS) {
-  return (CELL *)(CharP(dbtp) + LOCAL_HDiff);
+  return (CELL *)(CharP(dbtp) + REMOTE_HDiff(worker_id));
 }
 
 #define PtoAtomHashEntryAdjust(P) (P)
@@ -518,7 +518,7 @@ static inline DBRef DBRefAdjust__(DBRef dbtp, int do_reference USES_REGS) {
 
 #define DBRefPAdjust(P) DBRefPAdjust__(P PASS_REGS)
 static inline DBRef *DBRefPAdjust__(DBRef *dbtp USES_REGS) {
-  return (DBRef *)((char *)(dbtp) + LOCAL_HDiff);
+  return (DBRef *)((char *)(dbtp) + REMOTE_HDiff(worker_id));
 }
 
 #define LUIndexAdjust(P) (P)
@@ -530,7 +530,7 @@ static inline DBRef *DBRefPAdjust__(DBRef *dbtp USES_REGS) {
 #define PtoLUCAdjust(P) PtoLUCAdjust__(P PASS_REGS)
 #define PtoLUClauseAdjust(P) PtoLUCAdjust__(P PASS_REGS)
 static inline LogUpdClause *PtoLUCAdjust__(LogUpdClause *dbtp USES_REGS) {
-  return (LogUpdClause *)((char *)(dbtp) + LOCAL_HDiff);
+  return (LogUpdClause *)((char *)(dbtp) + REMOTE_HDiff(worker_id));
 }
 
 #define PtoStCAdjust(P) (P)
@@ -546,16 +546,16 @@ static inline CELL *PtoHeapCellAdjust__(CELL *ptr USES_REGS) {
   LogUpdClause *out;
   if ((out = LookupMayFailDBRef((DBRef)ptr)))
     return (CELL *)out;
-  return (CELL *)(CharP(ptr) + LOCAL_HDiff);
+  return (CELL *)(CharP(ptr) + REMOTE_HDiff(worker_id));
 }
 
 #define TermToGlobalAdjust(P) (P)
 #define PtoOpAdjust(P) PtoOpAdjust__(P PASS_REGS)
 static inline yamop *PtoOpAdjust__(yamop *ptr USES_REGS) {
   if (ptr) {
-    if (ptr == LOCAL_ImportFAILCODE)
+    if (ptr == REMOTE_ImportFAILCODE(worker_id))
       return FAILCODE;
-    return (yamop *)((char *)(ptr) + LOCAL_HDiff);
+    return (yamop *)((char *)(ptr) + REMOTE_HDiff(worker_id));
   }
   return ptr;
 }
@@ -569,7 +569,7 @@ static inline yamop *PtoOpAdjust__(yamop *ptr USES_REGS) {
 #if PRECOMPUTE_REGADDRESS
 #define XAdjust(P) XAdjust__(P PASS_REGS)
 static inline wamreg XAdjust__(wamreg reg USES_REGS) {
-  return (wamreg)((wamreg)((reg) + LOCAL_XDiff));
+  return (wamreg)((wamreg)((reg) + REMOTE_XDiff(worker_id)));
 }
 #else
 #define XAdjust(X) (X)
@@ -693,11 +693,11 @@ static Int get_header(USES_REGS1) {
   if (!(stream = Yap_GetInputStream(t1, "header scanning in qload"))) {
     return false;
   }
-    sigjmp_buf signew, *sighold = LOCAL_RestartEnv;
-  LOCAL_RestartEnv = &signew;
+    sigjmp_buf signew, *sighold = REMOTE_RestartEnv(worker_id);
+  REMOTE_RestartEnv(worker_id) = &signew;
 
   if (sigsetjmp(signew, 1) != 0) {
-      LOCAL_RestartEnv = sighold;
+      REMOTE_RestartEnv(worker_id) = sighold;
       return false;
     }
   if ((at = do_header(stream)) == NIL) 
@@ -705,7 +705,7 @@ static Int get_header(USES_REGS1) {
   else {
     rc = Yap_unify(ARG2, MkAtomTerm(at));
   }
-    LOCAL_RestartEnv = sighold;
+    REMOTE_RestartEnv(worker_id) = sighold;
     return rc;
 }
 
@@ -713,18 +713,18 @@ static void ReadHash(FILE *stream) {
   CACHE_REGS
   UInt i;
   RCHECK(read_tag(stream) == QLY_START_X);
-  LOCAL_XDiff = (char *)(&ARG1) - (char *)read_UInt(stream);
+  REMOTE_XDiff(worker_id) = (char *)(&ARG1) - (char *)read_UInt(stream);
   RCHECK(read_tag(stream) == QLY_START_OPCODES);
   RCHECK(read_Int(stream) == _std_top);
   for (i = 0; i <= _std_top; i++) {
     InsertOPCODE((OPCODE)read_UInt(stream), i, Yap_opcode(i));
   }
   RCHECK(read_tag(stream) == QLY_START_ATOMS);
-  LOCAL_ImportAtomHashTableNum = read_UInt(stream);
-  LOCAL_ImportAtomHashTableSize = LOCAL_ImportAtomHashTableNum * 2;
-  LOCAL_ImportAtomHashChain = (import_atom_hash_entry_t **)calloc(
-      LOCAL_ImportAtomHashTableSize, sizeof(import_atom_hash_entry_t *));
-  for (i = 0; i < LOCAL_ImportAtomHashTableNum; i++) {
+  REMOTE_ImportAtomHashTableNum(worker_id) = read_UInt(stream);
+  REMOTE_ImportAtomHashTableSize(worker_id) = REMOTE_ImportAtomHashTableNum(worker_id) * 2;
+  REMOTE_ImportAtomHashChain(worker_id) = (import_atom_hash_entry_t **)calloc(
+      REMOTE_ImportAtomHashTableSize(worker_id), sizeof(import_atom_hash_entry_t *));
+  for (i = 0; i < REMOTE_ImportAtomHashTableNum(worker_id); i++) {
     Atom oat = (Atom)read_UInt(stream);
     Atom at;
     qlf_tag_t tg = read_tag(stream);
@@ -752,11 +752,11 @@ static void ReadHash(FILE *stream) {
   }
   /* functors */
   RCHECK(read_tag(stream) == QLY_START_FUNCTORS);
-  LOCAL_ImportFunctorHashTableNum = read_UInt(stream);
-  LOCAL_ImportFunctorHashTableSize = 2 * LOCAL_ImportFunctorHashTableNum;
-  LOCAL_ImportFunctorHashChain = (import_functor_hash_entry_t **)calloc(
-      LOCAL_ImportFunctorHashTableSize, sizeof(import_functor_hash_entry_t *));
-  for (i = 0; i < LOCAL_ImportFunctorHashTableNum; i++) {
+  REMOTE_ImportFunctorHashTableNum(worker_id) = read_UInt(stream);
+  REMOTE_ImportFunctorHashTableSize(worker_id) = 2 * REMOTE_ImportFunctorHashTableNum(worker_id);
+  REMOTE_ImportFunctorHashChain(worker_id) = (import_functor_hash_entry_t **)calloc(
+      REMOTE_ImportFunctorHashTableSize(worker_id), sizeof(import_functor_hash_entry_t *));
+  for (i = 0; i < REMOTE_ImportFunctorHashTableNum(worker_id); i++) {
     Functor of = (Functor)read_UInt(stream);
     UInt arity = read_UInt(stream);
     Atom oat = (Atom)read_UInt(stream);
@@ -770,12 +770,12 @@ static void ReadHash(FILE *stream) {
     InsertFunctor(of, f);
   }
   RCHECK(read_tag(stream) == QLY_START_PRED_ENTRIES);
-  LOCAL_ImportPredEntryHashTableNum = read_UInt(stream);
-  LOCAL_ImportPredEntryHashTableSize = 2 * LOCAL_ImportPredEntryHashTableNum;
-  LOCAL_ImportPredEntryHashChain = (import_pred_entry_hash_entry_t **)calloc(
-      LOCAL_ImportPredEntryHashTableSize,
+  REMOTE_ImportPredEntryHashTableNum(worker_id) = read_UInt(stream);
+  REMOTE_ImportPredEntryHashTableSize(worker_id) = 2 * REMOTE_ImportPredEntryHashTableNum(worker_id);
+  REMOTE_ImportPredEntryHashChain(worker_id) = (import_pred_entry_hash_entry_t **)calloc(
+      REMOTE_ImportPredEntryHashTableSize(worker_id),
       sizeof(import_pred_entry_hash_entry_t *));
-  for (i = 0; i < LOCAL_ImportPredEntryHashTableNum; i++) {
+  for (i = 0; i < REMOTE_ImportPredEntryHashTableNum(worker_id); i++) {
     PredEntry *ope = (PredEntry *)read_UInt(stream), *pe;
     UInt arity = read_UInt(stream);
     Atom omod = (Atom)read_UInt(stream);
@@ -828,11 +828,11 @@ static void ReadHash(FILE *stream) {
     InsertPredEntry(ope, pe);
   }
   RCHECK(read_tag(stream) == QLY_START_DBREFS);
-  LOCAL_ImportDBRefHashTableNum = read_UInt(stream);
-  LOCAL_ImportDBRefHashTableSize = 2 * LOCAL_ImportDBRefHashTableNum + 17;
-  LOCAL_ImportDBRefHashChain = (import_dbref_hash_entry_t **)calloc(
-      LOCAL_ImportDBRefHashTableSize, sizeof(import_dbref_hash_entry_t *));
-  for (i = 0; i < LOCAL_ImportDBRefHashTableNum; i++) {
+  REMOTE_ImportDBRefHashTableNum(worker_id) = read_UInt(stream);
+  REMOTE_ImportDBRefHashTableSize(worker_id) = 2 * REMOTE_ImportDBRefHashTableNum(worker_id) + 17;
+  REMOTE_ImportDBRefHashChain(worker_id) = (import_dbref_hash_entry_t **)calloc(
+      REMOTE_ImportDBRefHashTableSize(worker_id), sizeof(import_dbref_hash_entry_t *));
+  for (i = 0; i < REMOTE_ImportDBRefHashTableNum(worker_id); i++) {
     LogUpdClause *ocl = (LogUpdClause *)read_UInt(stream);
     UInt sz = read_UInt(stream);
     UInt nrefs = read_UInt(stream);
@@ -846,7 +846,7 @@ static void ReadHash(FILE *stream) {
     InsertDBRef((DBRef)ocl, (DBRef)ncl);
   }
   RCHECK(read_tag(stream) == QLY_FAILCODE);
-  LOCAL_ImportFAILCODE = (yamop *)read_UInt(stream);
+  REMOTE_ImportFAILCODE(worker_id) = (yamop *)read_UInt(stream);
 }
 
 static void read_clauses(FILE *stream, PredEntry *pp, UInt nclauses,
@@ -884,7 +884,7 @@ static void read_clauses(FILE *stream, PredEntry *pp, UInt nclauses,
       read_bytes(stream, cl, size);
       cl->ClFlags &= ~InUseMask;
       cl->ClRefCount = nrefs;
-      LOCAL_HDiff = (char *)cl - base;
+      REMOTE_HDiff(worker_id) = (char *)cl - base;
       RestoreLUClause(cl, pp PASS_REGS);
       Yap_AssertzClause(pp, cl->ClCode);
     }
@@ -899,7 +899,7 @@ static void read_clauses(FILE *stream, PredEntry *pp, UInt nclauses,
     if (nclauses) {
       Yap_Abolish(pp);
     }
-    LOCAL_HDiff = (char *)cl - base;
+    REMOTE_HDiff(worker_id) = (char *)cl - base;
     read_bytes(stream, cl, size);
     cl->ClFlags = mask;
     pp->FirstClause = pp->LastClause = cl->ClCode;
@@ -927,7 +927,7 @@ static void read_clauses(FILE *stream, PredEntry *pp, UInt nclauses,
       DynamicClause *cl = (DynamicClause *)Yap_AlwaysAllocCodeSpace(size);
 	Yap_LUClauseSpace += size;
 
-      LOCAL_HDiff = (char *)cl - base;
+      REMOTE_HDiff(worker_id) = (char *)cl - base;
       read_bytes(stream, cl, size);
       INIT_LOCK(cl->ClLock);
       RestoreDynamicClause(cl, pp PASS_REGS);
@@ -962,7 +962,7 @@ static void read_clauses(FILE *stream, PredEntry *pp, UInt nclauses,
       StaticClause *cl = (StaticClause *)Yap_AlwaysAllocCodeSpace(size);
 	Yap_ClauseSpace += size;
 
-      LOCAL_HDiff = (char *)cl - base;
+      REMOTE_HDiff(worker_id) = (char *)cl - base;
       read_bytes(stream, cl, size);
       RestoreStaticClause(cl PASS_REGS);
       Yap_AssertzClause(pp, cl->ClCode);
@@ -1140,7 +1140,7 @@ YAP_file_type_t Yap_Restore(const char *s) {
   fclose(stream);
   free(buf);
   GLOBAL_RestoreFile = NULL;
-  LOCAL_SourceModule = CurrentModule = USER_MODULE;
+  REMOTE_SourceModule(worker_id) = CurrentModule = USER_MODULE;
   pop_text_stack(lvl);
   return YAP_QLY;
 }

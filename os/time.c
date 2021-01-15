@@ -26,11 +26,11 @@
 #endif
 
 #if THREADS
-#define StartOfTimes (*(LOCAL_ThreadHandle.start_of_timesp))
-#define last_time (*(LOCAL_ThreadHandle.last_timep))
+#define StartOfTimes (*(REMOTE_ThreadHandle(worker_id).start_of_timesp))
+#define last_time (*(REMOTE_ThreadHandle(worker_id).last_timep))
 
-#define StartOfTimes_sys (*(LOCAL_ThreadHandle.start_of_times_sysp))
-#define last_time_sys (*(LOCAL_ThreadHandle.last_time_sysp))
+#define StartOfTimes_sys (*(REMOTE_ThreadHandle(worker_id).start_of_times_sysp))
+#define last_time_sys (*(REMOTE_ThreadHandle(worker_id).last_time_sysp))
 
 #else
 /* since the point YAP was started */

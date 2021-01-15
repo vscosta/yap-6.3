@@ -43,7 +43,7 @@ static Term gethdir(Term t) {
     char *s = RepAtom(aref)->StrOfAE;
     size_t nsz;
 
-    s = strncpy(LOCAL_FileNameBuf, RepAtom(aref)->StrOfAE, MAXPATHLEN - 1);
+    s = strncpy(REMOTE_FileNameBuf(worker_id), RepAtom(aref)->StrOfAE, MAXPATHLEN - 1);
     if (!s) {
         return false;
     }
@@ -150,8 +150,8 @@ static Int abs_file_parameters(USES_REGS1) {
                                    ABSOLUTE_FILE_NAME_END,
                                    DOMAIN_ERROR_ABSOLUTE_FILE_NAME_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
-      Yap_Error(LOCAL_Error_TYPE, tlist, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, tlist, NULL);
     }
     return false;
   }
@@ -219,7 +219,7 @@ static Int get_abs_file_parameter(USES_REGS1) {
 
     static const char *myrealpath(const char *path USES_REGS) {
   int lvl = push_text_stack();
-  char *o = Malloc(FILENAME_MAX+1), *wd = Malloc(FILENAME_MAX+1);
+  char *o = Malloc(FILENAME_MAX+1 PASS_REGS), *wd = Malloc(FILENAME_MAX+1 PASS_REGS);
   const char *cwd =  Yap_getcwd(wd, FILENAME_MAX);
  size_t sz = cwk_path_get_absolute(
 				  cwd, path,
@@ -241,6 +241,7 @@ return pop_output_text_stack(lvl,o);
  * @return tmp, or NULL, in malloced memory
  */
 const char *Yap_AbsoluteFile(const char *spec, bool ok) {
+  CACHE_REGS
   const char *rc;
   const char *spec1;
   const char *spec2;
@@ -438,7 +439,7 @@ static const char *PlExpandVars(const char *source, const char *root) {
     CACHE_REGS
     int lvl = push_text_stack();
     const char *src = source;
-    char *result = Malloc(YAP_FILENAME_MAX + 1);
+    char *result = Malloc(YAP_FILENAME_MAX + 1 PASS_REGS);
 
     if (strlen(source) >= YAP_FILENAME_MAX) {
         Yap_Error(SYSTEM_ERROR_OPERATING_SYSTEM, TermNil,
@@ -650,7 +651,7 @@ static Int true_file_name(USES_REGS1) {
 static Int absolute_file_system_path(USES_REGS1) {
   Term t = Deref(ARG1);
   int l = push_text_stack();
-  const char *text = Yap_TextTermToText(t);
+  const char *text = Yap_TextTermToText(t PASS_REGS);
   const char *fp;
   bool rc;
 
@@ -662,7 +663,7 @@ static Int absolute_file_system_path(USES_REGS1) {
     pop_text_stack(l);
     return false;
   }
-  rc = Yap_unify(Yap_MkTextTerm(fp, Yap_TextType(t)), ARG2);
+  rc = Yap_unify(Yap_MkTextTerm(fp, Yap_TextType(t) PASS_REGS), ARG2);
   pop_text_stack(l);
   return rc;
 }
@@ -697,10 +698,10 @@ static Int prolog_to_os_filename(USES_REGS1) {
 
 
 const char *Yap_GetFileName(Term t USES_REGS) {
-  char *buf = Malloc(YAP_FILENAME_MAX + 1);
+  char *buf = Malloc(YAP_FILENAME_MAX + 1 PASS_REGS);
   if (IsApplTerm(t) && FunctorOfTerm(t) == FunctorSlash) {
-    snprintf(buf, YAP_FILENAME_MAX, "%s/%s", Yap_GetFileName(ArgOfTerm(1, t)),
-             Yap_GetFileName(ArgOfTerm(2, t)));
+    snprintf(buf, YAP_FILENAME_MAX, "%s/%s", Yap_GetFileName(ArgOfTerm(1, t) PASS_REGS),
+             Yap_GetFileName(ArgOfTerm(2, t) PASS_REGS));
   }
   if (IsAtomTerm(t)) {
     return RepAtom(AtomOfTerm(t))->StrOfAE;
@@ -737,7 +738,7 @@ static Int file_name_extension(USES_REGS1) {
   int l = push_text_stack();
   if (!IsVarTerm(t3)) {
     // full path is given.
-    const char *f = Yap_GetFileName(t3);
+    const char *f = Yap_GetFileName(t3 PASS_REGS);
     const char *ext;
     char *base;
     bool rc = true;
@@ -756,12 +757,12 @@ static Int file_name_extension(USES_REGS1) {
       lenb_b = len_b;
       ext = "";
     }
-    base = Malloc(lenb_b + 1);
+    base = Malloc(lenb_b + 1 PASS_REGS);
     memmove(base, f, lenb_b);
     base[lenb_b] = '\0';
     if (IsVarTerm(t1 = Deref(ARG1))) {
       // should always succeed
-      rc = Yap_unify(t1, Yap_MkTextTerm(base, typ));
+      rc = Yap_unify(t1, Yap_MkTextTerm(base, typ PASS_REGS));
     } else {
       char *f_a = (char *)Yap_GetFileName(t1 PASS_REGS);
 #if __APPLE__ || _WIN32
@@ -773,7 +774,7 @@ static Int file_name_extension(USES_REGS1) {
     if (rc) {
       if (IsVarTerm(t2 = Deref(ARG2))) {
         // should always succeed
-        rc = Yap_unify(t2, Yap_MkTextTerm(ext, typ));
+        rc = Yap_unify(t2, Yap_MkTextTerm(ext, typ PASS_REGS));
       } else {
         char *f_a = (char *)Yap_TextTermToText(t2 PASS_REGS);
         if (f_a[0] == '.') {
@@ -813,11 +814,11 @@ static Int file_name_extension(USES_REGS1) {
     }
 
     size_t lenb_b = strlen(f);
-    char *o = Realloc((void *)f, lenb_b + strlen(f2) + 2);
+    char *o = Realloc((void *)f, lenb_b + strlen(f2) + 2 PASS_REGS);
     o[lenb_b] = '.';
     o += lenb_b + 1;
     pop_text_stack(l);
-    return strcpy(o, f2) && (t3 = Yap_MkTextTerm(o, typ)) &&
+    return strcpy(o, f2) && (t3 = Yap_MkTextTerm(o, typ PASS_REGS)) &&
            Yap_unify(t3, ARG3);
   }
 }
@@ -901,7 +902,7 @@ static Int p_expand_file_name(USES_REGS1) {
     return FALSE;
   }
   int l = push_text_stack();
-  text = Yap_TextTermToText(t);
+  text = Yap_TextTermToText(t PASS_REGS);
   if (!text) {
     pop_text_stack(l);
     return false;
@@ -950,7 +951,7 @@ static Int path_concat(USES_REGS1) {
   if (*tailp != TermNil) {
       Yap_ThrowError(TYPE_ERROR_LIST, t, "while concatenating sub-paths");
   }
-  const  char **inp = Malloc( (n+1)*sizeof(const char *) );
+  const  char **inp = Malloc( (n+1)*sizeof(const char *) PASS_REGS );
   int i=0;
   while (IsPairTerm(t)) {
     Term th = HeadOfTerm(t);
@@ -964,13 +965,13 @@ static Int path_concat(USES_REGS1) {
   inp[i] = NULL;
     len = MAXPATHLEN;
    size_t sz;
-           char *buf = Malloc(len);
+           char *buf = Malloc(len PASS_REGS);
   do {
 
     sz = cwk_path_join_multiple(inp,buf,len-1);
       if (sz >= len) {
           len = sz+1;
-        buf = Realloc (buf, len);
+        buf = Realloc (buf, len PASS_REGS);
       } else {
     bool rc= Yap_unify(MkAtomTerm(Yap_LookupAtom(buf)),ARG2);
     pop_text_stack(l);

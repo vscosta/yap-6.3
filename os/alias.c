@@ -205,7 +205,6 @@ Yap_FetchStreamAlias (int sno, Term t2 USES_REGS)
 static void
 ExtendAliasArray(void)
 {
-    CACHE_REGS
   AliasDesc new;
   UInt new_size = GLOBAL_SzOfFileAliases+ALIASES_BLOCK_SIZE;
 
@@ -223,11 +222,11 @@ Yap_SetAlias (Atom arg, int sno)
   AliasDesc aliasp = GLOBAL_FileAliases, aliasp_max = GLOBAL_FileAliases+GLOBAL_NOfFileAliases;
 
       if (arg == AtomUserIn)
-	  LOCAL_c_input_stream = sno;
+	  REMOTE_c_input_stream(worker_id) = sno;
        if (arg == AtomUserOut)
-	  LOCAL_c_output_stream = sno;
+	  REMOTE_c_output_stream(worker_id) = sno;
        if (arg == AtomUserErr)
-	  LOCAL_c_error_stream = sno;
+	  REMOTE_c_error_stream(worker_id) = sno;
   while (aliasp < aliasp_max) {
     // replace alias
     if (aliasp->name == arg) {
@@ -249,7 +248,6 @@ Yap_SetAlias (Atom arg, int sno)
 void
 Yap_DeleteAliases (int sno)
 {
-    CACHE_REGS
   AliasDesc aliasp = GLOBAL_FileAliases, aliasp_max = GLOBAL_FileAliases+ GLOBAL_NOfFileAliases, new_aliasp = aliasp;
 
   while (aliasp < aliasp_max) {
@@ -279,7 +277,6 @@ Yap_DeleteAliases (int sno)
 int
 Yap_CheckAlias (Atom arg)
 {
-    CACHE_REGS
   AliasDesc aliasp = GLOBAL_FileAliases, aliasp_max = GLOBAL_FileAliases+GLOBAL_NOfFileAliases;
 
 
@@ -296,7 +293,6 @@ Yap_CheckAlias (Atom arg)
 static Atom
 FetchAlias (int sno)
 {
-    CACHE_REGS
   AliasDesc aliasp = GLOBAL_FileAliases, aliasp_max = GLOBAL_FileAliases+GLOBAL_NOfFileAliases;
 
   while (aliasp < aliasp_max) {
@@ -318,15 +314,15 @@ ExistsAliasForStream (int sno, Atom al)
   while (aliasp < aliasp_max) {
     if (aliasp->alias_stream == sno && aliasp->name == al) {
        if (al == AtomUserIn) {
-	  LOCAL_c_input_stream = sno;
+	  REMOTE_c_input_stream(worker_id) = sno;
 	  aliasp->alias_stream = sno;
       } else
        if (al == AtomUserOut) {
-	  LOCAL_c_output_stream = sno;
+	  REMOTE_c_output_stream(worker_id) = sno;
 	  aliasp->alias_stream = sno;
       }
       if (al == AtomUserErr) {
-	LOCAL_c_error_stream = sno;
+	REMOTE_c_error_stream(worker_id) = sno;
 	  aliasp->alias_stream = sno;
       }
       return true;
@@ -350,7 +346,7 @@ Yap_FindStreamForAlias (Atom al)
     }
     aliasp++;
   }
-  LOCAL_Error_TYPE = DOMAIN_ERROR_STREAM;
+  REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_STREAM;
   return false;
 }
 
@@ -358,7 +354,6 @@ Yap_FindStreamForAlias (Atom al)
 int
 Yap_RemoveAlias (Atom arg, int sno)
 {
-    CACHE_REGS
 
   AliasDesc aliasp = GLOBAL_FileAliases, aliasp_max = GLOBAL_FileAliases+GLOBAL_NOfFileAliases;
 
@@ -390,11 +385,11 @@ Yap_AddAlias (Atom arg, int sno)
   AliasDesc aliasp = GLOBAL_FileAliases, aliasp_max = GLOBAL_FileAliases+GLOBAL_NOfFileAliases;
 
   if (arg == AtomUserIn)
-    LOCAL_c_input_stream = sno;
+    REMOTE_c_input_stream(worker_id) = sno;
   else if (arg == AtomUserOut)
-    LOCAL_c_output_stream = sno;
+    REMOTE_c_output_stream(worker_id) = sno;
   else  if (arg == AtomUserErr)
-    LOCAL_c_error_stream = sno;
+    REMOTE_c_error_stream(worker_id) = sno;
   while (aliasp < aliasp_max) {
     if (aliasp->name == arg) {
       aliasp->alias_stream = sno;
@@ -417,7 +412,6 @@ Yap_AddAlias (Atom arg, int sno)
 struct AliasDescS *
 Yap_InitStandardAliases(void)
 {
-    CACHE_REGS
   /* init standard aliases */
 
     /* alloca alias array */

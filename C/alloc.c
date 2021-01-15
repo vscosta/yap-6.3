@@ -78,6 +78,7 @@ static char SccsId[] = "%W% %G%";
 int write_malloc = 0;
 
 void *my_malloc(size_t sz) {
+  CACHE_REGS
   void *p;
 
   p = malloc(sz);
@@ -106,6 +107,7 @@ void *my_realloc(void *ptr, size_t sz) {
 }
 
 void my_free(void *p) {
+  CACHE_REGS
   // printf("f %p\n",p);
   if (Yap_do_low_level_trace)
     fprintf(stderr, "- %p\n @%p %ld\n", p, TR, (long int)(LCL0 - (CELL *)B) );
@@ -188,13 +190,13 @@ static inline char *call_malloc(size_t size) {
   tmalloc += size;
   size += sizeof(CELL);
 #endif
-  LOCAL_PrologMode |= MallocMode;
+  REMOTE_PrologMode(worker_id) |= MallocMode;
   out = (char *)my_malloc(size);
 #if INSTRUMENT_MALLOC
   *(CELL *)out = size - sizeof(CELL);
   out += sizeof(CELL);
 #endif
-  LOCAL_PrologMode &= ~MallocMode;
+  REMOTE_PrologMode(worker_id) &= ~MallocMode;
 #if USE_DL_MALLOC
   UNLOCK(DLMallocLock);
 #endif
@@ -219,13 +221,13 @@ static inline char *call_realloc(char *p, size_t size) {
   p -= sizeof(CELL);
   tmalloc -= *(CELL *)p;
 #endif
-  LOCAL_PrologMode |= MallocMode;
+  REMOTE_PrologMode(worker_id) |= MallocMode;
   out = (char *)my_realloc(p, size);
 #if INSTRUMENT_MALLOC
   *(CELL *)out = size - sizeof(CELL);
   out += sizeof(CELL);
 #endif
-  LOCAL_PrologMode &= ~MallocMode;
+  REMOTE_PrologMode(worker_id) &= ~MallocMode;
 #if USE_DL_MALLOC
   UNLOCK(DLMallocLock);
 #endif
@@ -242,14 +244,14 @@ void Yap_FreeCodeSpace(void *p) {
 #if USE_DL_MALLOC
   LOCK(DLMallocLock);
 #endif
-  LOCAL_PrologMode |= MallocMode;
+  REMOTE_PrologMode(worker_id) |= MallocMode;
 #if INSTRUMENT_MALLOC
   p -= sizeof(CELL);
   tmalloc -= *(CELL *)p;
   frees++;
 #endif
   my_free(p);
-  LOCAL_PrologMode &= ~MallocMode;
+  REMOTE_PrologMode(worker_id) &= ~MallocMode;
 #if USE_DL_MALLOC
   UNLOCK(DLMallocLock);
 #endif
@@ -265,14 +267,14 @@ void Yap_FreeAtomSpace(void *p) {
 #if USE_DL_MALLOC
   LOCK(DLMallocLock);
 #endif
-  LOCAL_PrologMode |= MallocMode;
+  REMOTE_PrologMode(worker_id) |= MallocMode;
 #if INSTRUMENT_MALLOC
   p -= sizeof(CELL);
   tmalloc -= *(CELL *)p;
   frees++;
 #endif
   my_free(p);
-  LOCAL_PrologMode &= ~MallocMode;
+  REMOTE_PrologMode(worker_id) &= ~MallocMode;
 #if USE_DL_MALLOC
   UNLOCK(DLMallocLock);
 #endif
@@ -308,8 +310,8 @@ ADDR Yap_InitPreAllocCodeSpace(int wid) {
 #if USE_DL_MALLOC
       UNLOCK(DLMallocLock);
 #endif
-      if (!Yap_growheap(FALSE, LOCAL_Error_Size, NULL)) {
-        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+      if (!Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL)) {
+        Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsgLen);
         return (NULL);
       }
 #if INSTRUMENT_MALLOC
@@ -341,8 +343,8 @@ ADDR Yap_ExpandPreAllocCodeSpace(UInt sz0, void *cip, int safe) {
   UInt sz;
   if (sz0 < SCRATCH_INC_SIZE)
     sz0 = SCRATCH_INC_SIZE;
-  if (sz0 < LOCAL_ScratchPad.sz)
-    sz = LOCAL_ScratchPad.sz + sz0;
+  if (sz0 < REMOTE_ScratchPad(worker_id).sz)
+    sz = REMOTE_ScratchPad(worker_id).sz + sz0;
   else
     sz = sz0;
   sz = AdjustLargePageSize(sz + sz / 4);
@@ -350,25 +352,25 @@ ADDR Yap_ExpandPreAllocCodeSpace(UInt sz0, void *cip, int safe) {
 #if USE_DL_MALLOC
   LOCK(DLMallocLock);
 #endif
-  LOCAL_PrologMode |= MallocMode;
+  REMOTE_PrologMode(worker_id) |= MallocMode;
 #if INSTRUMENT_MALLOC
   reallocs++;
-  tmalloc -= LOCAL_ScratchPad.sz;
+  tmalloc -= REMOTE_ScratchPad(worker_id).sz;
   tmalloc += sz;
 #endif
-  if (!(ptr = my_realloc(LOCAL_ScratchPad.ptr, sz))) {
-    LOCAL_PrologMode &= ~MallocMode;
+  if (!(ptr = my_realloc(REMOTE_ScratchPad(worker_id).ptr, sz))) {
+    REMOTE_PrologMode(worker_id) &= ~MallocMode;
 #if USE_DL_MALLOC
     UNLOCK(DLMallocLock);
 #endif
     return NULL;
   }
-  LOCAL_PrologMode &= ~MallocMode;
+  REMOTE_PrologMode(worker_id) &= ~MallocMode;
 #if USE_DL_MALLOC
   UNLOCK(DLMallocLock);
 #endif
-  LOCAL_ScratchPad.sz = LOCAL_ScratchPad.msz = sz;
-  LOCAL_ScratchPad.ptr = ptr;
+  REMOTE_ScratchPad(worker_id).sz = REMOTE_ScratchPad(worker_id).msz = sz;
+  REMOTE_ScratchPad(worker_id).ptr = ptr;
   AuxBase = ptr;
   AuxSp = (CELL *)(AuxTop = ptr + sz);
   return ptr;
@@ -384,7 +386,7 @@ struct various_codes *Yap_heap_regs;
 {
   #if HAVE_MALLINFO
     struct mallinfo mi = mallinfo();
-    return mi.uordblks - (LOCAL_TrailTop-LOCAL_GlobalBase);
+    return mi.uordblks - (REMOTE_TrailTop(worker_id)-REMOTE_GlobalBase(worker_id));
 #else
     return         Yap_ClauseSpace+Yap_IndexSpace_Tree+Yap_LUClauseSpace+Yap_LUIndexSpace_CP;
 #endif
@@ -448,9 +450,9 @@ void Yap_KillStacks(int wid) {
 }
 #else
 void Yap_KillStacks(int wid) {
-  if (LOCAL_GlobalBase) {
-    free(LOCAL_GlobalBase);
-    LOCAL_GlobalBase = NULL;
+  if (REMOTE_GlobalBase(worker_id)) {
+    free(REMOTE_GlobalBase(worker_id));
+    REMOTE_GlobalBase(worker_id) = NULL;
   }
 }
 #endif
@@ -464,15 +466,15 @@ void Yap_InitMemory(size_t Trail, size_t Heap, size_t Stack) {
 
 int Yap_ExtendWorkSpace(Int s) {
   CACHE_REGS
-  void *basebp = LOCAL_GlobalBase, *nbp;
-  UInt s0 = LOCAL_TrailTop - LOCAL_GlobalBase;
+  void *basebp = REMOTE_GlobalBase(worker_id), *nbp;
+  UInt s0 = REMOTE_TrailTop(worker_id) - REMOTE_GlobalBase(worker_id);
   nbp = realloc(basebp, s + s0);
   if (nbp == NULL)
     return FALSE;
 #if defined(THREADS)
-  LOCAL_ThreadHandle.stack_address = (char *)nbp;
+  REMOTE_ThreadHandle(worker_id).stack_address = (char *)nbp;
 #endif
-  LOCAL_GlobalBase = (char *)nbp;
+  REMOTE_GlobalBase(worker_id) = (char *)nbp;
   return TRUE;
 }
 
@@ -704,7 +706,7 @@ static char *AllocHeap(size_t size) {
   HeapUsed += size * sizeof(CELL) + sizeof(YAP_SEG_SIZE);
 
 #ifdef YAPOR
-  if (HeapTop > Addr(LOCAL_GlobalBase) - MinHeapGap)
+  if (HeapTop > Addr(REMOTE_GlobalBase(worker_id)) - MinHeapGap)
     Yap_Error(SYSTEM_ERROR_INTERNAL, TermNil, "no heap left (AllocHeap)");
 #else
   if (HeapTop > HeapLim - MinHeapGap) {
@@ -826,9 +828,9 @@ static LPVOID brk;
 
 static int ExtendWorkSpace(Int s, int fixed_allocation) {
   LPVOID b = brk;
-  prolog_exec_mode OldPrologMode = LOCAL_PrologMode;
+  prolog_exec_mode OldPrologMode = REMOTE_PrologMode(worker_id);
 
-  LOCAL_PrologMode = ExtendStackMode;
+  REMOTE_PrologMode(worker_id) = ExtendStackMode;
 
 #if DEBUG_WIN32_ALLOC
   fprintf(stderr, "trying: %p (" Int_FORMAT "K) %d\n", b, s / 1024,
@@ -843,7 +845,7 @@ static int ExtendWorkSpace(Int s, int fixed_allocation) {
     }
   }
   if (!b) {
-    LOCAL_PrologMode = OldPrologMode;
+    REMOTE_PrologMode(worker_id) = OldPrologMode;
 #if DEBUG_WIN32_ALLOC
     {
       char msg[256];
@@ -857,10 +859,10 @@ static int ExtendWorkSpace(Int s, int fixed_allocation) {
   }
   b = VirtualAlloc(b, s, MEM_COMMIT, PAGE_READWRITE);
   if (!b) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
-    snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+    snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "VirtualAlloc could not commit %ld bytes", (long int)s);
-    LOCAL_PrologMode = OldPrologMode;
+    REMOTE_PrologMode(worker_id) = OldPrologMode;
 #if DEBUG_WIN32_ALLOC
     fprintf(stderr, "NOT OK2: %p--%p\n", b, brk);
 #endif
@@ -870,7 +872,7 @@ static int ExtendWorkSpace(Int s, int fixed_allocation) {
 #if DEBUG_WIN32_ALLOC
   fprintf(stderr, "OK: %p--%p " Int_FORMAT "\n", b, brk, s);
 #endif
-  LOCAL_PrologMode = OldPrologMode;
+  REMOTE_PrologMode(worker_id) = OldPrologMode;
   return TRUE;
 }
 
@@ -1050,13 +1052,13 @@ static MALLOC_T mmap_extension(Int s, MALLOC_T base, int fixed_allocation) {
     char file[256];
     strncpy(file, "/tmp/YAP.TMPXXXXXX", 256);
     if (mkstemp(file) == -1) {
-      LOCAL_ErrorMessage = LOCAL_ErrorSay;
+      REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
 #if HAVE_STRERROR
-      snprintf5(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+      snprintf5(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
                 "mkstemp could not create temporary file %s (%s)", file,
                 strerror(errno));
 #else
-      snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+      snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
                 "mkstemp could not create temporary file %s", file);
 #endif /* HAVE_STRERROR */
       return (MALLOC_T)-1;
@@ -1072,28 +1074,28 @@ static MALLOC_T mmap_extension(Int s, MALLOC_T base, int fixed_allocation) {
 #endif /* HAVE_MKSTEMP */
     fd = open(file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (fd < 0) {
-      LOCAL_ErrorMessage = LOCAL_ErrorSay;
-      snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+      REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+      snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
                 "mmap could not open %s", file);
       return (MALLOC_T)-1;
     }
     if (lseek(fd, s, SEEK_SET) < 0) {
-      LOCAL_ErrorMessage = LOCAL_ErrorSay;
-      snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+      REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+      snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
                 "mmap could not lseek in mmapped file %s", file);
       close(fd);
       return (MALLOC_T)-1;
     }
     if (write(fd, "", 1) < 0) {
-      LOCAL_ErrorMessage = LOCAL_ErrorSay;
-      snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+      REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+      snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
                 "mmap could not write in mmapped file %s", file);
       close(fd);
       return (MALLOC_T)-1;
     }
     if (unlink(file) < 0) {
-      LOCAL_ErrorMessage = LOCAL_ErrorSay;
-      snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+      REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+      snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
                 "mmap could not unlink mmapped file %s", file);
       close(fd);
       return (MALLOC_T)-1;
@@ -1109,12 +1111,12 @@ static MALLOC_T mmap_extension(Int s, MALLOC_T base, int fixed_allocation) {
       ,
       fd, 0);
   if (close(fd) == -1) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
 #if HAVE_STRERROR
-    snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "mmap could not close file (%s) ]\n", strerror(errno));
 #else
-    snprintf3(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    snprintf3(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "mmap could not close file ]\n");
 #endif
     return (MALLOC_T)-1;
@@ -1138,23 +1140,23 @@ static int ExtendWorkSpace(Int s, int fixed_allocation) {
   return (FALSE);
 #else
   MALLOC_T a;
-  prolog_exec_mode OldPrologMode = LOCAL_PrologMode;
+  prolog_exec_mode OldPrologMode = REMOTE_PrologMode(worker_id);
   MALLOC_T base = WorkSpaceTop;
 
   if (fixed_allocation == MAP_FIXED)
     base = WorkSpaceTop;
   else
     base = 0L;
-  LOCAL_PrologMode = ExtendStackMode;
+  REMOTE_PrologMode(worker_id) = ExtendStackMode;
   a = mmap_extension(s, base, fixed_allocation);
-  LOCAL_PrologMode = OldPrologMode;
+  REMOTE_PrologMode(worker_id) = OldPrologMode;
   if (a == (MALLOC_T)-1) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
 #if HAVE_STRERROR
-    snprintf5(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    snprintf5(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "could not allocate %d bytes (%s)", (int)s, strerror(errno));
 #else
-    snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "could not allocate %d bytes", (int)s);
 #endif
     return FALSE;
@@ -1162,10 +1164,10 @@ static int ExtendWorkSpace(Int s, int fixed_allocation) {
   if (fixed_allocation) {
     if (a != WorkSpaceTop) {
       munmap((void *)a, (size_t)s);
-      LOCAL_ErrorMessage = LOCAL_ErrorSay;
-      snprintf5(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+      REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+      snprintf5(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
                 "mmap could not grow memory at %p, got %p", WorkSpaceTop, a);
-      LOCAL_PrologMode = OldPrologMode;
+      REMOTE_PrologMode(worker_id) = OldPrologMode;
       return FALSE;
     }
   } else if (a < WorkSpaceTop) {
@@ -1176,7 +1178,7 @@ static int ExtendWorkSpace(Int s, int fixed_allocation) {
     return res;
   }
   WorkSpaceTop = (char *)a + s;
-  LOCAL_PrologMode = OldPrologMode;
+  REMOTE_PrologMode(worker_id) = OldPrologMode;
   return TRUE;
 #endif /* YAPOR */
 }
@@ -1220,33 +1222,33 @@ static MALLOC_T InitWorkSpace(Int s) {
 static int ExtendWorkSpace(Int s) {
   MALLOC_T ptr;
   int shm_id;
-  prolog_exec_mode OldPrologMode = LOCAL_PrologMode;
+  prolog_exec_mode OldPrologMode = REMOTE_PrologMode(worker_id);
 
-  LOCAL_PrologMode = ExtendStackMode;
+  REMOTE_PrologMode(worker_id) = ExtendStackMode;
   /* mapping heap area */
   if ((shm_id = shmget(IPC_PRIVATE, (size_t)s, SHM_R | SHM_W)) == -1) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
-    snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+    snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "could not shmget %d bytes", s);
-    LOCAL_PrologMode = OldPrologMode;
+    REMOTE_PrologMode(worker_id) = OldPrologMode;
     return (FALSE);
   }
   if ((ptr = (MALLOC_T)shmat(shm_id, WorkSpaceTop, 0)) == (MALLOC_T)-1) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
-    snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE, "could not shmat at %p",
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+    snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE, "could not shmat at %p",
               MMAP_ADDR);
-    LOCAL_PrologMode = OldPrologMode;
+    REMOTE_PrologMode(worker_id) = OldPrologMode;
     return (FALSE);
   }
   if (shmctl(shm_id, IPC_RMID, 0) != 0) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
-    snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+    snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "could not remove shm segment", shm_id);
-    LOCAL_PrologMode = OldPrologMode;
+    REMOTE_PrologMode(worker_id) = OldPrologMode;
     return (FALSE);
   }
   WorkSpaceTop = (char *)ptr + s;
-  LOCAL_PrologMode = OldPrologMode;
+  REMOTE_PrologMode(worker_id) = OldPrologMode;
   return (TRUE);
 }
 
@@ -1287,17 +1289,17 @@ static MALLOC_T InitWorkSpace(Int s) {
 
 static int ExtendWorkSpace(Int s) {
   MALLOC_T ptr = (MALLOC_T)sbrk(s);
-  prolog_exec_mode OldPrologMode = LOCAL_PrologMode;
+  prolog_exec_mode OldPrologMode = REMOTE_PrologMode(worker_id);
 
-  LOCAL_PrologMode = ExtendStackMode;
+  REMOTE_PrologMode(worker_id) = ExtendStackMode;
   if (ptr == ((MALLOC_T)-1)) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
-    snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+    snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "could not expand stacks over %d bytes", s);
-    LOCAL_PrologMode = OldPrologMode;
+    REMOTE_PrologMode(worker_id) = OldPrologMode;
     return (FALSE);
   }
-  LOCAL_PrologMode = OldPrologMode;
+  REMOTE_PrologMode(worker_id) = OldPrologMode;
   return TRUE;
 }
 
@@ -1398,37 +1400,37 @@ static MALLOC_T InitWorkSpace(Int s) {
 
 static int ExtendWorkSpace(Int s) {
   MALLOC_T ptr;
-  prolog_exec_mode OldPrologMode = LOCAL_PrologMode;
+  prolog_exec_mode OldPrologMode = REMOTE_PrologMode(worker_id);
 
-  LOCAL_PrologMode = ExtendStackMode;
+  REMOTE_PrologMode(worker_id) = ExtendStackMode;
   total_space += s;
   if (total_space < MAX_SPACE)
     return TRUE;
   ptr = (MALLOC_T)realloc((void *)Yap_HeapBase, total_space);
   if (ptr == NULL) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
-    snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+    snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "could not allocate %d bytes", s);
-    LOCAL_PrologMode = OldPrologMode;
+    REMOTE_PrologMode(worker_id) = OldPrologMode;
     return FALSE;
   }
   if (ptr != (MALLOC_T)Yap_HeapBase) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
-    snprintf4(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+    snprintf4(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "could not expand contiguous stacks  %d bytes", s);
-    LOCAL_PrologMode = OldPrologMode;
+    REMOTE_PrologMode(worker_id) = OldPrologMode;
     return FALSE;
   }
 #if MBIT
   if ((CELL)ptr & MBIT) {
-    LOCAL_ErrorMessage = LOCAL_ErrorSay;
-    snprintf5(LOCAL_ErrorMessage, MAX_ERROR_MSG_SIZE,
+    REMOTE_ActiveError(worker_id)->errorMsg = REMOTE_ErrorSay(worker_id);
+    snprintf5(REMOTE_ActiveError(worker_id)->errorMsg, MAX_ERROR_MSG_SIZE,
               "memory at %p conflicts with MBIT %lx", ptr, (unsigned long)MBIT);
-    LOCAL_PrologMode = OldPrologMode;
+    REMOTE_PrologMode(worker_id) = OldPrologMode;
     return FALSE;
   }
 #endif
-  LOCAL_PrologMode = OldPrologMode;
+  REMOTE_PrologMode(worker_id) = OldPrologMode;
   return TRUE;
 }
 
@@ -1485,15 +1487,15 @@ void Yap_InitMemory(UInt Trail, UInt Heap, UInt Stack) {
 
   InitHeap(addr);
 
-  LOCAL_TrailTop = Yap_HeapBase + pm;
-  LOCAL_LocalBase = LOCAL_TrailTop - ta;
-  LOCAL_TrailBase = LOCAL_LocalBase + sizeof(CELL);
+  REMOTE_TrailTop(worker_id) = Yap_HeapBase + pm;
+  REMOTE_LocalBase(worker_id) = REMOTE_TrailTop(worker_id) - ta;
+  REMOTE_TrailBase(worker_id) = REMOTE_LocalBase(worker_id) + sizeof(CELL);
 
-  LOCAL_GlobalBase = LOCAL_LocalBase - sa;
-  HeapLim = LOCAL_GlobalBase; /* avoid confusions while
+  REMOTE_GlobalBase(worker_id) = REMOTE_LocalBase(worker_id) - sa;
+  HeapLim = REMOTE_GlobalBase(worker_id); /* avoid confusions while
                                * * restoring */
 #if !USE_DL_MALLOC
-  AuxTop = (ADDR)(AuxSp = (CELL *)LOCAL_GlobalBase);
+  AuxTop = (ADDR)(AuxSp = (CELL *)REMOTE_GlobalBase(worker_id));
 #endif
 
 #if DEBUG
@@ -1501,13 +1503,13 @@ void Yap_InitMemory(UInt Trail, UInt Heap, UInt Stack) {
   if (Yap_output_msg) {
     fprintf(stderr,
             "HeapBase = %p  GlobalBase = %p\n  LocalBase = %p  TrailTop = %p\n",
-            Yap_HeapBase, LOCAL_GlobalBase, LOCAL_LocalBase, LOCAL_TrailTop);
+            Yap_HeapBase, REMOTE_GlobalBase(worker_id), REMOTE_LocalBase(worker_id), REMOTE_TrailTop(worker_id));
 #else
   if (Yap_output_msg) {
     fprintf(stderr,
             "HeapBase = %x  GlobalBase = %x\n  LocalBase = %x  TrailTop = %x\n",
-            (UInt)Yap_HeapBase, (UInt)LOCAL_GlobalBase, (UInt)LOCAL_LocalBase,
-            (UInt)LOCAL_TrailTop);
+            (UInt)Yap_HeapBase, (UInt)REMOTE_GlobalBase(worker_id), (UInt)REMOTE_LocalBase(worker_id),
+            (UInt)REMOTE_TrailTop(worker_id));
 #endif
 
     fprintf(stderr,
@@ -1555,7 +1557,7 @@ size_t Yap_ExtendWorkSpaceThroughHole(size_t s) {
     WorkSpaceTop += 512 * 1024;
     if (ExtendWorkSpace(s, MAP_FIXED)) {
       Yap_add_memory_hole((ADDR)WorkSpaceTop0, (ADDR)WorkSpaceTop - s);
-      LOCAL_ErrorMessage = NULL;
+      REMOTE_ActiveError(worker_id)->errorMsg = NULL;
       return WorkSpaceTop - WorkSpaceTop0;
     }
 #if defined(_WIN32)
@@ -1573,7 +1575,7 @@ size_t Yap_ExtendWorkSpaceThroughHole(size_t s) {
       WorkSpaceTop += 512 * 1024;
       if (ExtendWorkSpace(s, MAP_FIXED)) {
         Yap_add_memory_hole((ADDR)WorkSpaceTop0, (ADDR)WorkSpaceTop - s);
-        LOCAL_ErrorMessage = NULL;
+        REMOTE_ActiveError(worker_id)->errorMsg = NULL;
         return WorkSpaceTop - WorkSpaceTop0;
       }
 #if defined(_WIN32)
@@ -1658,31 +1660,36 @@ typedef struct TextBuffer_manager {
   int lvl;
 } text_buffer_t;
 
-int AllocLevel(void) { return LOCAL_TextBuffer->lvl; }
-//	void pop_text_stack(int i) { LOCAL_TextBuffer->lvl = i; }
+int AllocLevel(void) {
+  CACHE_REGS
+  return REMOTE_TextBuffer(worker_id)->lvl;
+}
+//	void pop_text_stack(int i) { REMOTE_TextBuffer(worker_id)->lvl = i; }
 void insert_block(struct mblock *o) {
+  CACHE_REGS
   int lvl = o->lvl;
-  o->prev = LOCAL_TextBuffer->last[lvl];
+  o->prev = REMOTE_TextBuffer(worker_id)->last[lvl];
   if (o->prev) {
     o->prev->next = o;
   }
-  if (LOCAL_TextBuffer->first[lvl]) {
-    LOCAL_TextBuffer->last[lvl] = o;
+  if (REMOTE_TextBuffer(worker_id)->first[lvl]) {
+    REMOTE_TextBuffer(worker_id)->last[lvl] = o;
   } else {
-    LOCAL_TextBuffer->first[lvl] = LOCAL_TextBuffer->last[lvl] = o;
+    REMOTE_TextBuffer(worker_id)->first[lvl] = REMOTE_TextBuffer(worker_id)->last[lvl] = o;
   }
   o->next = NULL;
 }
 
  void release_block(struct mblock *o) {
+  CACHE_REGS
   int lvl = o->lvl;
-  if (LOCAL_TextBuffer->first[lvl] == o) {
-    if (LOCAL_TextBuffer->last[lvl] == o) {
-      LOCAL_TextBuffer->first[lvl] = LOCAL_TextBuffer->last[lvl] = NULL;
+  if (REMOTE_TextBuffer(worker_id)->first[lvl] == o) {
+    if (REMOTE_TextBuffer(worker_id)->last[lvl] == o) {
+      REMOTE_TextBuffer(worker_id)->first[lvl] = REMOTE_TextBuffer(worker_id)->last[lvl] = NULL;
     }
-    LOCAL_TextBuffer->first[lvl] = o->next;
-  } else if (LOCAL_TextBuffer->last[lvl] == o) {
-    LOCAL_TextBuffer->last[lvl] = o->prev;
+    REMOTE_TextBuffer(worker_id)->first[lvl] = o->next;
+  } else if (REMOTE_TextBuffer(worker_id)->last[lvl] == o) {
+    REMOTE_TextBuffer(worker_id)->last[lvl] = o->prev;
   }
   if (o->prev)
     o->prev->next = o->next;
@@ -1691,35 +1698,35 @@ void insert_block(struct mblock *o) {
 }
 
 int push_text_stack__(USES_REGS1) {
-  int i = LOCAL_TextBuffer->lvl;
+  int i = REMOTE_TextBuffer(worker_id)->lvl;
   i++;
-  LOCAL_TextBuffer->lvl = i;
+  REMOTE_TextBuffer(worker_id)->lvl = i;
 
   return i;
 }
 
-int pop_text_stack__(int i) {
-  int lvl = LOCAL_TextBuffer->lvl;
+int pop_text_stack__(int i USES_REGS) {
+  int lvl = REMOTE_TextBuffer(worker_id)->lvl;
   while (lvl >= i) {
-    struct mblock *p = LOCAL_TextBuffer->first[lvl];
+    struct mblock *p = REMOTE_TextBuffer(worker_id)->first[lvl];
     while (p) {
       struct mblock *np = p->next;
       free(p);
       p = np;
     }
-    LOCAL_TextBuffer->first[lvl] = NULL;
-    LOCAL_TextBuffer->last[lvl] = NULL;
+    REMOTE_TextBuffer(worker_id)->first[lvl] = NULL;
+    REMOTE_TextBuffer(worker_id)->last[lvl] = NULL;
     lvl--;
   }
-  LOCAL_TextBuffer->lvl = lvl;
+  REMOTE_TextBuffer(worker_id)->lvl = lvl;
   return lvl;
 }
 
-void *pop_output_text_stack__(int i, const void *export) {
-  int lvl = LOCAL_TextBuffer->lvl;
+void *pop_output_text_stack__(int i, const void *export USES_REGS) {
+  int lvl = REMOTE_TextBuffer(worker_id)->lvl;
   bool found = false;
   while (lvl >= i) {
-    struct mblock *p = LOCAL_TextBuffer->first[lvl];
+    struct mblock *p = REMOTE_TextBuffer(worker_id)->first[lvl];
     while (p) {
       struct mblock *np = p->next;
       if (p + 1 == export) {
@@ -1729,11 +1736,11 @@ void *pop_output_text_stack__(int i, const void *export) {
       }
       p = np;
     }
-    LOCAL_TextBuffer->first[lvl] = NULL;
-    LOCAL_TextBuffer->last[lvl] = NULL;
+    REMOTE_TextBuffer(worker_id)->first[lvl] = NULL;
+    REMOTE_TextBuffer(worker_id)->last[lvl] = NULL;
     lvl--;
   }
-  LOCAL_TextBuffer->lvl = lvl;
+  REMOTE_TextBuffer(worker_id)->lvl = lvl;
   if (found) {
   if (lvl) {
     struct mblock *o = (struct mblock *)export-1;
@@ -1753,7 +1760,7 @@ void *pop_output_text_stack__(int i, const void *export) {
 }
 
 void *Malloc(size_t sz USES_REGS) {
-  int lvl = LOCAL_TextBuffer->lvl;
+  int lvl = REMOTE_TextBuffer(worker_id)->lvl;
   if (sz == 0)
     sz = 1024;
   sz = ALIGN_BY_TYPE(sz + sizeof(struct mblock), CELL);
@@ -1768,7 +1775,7 @@ void *Malloc(size_t sz USES_REGS) {
 }
 
 void *MallocAtLevel(size_t sz, int atL USES_REGS) {
-  int lvl = LOCAL_TextBuffer->lvl;
+  int lvl = REMOTE_TextBuffer(worker_id)->lvl;
   if (atL > 0 && atL <= lvl) {
     lvl = atL;
   } else if (atL < 0 && lvl - atL >= 0) {
@@ -1800,12 +1807,12 @@ void *Realloc(void *pt, size_t sz USES_REGS) {
   if (o->next) {
     o->next->prev = o;
   } else {
-    LOCAL_TextBuffer->last[o->lvl] = o;
+    REMOTE_TextBuffer(worker_id)->last[o->lvl] = o;
   }
   if (o->prev) {
     o->prev->next = o;
   } else {
-    LOCAL_TextBuffer->first[o->lvl] = o;
+    REMOTE_TextBuffer(worker_id)->first[o->lvl] = o;
   }
   o->sz = sz;
   return o + 1;
@@ -1841,16 +1848,17 @@ void *Yap_InitTextAllocator(void) {
 
 
  bool Yap_get_scratch_buf(scratch_struct_t *handle, size_t nof, size_t each) {
+   CACHE_REGS
    handle->n_of = nof;
    handle->size_of = each;
    if (!handle->data) {
-     if (LOCAL_WorkerBuffer.data && !LOCAL_WorkerBuffer.in_use) {
-       if (LOCAL_WorkerBuffer.in_use < nof*each) {
-	 LOCAL_WorkerBuffer.data = realloc( LOCAL_WorkerBuffer.data, nof*each);
-	 LOCAL_WorkerBuffer.sz =  nof*each;
+     if (REMOTE_WorkerBuffer(worker_id).data && !REMOTE_WorkerBuffer(worker_id).in_use) {
+       if (REMOTE_WorkerBuffer(worker_id).in_use < nof*each) {
+	 REMOTE_WorkerBuffer(worker_id).data = realloc( REMOTE_WorkerBuffer(worker_id).data, nof*each);
+	 REMOTE_WorkerBuffer(worker_id).sz =  nof*each;
        }
-       LOCAL_WorkerBuffer.in_use =  true;
-       handle->data =  LOCAL_WorkerBuffer.data;
+       REMOTE_WorkerBuffer(worker_id).in_use =  true;
+       handle->data =  REMOTE_WorkerBuffer(worker_id).data;
        handle->is_thread_scratch_buf = true;
       return true;
      }
@@ -1868,9 +1876,10 @@ bool Yap_realloc_scratch_buf(scratch_struct_t *handle, size_t nof) {
  }
 
    bool Yap_release_scratch_buf(scratch_struct_t *handle) {
+     CACHE_REGS
      if (handle->is_thread_scratch_buf &&
-	 handle->data == LOCAL_WorkerBuffer.data) {
-       LOCAL_WorkerBuffer.in_use= false;
+	 handle->data == REMOTE_WorkerBuffer(worker_id).data) {
+       REMOTE_WorkerBuffer(worker_id).in_use= false;
      } else {
        free(handle->data);
      }

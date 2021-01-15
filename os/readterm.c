@@ -232,6 +232,7 @@ static const param_t read_defs[] = { READ_DEFS() };
 
 static Term add_output(Term t, Term tail)
 {
+  CACHE_REGS
   Term topt = Yap_MkApplTerm(Yap_MkFunctor(AtomOutput, 1), 1, &t);
 
   tail = Deref(tail);
@@ -251,6 +252,7 @@ static Term add_output(Term t, Term tail)
 
 static Term add_names(Term t, Term tail)
 {
+  CACHE_REGS
   Term topt = Yap_MkApplTerm(Yap_MkFunctor(AtomVariableNames, 1), 1, &t);
 
   if (IsVarTerm(tail))
@@ -269,6 +271,7 @@ static Term add_names(Term t, Term tail)
 
 static Term add_priority(Term t, Term tail)
 {
+  CACHE_REGS
   Term topt = Yap_MkNewApplTerm(Yap_MkFunctor(AtomPriority, 1), 1);
 
   Yap_unify(t, ArgOfTerm(1, topt));
@@ -288,6 +291,7 @@ static Term add_priority(Term t, Term tail)
 
 static Term scanToList(TokEntry *tok, TokEntry *errtok)
 {
+  CACHE_REGS
   TokEntry *tok0 = tok;
   CELL *Hi = HR;
   Term ts[1];
@@ -346,13 +350,13 @@ static Int scan_to_list(USES_REGS1)
   Term  tout;
   scanner_params params;
 
-  /* needs to change LOCAL_output_stream for write */
+  /* needs to change REMOTE_output_stream(worker_id) for write */
   inp_stream = Yap_CheckTextStream(ARG1, Input_Stream_f, "read/3");
   if (inp_stream == -1)
     {
       return false;
     }
-  TokEntry *tok = LOCAL_tokptr = LOCAL_toktide =
+  TokEntry *tok = REMOTE_tokptr(worker_id) = REMOTE_toktide(worker_id) =
                                    Yap_tokenizer(GLOBAL_Stream + inp_stream, &params);
   UNLOCK(GLOBAL_Stream[inp_stream].streamlock);
   tout = scanToList(tok, NULL);
@@ -375,25 +379,25 @@ static Int scan_to_list(USES_REGS1)
 static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool code, const char *msg)
 {
   CACHE_REGS
-  Yap_MkErrorRecord(LOCAL_ActiveError, __FILE__, __FUNCTION__, __LINE__, SYNTAX_ERROR, 0, NULL);
-  TokEntry *tok = LOCAL_tokptr;
+  Yap_MkErrorRecord(REMOTE_ActiveError(worker_id), __FILE__, __FUNCTION__, __LINE__, SYNTAX_ERROR, 0, NULL);
+  TokEntry *tok = REMOTE_tokptr(worker_id);
   Int start_line = tok->TokLine;
-  Int err_line = LOCAL_toktide->TokLine;
+  Int err_line = REMOTE_toktide(worker_id)->TokLine;
    Int startpos = tok->TokPos;
-  Int errpos = LOCAL_toktide->TokPos;
+  Int errpos = REMOTE_toktide(worker_id)->TokPos;
   Int end_line = GetCurInpLine(GLOBAL_Stream + sno);
  Int endpos = GetCurInpPos(GLOBAL_Stream + sno);
 
-  Yap_local.ActiveError->prologConsulting = Yap_Consulting();
-  Yap_local.ActiveError->parserFirstLine = start_line;
-  Yap_local.ActiveError->parserLine = err_line;
-  Yap_local.ActiveError->parserLastLine = end_line;
-  Yap_local.ActiveError->parserFirstPos = startpos;
-  Yap_local.ActiveError->parserPos = errpos;
-  Yap_local.ActiveError->parserLastPos = endpos;
-  Yap_local.ActiveError->parserFile =
+  REMOTE_ActiveError(worker_id)->prologConsulting = Yap_Consulting(PASS_REGS1);
+  REMOTE_ActiveError(worker_id)->parserFirstLine = start_line;
+  REMOTE_ActiveError(worker_id)->parserLine = err_line;
+  REMOTE_ActiveError(worker_id)->parserLastLine = end_line;
+  REMOTE_ActiveError(worker_id)->parserFirstPos = startpos;
+  REMOTE_ActiveError(worker_id)->parserPos = errpos;
+  REMOTE_ActiveError(worker_id)->parserLastPos = endpos;
+  REMOTE_ActiveError(worker_id)->parserFile =
     RepAtom(AtomOfTerm((GLOBAL_Stream + sno)->user_name))->StrOfAE;
-  Yap_local.ActiveError->parserReadingCode = code;
+  REMOTE_ActiveError(worker_id)->parserReadingCode = code;
 
   if (GLOBAL_Stream[sno].status & Seekable_Stream_f)
     {
@@ -407,8 +411,8 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
 #endif
       if (GLOBAL_Stream[sno].status & Seekable_Stream_f)
         {
-          err_line = LOCAL_ActiveError->parserLine;
-          errpos = LOCAL_ActiveError->parserPos -1;
+          err_line = REMOTE_ActiveError(worker_id)->parserLine;
+          errpos = REMOTE_ActiveError(worker_id)->parserPos -1;
           if (errpos <= startpos)
             {
               o = malloc(1);
@@ -425,7 +429,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
                     Yap_Error(EVALUATION_ERROR_READ_STREAM, GLOBAL_Stream[sno].user_name, "%s", strerror(errno));
               o[sza - 1] = '\0';
             }
-          Yap_local.ActiveError->parserTextA = o;
+          REMOTE_ActiveError(worker_id)->parserTextA = o;
           if (endpos <= errpos)
             {
               o2 = malloc(1);
@@ -443,7 +447,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
                  
               o2[sza - 1] = '\0';
             }
-          Yap_local.ActiveError->parserTextB = o2;
+          REMOTE_ActiveError(worker_id)->parserTextB = o2;
 	    }
 	    }
 	}
@@ -455,10 +459,10 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
           o[0] = '\0';
           while (tok)
             {
-              if (tok->Tok == Error_tok || tok == LOCAL_toktide )
+              if (tok->Tok == Error_tok || tok == REMOTE_toktide(worker_id) )
                 {
                   o = realloc(o, strlen(o) + 1);
-                  Yap_local.ActiveError->parserTextA = o;
+                  REMOTE_ActiveError(worker_id)->parserTextA = o;
                   o = malloc(1024);
                   sz = 1024;
                   err_line = tok->TokLine;
@@ -482,23 +486,23 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
               tok = tok->TokNext;
             }
           o = realloc(o, strlen(o) + 1);
-          Yap_local.ActiveError->parserTextB = o;
+          REMOTE_ActiveError(worker_id)->parserTextB = o;
         }
     }
-  Yap_local.ActiveError->parserPos = errpos;
-  Yap_local.ActiveError->parserLine = err_line;
+  REMOTE_ActiveError(worker_id)->parserPos = errpos;
+  REMOTE_ActiveError(worker_id)->parserLine = err_line;
   /* 0:  strat, error, end line */
   /*2 msg */
   /* 1: file */
-      Yap_local.ActiveError->culprit =
+      REMOTE_ActiveError(worker_id)->culprit =
 	(char*)msg;
-      if (Yap_local.ActiveError->errorMsg) {
-        Yap_local.ActiveError->errorMsg = (char*)msg;
-	Yap_local.ActiveError->errorMsgLen = strlen(Yap_local.ActiveError->errorMsg);
+      if (REMOTE_ActiveError(worker_id)->errorMsg) {
+        REMOTE_ActiveError(worker_id)->errorMsg = (char*)msg;
+	REMOTE_ActiveError(worker_id)->errorMsgLen = strlen(REMOTE_ActiveError(worker_id)->errorMsg);
       }
       
-      clean_vars(LOCAL_VarTable);
-      clean_vars(LOCAL_AnonVarTable);
+      clean_vars(REMOTE_VarTable(worker_id));
+      clean_vars(REMOTE_AnonVarTable(worker_id));
       if (Yap_ExecutionMode == YAP_BOOT_MODE)
         {
           fprintf(stderr, "SYNTAX ERROR while booting: ");
@@ -508,6 +512,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
 
   Term Yap_syntax_error(TokEntry *errtok, int sno, const char *msg)
   {
+    CACHE_REGS
     return syntax_error(errtok, sno, CurrentModule, -1, false, msg);
   }
 
@@ -542,7 +547,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
   static xarg *setReadEnv(Term opts, FEnv *fe, struct renv *re, int inp_stream)
   {
     CACHE_REGS
-      LOCAL_VarTable = LOCAL_VarList = LOCAL_VarTail = LOCAL_AnonVarTable = NULL;
+      REMOTE_VarTable(worker_id) = REMOTE_VarList(worker_id) = REMOTE_VarTail(worker_id) = REMOTE_AnonVarTable(worker_id) = NULL;
     fe->enc = GLOBAL_Stream[inp_stream].encoding;
     xarg *args =
       Yap_ArgListToVector(opts, read_defs, READ_END, DOMAIN_ERROR_READ_OPTION);
@@ -694,7 +699,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
       }
     else
       {
-        re->prio = LOCAL_default_priority;
+        re->prio = REMOTE_default_priority(worker_id);
       }
     fe->msg = NULL;
     return args;
@@ -713,7 +718,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
   Int Yap_FirstLineInParse(void)
   {
     CACHE_REGS
-    return LOCAL_StartLineCount;
+    return REMOTE_StartLineCount(worker_id);
   }
 
 #define PUSHFET(X) *HR++ = fe->X
@@ -735,7 +740,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
       PUSHFET(scanner.tposOUTPUT);
     PUSHFET(t);
     HR = fe->old_H;
-    LOCAL_Error_TYPE = YAP_NO_ERROR;
+    REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
     Yap_growstack_in_parser();
     POPFET(t);
     POPFET(vprefix);
@@ -756,9 +761,9 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
         while (true)
           {
             fe->old_H = HR;
-            if (setjmp(LOCAL_IOBotch) == 0)
+            if (setjmp(REMOTE_IOBotch(worker_id)) == 0)
               {
-                if ((v = Yap_Variables(LOCAL_VarList, TermNil)))
+                if ((v = Yap_Variables(REMOTE_VarList(worker_id), TermNil)))
                   {
                     fe->old_H = HR;
                     return v;
@@ -784,9 +789,9 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
           {
             fe->old_H = HR;
 
-            if (setjmp(LOCAL_IOBotch) == 0)
+            if (setjmp(REMOTE_IOBotch(worker_id)) == 0)
               {
-                if ((v = Yap_VarNames(LOCAL_VarList, TermNil)))
+                if ((v = Yap_VarNames(REMOTE_VarList(worker_id), TermNil)))
                   {
                     fe->old_H = HR;
                     return v;
@@ -812,9 +817,9 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
           {
             fe->old_H = HR;
 
-            if (setjmp(LOCAL_IOBotch) == 0)
+            if (setjmp(REMOTE_IOBotch(worker_id)) == 0)
               {
-                if ((v = Yap_Singletons(LOCAL_VarList, TermNil)))
+                if ((v = Yap_Singletons(REMOTE_VarList(worker_id), TermNil)))
                   {
                     return v;
                   }
@@ -839,8 +844,8 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
       {
         Term singls[4];
         singls[0] = Yap_MkApplTerm(Yap_MkFunctor(AtomSingleton, 1), 1, &v);
-        singls[1] = MkIntegerTerm(LOCAL_SourceFileLineno);
-        singls[2] = MkAtomTerm(LOCAL_SourceFileName);
+        singls[1] = MkIntegerTerm(REMOTE_SourceFileLineno(worker_id));
+        singls[2] = MkAtomTerm(REMOTE_SourceFileName(worker_id));
         if (fe->t)
           singls[3] = fe->t;
         else
@@ -861,7 +866,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
           {
             fe->old_H = HR;
 
-            if (setjmp(LOCAL_IOBotch) == 0)
+            if (setjmp(REMOTE_IOBotch(worker_id)) == 0)
               {
                 if ((v = CurrentPositionToTerm()))
                   {
@@ -898,7 +903,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
     else
       v3 = 0L;
     if (fe->t && fe->scanner.tcomms)
-      vc = LOCAL_Comments;
+      vc = REMOTE_Comments(worker_id);
     else
       vc = 0L;
     fe->scanner.tposOUTPUT = get_stream_position(fe, tokstart);
@@ -935,7 +940,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
         warn_singletons(fe, tokstart);
       }
     if (fe->t && fe->scanner.tcomms)
-      v_comments = LOCAL_Comments;
+      v_comments = REMOTE_Comments(worker_id);
     else
       v_comments = 0L;
     if (fe->t && fe->tp)
@@ -970,7 +975,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
   {
     CACHE_REGS
     // bool store_comments = false;
-    TokEntry *tokstart = LOCAL_tokptr;
+    TokEntry *tokstart = REMOTE_tokptr(worker_id);
 
     // check for an user abort
     if (tokstart != NULL && tokstart->Tok != Ord(eot_tok))
@@ -1020,10 +1025,11 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
   static parser_state_t initparser(Term opts, FEnv *fe, REnv *re, int inp_stream,
                                    bool clause)
   {
-    LOCAL_ErrorMessage = NULL;
-    LOCAL_Error_TYPE = YAP_NO_ERROR;
-    LOCAL_SourceFileName = GLOBAL_Stream[inp_stream].name;
-    LOCAL_eot_before_eof = false;
+    CACHE_REGS
+    REMOTE_ActiveError(worker_id)->errorMsg = NULL;
+    REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+    REMOTE_SourceFileName(worker_id) = GLOBAL_Stream[inp_stream].name;
+    REMOTE_eot_before_eof(worker_id) = false;
     fe->scanner.tposOUTPUT = StreamPosition(inp_stream);
     fe->reading_clause = clause;
     if (clause)
@@ -1036,10 +1042,10 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
       }
     if (fe->args == NULL)
       {
-        if (LOCAL_Error_TYPE == DOMAIN_ERROR_OUT_OF_RANGE)
-          LOCAL_Error_TYPE = DOMAIN_ERROR_READ_OPTION;
-        if (LOCAL_Error_TYPE)
-          Yap_Error(LOCAL_Error_TYPE, opts, NULL);
+        if (REMOTE_ActiveError(worker_id)->errorNo == DOMAIN_ERROR_OUT_OF_RANGE)
+          REMOTE_ActiveError(worker_id)->errorNo = DOMAIN_ERROR_READ_OPTION;
+        if (REMOTE_ActiveError(worker_id)->errorNo)
+          Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, opts, NULL);
         fe->t = 0;
         return YAP_PARSING_FINISHED;
         ;
@@ -1062,14 +1068,14 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
     CACHE_REGS
     /* preserve   value of H after scanning: otherwise we may lose strings
        and floats */
-      LOCAL_tokptr = LOCAL_toktide =
+      REMOTE_tokptr(worker_id) = REMOTE_toktide(worker_id) =
 
                        Yap_tokenizer(GLOBAL_Stream + sno, &fe->scanner);
 
 #if DEBUG
     if (GLOBAL_Option[2])
       {
-        TokEntry *t = LOCAL_tokptr;
+        TokEntry *t = REMOTE_tokptr(worker_id);
         int n = 0;
         while (t)
           {
@@ -1079,16 +1085,16 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
         fprintf(stderr, "\n");
       }
 #endif
-    if (LOCAL_ErrorMessage)
+    if (REMOTE_ActiveError(worker_id)->errorMsg)
       return YAP_SCANNING_ERROR;
-    if (LOCAL_tokptr->Tok != Ord(eot_tok))
+    if (REMOTE_tokptr(worker_id)->Tok != Ord(eot_tok))
       {
         // next step
         return YAP_PARSING;
       }
-    if (LOCAL_tokptr->Tok == eot_tok && LOCAL_tokptr->TokInfo == TermNl)
+    if (REMOTE_tokptr(worker_id)->Tok == eot_tok && REMOTE_tokptr(worker_id)->TokInfo == TermNl)
       {
-        LOCAL_ErrorMessage = ". is end-of-term?";
+        REMOTE_ActiveError(worker_id)->errorMsg = ". is end-of-term?";
         return YAP_PARSING_ERROR;
       }
     return scanEOF(fe, sno);
@@ -1100,40 +1106,40 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
     fe->t = 0;
 
     // running out of memory
-    if (LOCAL_Error_TYPE == RESOURCE_ERROR_TRAIL)
+    if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_TRAIL)
       {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         if (!Yap_growtrail(sizeof(CELL) * K16, FALSE))
           {
             return YAP_PARSING_FINISHED;
           }
       }
-    else if (LOCAL_Error_TYPE == RESOURCE_ERROR_AUXILIARY_STACK)
+    else if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_AUXILIARY_STACK)
       {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         if (!Yap_ExpandPreAllocCodeSpace(0, NULL, TRUE))
           {
             return YAP_PARSING_FINISHED;
           }
       }
-    else if (LOCAL_Error_TYPE == RESOURCE_ERROR_HEAP)
+    else if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_HEAP)
       {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         if (!Yap_growheap(FALSE, 0, NULL))
           {
             return YAP_PARSING_FINISHED;
           }
       }
-    else if (LOCAL_Error_TYPE == RESOURCE_ERROR_STACK)
+    else if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_STACK)
       {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
-        if (!Yap_gcl(LOCAL_Error_Size, fe->nargs, ENV, CP))
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, fe->nargs, ENV, CP))
           {
             return YAP_PARSING_FINISHED;
           }
       }
     // go back to the start
-    if (LOCAL_Error_TYPE == SYNTAX_ERROR)
+    if (REMOTE_ActiveError(worker_id)->errorNo == SYNTAX_ERROR)
       {
         return YAP_PARSING_ERROR;
       }
@@ -1160,22 +1166,22 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
     CACHE_REGS
     fe->t = 0;
 
-    if (LOCAL_Error_TYPE != SYNTAX_ERROR && LOCAL_Error_TYPE != YAP_NO_ERROR)
+    if (REMOTE_ActiveError(worker_id)->errorNo != SYNTAX_ERROR && REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR)
       {
         return YAP_SCANNING_ERROR;
       }
     Term ParserErrorStyle = re->sy;
-    if (ParserErrorStyle == TermQuiet || LOCAL_Error_TYPE == YAP_NO_ERROR)
+    if (ParserErrorStyle == TermQuiet || REMOTE_ActiveError(worker_id)->errorNo == YAP_NO_ERROR)
       {
         /* just fail */
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         return YAP_PARSING_FINISHED;
       }
 
     syntax_error(fe->toklast, inp_stream, fe->cmod, re->cpos, fe->reading_clause, fe->msg);
     if (ParserErrorStyle == TermException)
       {
-        if (LOCAL_RestartEnv && !LOCAL_delay)
+        if (REMOTE_RestartEnv(worker_id) && !REMOTE_delay(worker_id))
           {
             Yap_RestartYap(5);
           }
@@ -1185,9 +1191,9 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
       {
         re->cpos = GLOBAL_Stream[inp_stream].charcount;
       }
-    LOCAL_Error_TYPE = WARNING_SYNTAX_ERROR;
+    REMOTE_ActiveError(worker_id)->errorNo = WARNING_SYNTAX_ERROR;
     Yap_PrintWarning(0);
-    LOCAL_Error_TYPE = YAP_NO_ERROR;
+    REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
     if (ParserErrorStyle == TermDec10)
       {
         return YAP_START_PARSING;
@@ -1198,15 +1204,15 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
   static parser_state_t parse(REnv *re, FEnv *fe, int inp_stream)
   {
     CACHE_REGS
-    TokEntry *tokstart = LOCAL_tokptr;
+    TokEntry *tokstart = REMOTE_tokptr(worker_id);
 
     fe->t = Yap_Parse(re->prio, fe->enc, fe->cmod);
-    fe->toklast = LOCAL_tokptr;
-    LOCAL_tokptr = tokstart;
+    fe->toklast = REMOTE_tokptr(worker_id);
+    REMOTE_tokptr(worker_id) = tokstart;
 #if EMACS
     first_char = tokstart->TokPos;
 #endif /* EMACS */
-    if (LOCAL_Error_TYPE != YAP_NO_ERROR || fe->t == 0)
+    if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR || fe->t == 0)
       return YAP_PARSING_ERROR;
     return YAP_PARSING_FINISHED;
   }
@@ -1228,14 +1234,15 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
  */
   Term Yap_read_term(int sno, Term opts, bool clause)
   {
+    CACHE_REGS
     yap_error_descriptor_t *new = calloc(1, sizeof *new);
 #if EMACS
     int emacs_cares = FALSE;
 #endif
     int lvl = push_text_stack();
     Term rc;
-    FEnv *fe = Malloc(sizeof *fe);
-    REnv *re = Malloc(sizeof *re);
+    FEnv *fe = Malloc(sizeof *fe PASS_REGS);
+    REnv *re = Malloc(sizeof *re PASS_REGS);
     bool err = Yap_pushErrorContext(true, new);
     parser_state_t state = YAP_START_PARSING;
     yhandle_t yopts = Yap_InitHandle(opts);
@@ -1275,9 +1282,9 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
             CACHE_REGS
             bool done;
             if (clause)
-              done = complete_clause_processing(fe, LOCAL_tokptr);
+              done = complete_clause_processing(fe, REMOTE_tokptr(worker_id));
             else
-              done = complete_processing(fe, LOCAL_tokptr);
+              done = complete_processing(fe, REMOTE_tokptr(worker_id));
             if (!done)
               {
                 state = YAP_PARSING_ERROR;
@@ -1305,7 +1312,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
   static Int
   read_term2(USES_REGS1) /* '$read'(+Flag,?Term,?Module,?Vars,-Pos,-Err) */
   {
-    return Yap_read_term(LOCAL_c_input_stream, add_output(ARG1, ARG2), false) !=
+    return Yap_read_term(REMOTE_c_input_stream(worker_id), add_output(ARG1, ARG2), false) !=
            0;
   }
 
@@ -1315,7 +1322,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
     int sno;
     Term out;
 
-    /* needs to change LOCAL_output_stream for write */
+    /* needs to change REMOTE_output_stream(worker_id) for write */
 
     sno = Yap_CheckTextStream(ARG1, Input_Stream_f, "read/3");
     if (sno == -1)
@@ -1355,7 +1362,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
   {
     CACHE_REGS
 
-      LOCAL_VarTable = LOCAL_VarList = LOCAL_VarTail = LOCAL_AnonVarTable = NULL;
+      REMOTE_VarTable(worker_id) = REMOTE_VarList(worker_id) = REMOTE_VarTail(worker_id) = REMOTE_AnonVarTable(worker_id) = NULL;
     xarg *args = Yap_ArgListToVector(opts, read_clause_defs, READ_CLAUSE_END,
                                      DOMAIN_ERROR_READ_OPTION);
       memset(fe,0,sizeof(*fe));
@@ -1374,7 +1381,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
       }
     else
       {
-        fe->cmod = LOCAL_SourceModule;
+        fe->cmod = REMOTE_SourceModule(worker_id);
         if (fe->cmod == TermProlog)
           fe->cmod = PROLOG_MODULE;
       }
@@ -1432,7 +1439,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
       {
         re->cpos = GLOBAL_Stream[sno].charcount;
       }
-    re->prio = LOCAL_default_priority;
+    re->prio = REMOTE_default_priority(worker_id);
     fe->msg = NULL;
     return args;
   }
@@ -1447,7 +1454,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
   {
     Term ctl = add_output(ARG1, ARG2);
 
-    return Yap_read_term(LOCAL_c_input_stream, ctl, true);
+    return Yap_read_term(REMOTE_c_input_stream(worker_id), ctl, true);
   }
 
 /**
@@ -1479,7 +1486,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
     int sno;
     Term out;
 
-    /* needs to change LOCAL_output_stream for write */
+    /* needs to change REMOTE_output_stream(worker_id) for write */
     sno = Yap_CheckTextStream(ARG1, Input_Stream_f, "read/3");
     if (sno < 0)
       return false;
@@ -1509,13 +1516,13 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
     TokENtry *tok;
     arity_t srity = 0;
 
-    /* needs to change LOCAL_output_stream for write */
+    /* needs to change REMOTE_output_stream(worker_id) for write */
     sno = Yap_CheckTextStream(ARG1, Input_Stream_f, "read_exo/3");
     if (sno < 0)
       return false;
     /* preserve   value of H after scanning: otherwise we may lose strings
        and floats */
-    LOCAL_tokptr = LOCAL_toktide =
+    REMOTE_tokptr(worker_id) = REMOTE_toktide(worker_id) =
                      x Yap_tokenizer(GLOBAL_Stream + sno, fe->scanner);
     if (tokptr->Tok == Name_tok && (next = tokptr->TokNext) != NULL &&
         next->Tok == Ponctuation_tok && next->TokInfo == TermOpenBracket)
@@ -1554,8 +1561,8 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
    */
   static Int source_location(USES_REGS1)
   {
-    return Yap_unify(ARG1, MkAtomTerm(LOCAL_SourceFileName)) &&
-           Yap_unify(ARG2, MkIntegerTerm(LOCAL_SourceFileLineno));
+    return Yap_unify(ARG1, MkAtomTerm(REMOTE_SourceFileName(worker_id))) &&
+           Yap_unify(ARG2, MkIntegerTerm(REMOTE_SourceFileLineno(worker_id)));
   }
 
   /**
@@ -1574,7 +1581,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
     int sno;
     Int out;
 
-    /* needs to change LOCAL_output_stream for write */
+    /* needs to change REMOTE_output_stream(worker_id) for write */
     sno = Yap_CheckTextStream(ARG1, Input_Stream_f, "read/3");
     if (sno == -1)
       {
@@ -1598,7 +1605,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
   static Int read1(
     USES_REGS1)                    /* '$read2'(+Flag,?Term,?Module,?Vars,-Pos,-Err,+Stream)  */
   {
-    Term out = Yap_read_term(LOCAL_c_input_stream, add_output(ARG1, TermNil), 1);
+    Term out = Yap_read_term(REMOTE_c_input_stream(worker_id), add_output(ARG1, TermNil), 1);
 
     return out;
   }
@@ -1721,7 +1728,6 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
                                               Term bindings, size_t len,
                                               int prio)
   {
-    CACHE_REGS
     if (bindings)
       {
         ctl = add_names(bindings, ctl);
@@ -1870,7 +1876,7 @@ static Term syntax_error(TokEntry *errtok, int sno, Term cmod, Int newpos, bool 
     int l = push_text_stack();
     Term cm = CurrentModule;
     if (IsApplTerm(t1)) {
-      Term tmod = LOCAL_SourceModule;
+      Term tmod = REMOTE_SourceModule(worker_id);
       t1 = Yap_YapStripModule(t1, &tmod);
       CurrentModule = tmod;
     }

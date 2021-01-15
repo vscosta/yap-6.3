@@ -266,7 +266,7 @@ typedef enum {
           DEP_ON_STACK = (LEADER_CP == SgFr_gen_cp(SG_FR));                       \
         }
 #define find_leader_node(LEADER_CP, DEP_ON_STACK)                                 \
-        { dep_fr_ptr chain_dep_fr = LOCAL_top_dep_fr;                             \
+        { dep_fr_ptr chain_dep_fr = REMOTE_top_dep_fr(worker_id);                             \
           while (YOUNGER_CP(DepFr_cons_cp(chain_dep_fr), LEADER_CP)) {            \
             if (LEADER_CP == DepFr_leader_cp(chain_dep_fr)) {                     \
               DEP_ON_STACK |= DepFr_leader_dep_is_on_stack(chain_dep_fr);         \
@@ -287,7 +287,7 @@ typedef enum {
 #define YAPOR_SET_LOAD(CP_PTR)  SCH_set_load(CP_PTR)
 #define SgFr_init_yapor_fields(SG_FR)                                             \
         SgFr_gen_worker(SG_FR) = worker_id;                                       \
-        SgFr_gen_top_or_fr(SG_FR) = LOCAL_top_or_fr
+        SgFr_gen_top_or_fr(SG_FR) = REMOTE_top_or_fr(worker_id)
 #define DepFr_init_yapor_fields(DEP_FR, DEP_ON_STACK, TOP_OR_FR)                  \
         INIT_LOCK_DEP_FR(DEP_FR);                                                 \
         DepFr_leader_dep_is_on_stack(DEP_FR) = DEP_ON_STACK;                      \
@@ -297,7 +297,7 @@ typedef enum {
 #define find_dependency_node(SG_FR, LEADER_CP, DEP_ON_STACK)                      \
         LEADER_CP = SgFr_gen_cp(SG_FR)
 #define find_leader_node(LEADER_CP, DEP_ON_STACK)                                 \
-        { dep_fr_ptr chain_dep_fr = LOCAL_top_dep_fr;                             \
+        { dep_fr_ptr chain_dep_fr = REMOTE_top_dep_fr(worker_id);                             \
           while (YOUNGER_CP(DepFr_cons_cp(chain_dep_fr), LEADER_CP)) {            \
             if (EQUAL_OR_YOUNGER_CP(LEADER_CP, DepFr_leader_cp(chain_dep_fr))) {  \
               LEADER_CP = DepFr_leader_cp(chain_dep_fr);                          \
@@ -489,11 +489,11 @@ typedef enum {
         SetMode_ExecAnswers(TabEnt_flags(TAB_ENT));                    \
         SetMode_LocalTrie(TabEnt_flags(TAB_ENT));                      \
         TabEnt_mode(TAB_ENT) = TabEnt_flags(TAB_ENT);                  \
-        if (IsMode_Local(LOCAL_TabMode))                \
+        if (IsMode_Local(REMOTE_TabMode(worker_id)))                \
           SetMode_Local(TabEnt_mode(TAB_ENT));                         \
-        if (IsMode_LoadAnswers(LOCAL_TabMode))				       \
+        if (IsMode_LoadAnswers(REMOTE_TabMode(worker_id)))				       \
           SetMode_LoadAnswers(TabEnt_mode(TAB_ENT));                   \
-        if (IsMode_GlobalTrie(LOCAL_TabMode))				       \
+        if (IsMode_GlobalTrie(REMOTE_TabMode(worker_id)))				       \
           SetMode_GlobalTrie(TabEnt_mode(TAB_ENT));                    \
         TabEnt_init_mode_directed_field(TAB_ENT, MODE_ARRAY);          \
         TabEnt_init_subgoal_trie_field(TAB_ENT);                       \
@@ -523,8 +523,8 @@ typedef enum {
 
 #define init_subgoal_frame(SG_FR)                                  \
         { SgFr_state(SG_FR) = evaluating;			   \
-          SgFr_next(SG_FR) = LOCAL_top_sg_fr;                      \
-          LOCAL_top_sg_fr = SG_FR;                                 \
+          SgFr_next(SG_FR) = REMOTE_top_sg_fr(worker_id);                      \
+          REMOTE_top_sg_fr(worker_id) = SG_FR;                                 \
 	}
 #else
 #define new_subgoal_frame(SG_FR, CODE, MODE_ARRAY)		   \
@@ -544,8 +544,8 @@ typedef enum {
 #define init_subgoal_frame(SG_FR)                                  \
         { SgFr_init_yapor_fields(SG_FR);                           \
           SgFr_state(SG_FR) = evaluating;                          \
-          SgFr_next(SG_FR) = LOCAL_top_sg_fr;                      \
-          LOCAL_top_sg_fr = SG_FR;                                 \
+          SgFr_next(SG_FR) = REMOTE_top_sg_fr(worker_id);                      \
+          REMOTE_top_sg_fr(worker_id) = SG_FR;                                 \
 	}
 #endif /* THREADS_FULL_SHARING) || THREADS_CONSUMER_SHARING */
 
@@ -945,8 +945,8 @@ static inline void __check_for_deadlock(sg_fr_ptr sg_fr USES_REGS) {
 
   if (local_sg_fr){
     LOCK(ThDepFr_lock(GLOBAL_th_dep_fr(worker_id)));
-    if (YOUNGER_CP(DepFr_leader_cp(LOCAL_top_dep_fr),SgFr_gen_cp(local_sg_fr)))
-      DepFr_leader_cp(LOCAL_top_dep_fr) = SgFr_gen_cp(local_sg_fr);
+    if (YOUNGER_CP(DepFr_leader_cp(REMOTE_top_dep_fr(worker_id)),SgFr_gen_cp(local_sg_fr)))
+      DepFr_leader_cp(REMOTE_top_dep_fr(worker_id)) = SgFr_gen_cp(local_sg_fr);
 
     UNLOCK(ThDepFr_lock(GLOBAL_th_dep_fr(worker_id)));
   }
@@ -959,7 +959,7 @@ static inline sg_fr_ptr __deadlock_detection(sg_fr_ptr sg_fr USES_REGS) {
   sg_fr_ptr remote_sg_fr = REMOTE_top_sg_fr(SgFr_gen_worker(sg_fr));
 
   while( SgFr_sg_ent(remote_sg_fr) != SgFr_sg_ent(sg_fr)){
-    sg_fr_ptr local_sg_fr = SgFr_next(LOCAL_top_sg_fr);
+    sg_fr_ptr local_sg_fr = SgFr_next(REMOTE_top_sg_fr(worker_id));
     while(local_sg_fr){
       if (      SgFr_sg_ent(local_sg_fr)   == SgFr_sg_ent(remote_sg_fr) || 
          (      SgFr_gen_worker(remote_sg_fr) != SgFr_gen_worker(sg_fr)       &&  /* jump to other chain */
@@ -998,7 +998,7 @@ static inline Int __freeze_current_cp(USES_REGS1) {
   TR_FZ = freeze_cp->cp_tr;
   B = B->cp_b;
   HB = B->cp_h;
-  return (LOCAL_LocalBase - (ADDR)freeze_cp);
+  return (REMOTE_LocalBase(worker_id) - (ADDR)freeze_cp);
 }
 
 
@@ -1007,7 +1007,7 @@ static inline Int __freeze_current_cp(USES_REGS1) {
 #define restore_bindings(u, r) __restore_bindings((u), (r) PASS_REGS)
 
 static inline void __wake_frozen_cp(Int frozen_offset USES_REGS) {
-  choiceptr frozen_cp = (choiceptr)(LOCAL_LocalBase - frozen_offset);
+  choiceptr frozen_cp = (choiceptr)(REMOTE_LocalBase(worker_id) - frozen_offset);
 
   restore_bindings(TR, frozen_cp->cp_tr);
   B = frozen_cp;
@@ -1020,7 +1020,7 @@ static inline void __wake_frozen_cp(Int frozen_offset USES_REGS) {
 #define abolish_frozen_cps_until(f) __abolish_frozen_cps_until((f) PASS_REGS )
 
 static inline void __abolish_frozen_cps_until(Int frozen_offset USES_REGS) {
-  choiceptr frozen_cp = (choiceptr)(LOCAL_LocalBase - frozen_offset);
+  choiceptr frozen_cp = (choiceptr)(REMOTE_LocalBase(worker_id) - frozen_offset);
 
   B_FZ  = frozen_cp;
   H_FZ  = frozen_cp->cp_h;
@@ -1031,16 +1031,16 @@ static inline void __abolish_frozen_cps_until(Int frozen_offset USES_REGS) {
 #define abolish_frozen_cps_all() __abolish_frozen_cps_all( PASS_REGS1 )
 
 static inline void __abolish_frozen_cps_all( USES_REGS1 ) {
-  B_FZ  = (choiceptr) LOCAL_LocalBase;
-  H_FZ  = (CELL *) LOCAL_GlobalBase;
-  TR_FZ = (tr_fr_ptr) LOCAL_TrailBase;
+  B_FZ  = (choiceptr) REMOTE_LocalBase(worker_id);
+  H_FZ  = (CELL *) REMOTE_GlobalBase(worker_id);
+  TR_FZ = (tr_fr_ptr) REMOTE_TrailBase(worker_id);
   return;
 }
 
 #define adjust_freeze_registers() __adjust_freeze_registers( PASS_REGS1 )
 
 static inline void __adjust_freeze_registers( USES_REGS1 ) {
-  B_FZ  = DepFr_cons_cp(LOCAL_top_dep_fr);
+  B_FZ  = DepFr_cons_cp(REMOTE_top_dep_fr(worker_id));
   H_FZ  = B_FZ->cp_h;
   TR_FZ = B_FZ->cp_tr;
   return;
@@ -1107,10 +1107,10 @@ static inline void __unbind_variables(tr_fr_ptr unbind_tr, tr_fr_ptr end_tr USES
       RESET_VARIABLE(ref);
     } else if (IsPairTerm(ref)) {
       ref = (CELL) RepPair(ref);
-      if (IN_BETWEEN(LOCAL_TrailBase, ref, LOCAL_TrailTop)) {
+      if (IN_BETWEEN(REMOTE_TrailBase(worker_id), ref, REMOTE_TrailTop(worker_id))) {
         /* avoid frozen segments */
         unbind_tr = (tr_fr_ptr) ref;
-	TABLING_ERROR_CHECKING(unbind_variables, unbind_tr > (tr_fr_ptr) LOCAL_TrailTop);
+	TABLING_ERROR_CHECKING(unbind_variables, unbind_tr > (tr_fr_ptr) REMOTE_TrailTop(worker_id));
 	TABLING_ERROR_CHECKING(unbind_variables, unbind_tr < end_tr);
       }
 #ifdef MULTI_ASSIGNMENT_VARIABLES
@@ -1140,10 +1140,10 @@ static inline void __rebind_variables(tr_fr_ptr rebind_tr, tr_fr_ptr end_tr USES
       *((CELL *)ref) = TrailVal(rebind_tr);
     } else if (IsPairTerm(ref)) {
       ref = (CELL) RepPair(ref);
-      if (IN_BETWEEN(LOCAL_TrailBase, ref, LOCAL_TrailTop)) {
+      if (IN_BETWEEN(REMOTE_TrailBase(worker_id), ref, REMOTE_TrailTop(worker_id))) {
         /* avoid frozen segments */
   	rebind_tr = (tr_fr_ptr) ref;
-	TABLING_ERROR_CHECKING(rebind_variables, rebind_tr > (tr_fr_ptr) LOCAL_TrailTop);
+	TABLING_ERROR_CHECKING(rebind_variables, rebind_tr > (tr_fr_ptr) REMOTE_TrailTop(worker_id));
 	TABLING_ERROR_CHECKING(rebind_variables, rebind_tr < end_tr);
       }
 #ifdef MULTI_ASSIGNMENT_VARIABLES
@@ -1175,10 +1175,10 @@ static inline void __restore_bindings(tr_fr_ptr unbind_tr, tr_fr_ptr rebind_tr U
         RESET_VARIABLE(ref);
       } else if (IsPairTerm(ref)) {
         ref = (CELL) RepPair(ref);
-	if (IN_BETWEEN(LOCAL_TrailBase, ref, LOCAL_TrailTop)) {
+	if (IN_BETWEEN(REMOTE_TrailBase(worker_id), ref, REMOTE_TrailTop(worker_id))) {
 	  /* avoid frozen segments */
           unbind_tr = (tr_fr_ptr) ref;
-	  TABLING_ERROR_CHECKING(restore_variables, unbind_tr > (tr_fr_ptr) LOCAL_TrailTop);
+	  TABLING_ERROR_CHECKING(restore_variables, unbind_tr > (tr_fr_ptr) REMOTE_TrailTop(worker_id));
         }
 #ifdef MULTI_ASSIGNMENT_VARIABLES
       }	else if (IsApplTerm(ref)) {
@@ -1199,10 +1199,10 @@ static inline void __restore_bindings(tr_fr_ptr unbind_tr, tr_fr_ptr rebind_tr U
       ref = (CELL) TrailTerm(--end_tr);
       if (IsPairTerm(ref)) {
         ref = (CELL) RepPair(ref);
-	if (IN_BETWEEN(LOCAL_TrailBase, ref, LOCAL_TrailTop)) {
+	if (IN_BETWEEN(REMOTE_TrailBase(worker_id), ref, REMOTE_TrailTop(worker_id))) {
 	  /* avoid frozen segments */
   	  end_tr = (tr_fr_ptr) ref;
-	  TABLING_ERROR_CHECKING(restore_variables, end_tr > (tr_fr_ptr) LOCAL_TrailTop);
+	  TABLING_ERROR_CHECKING(restore_variables, end_tr > (tr_fr_ptr) REMOTE_TrailTop(worker_id));
         }
       }
     }
@@ -1214,10 +1214,10 @@ static inline void __restore_bindings(tr_fr_ptr unbind_tr, tr_fr_ptr rebind_tr U
       *((CELL *)ref) = TrailVal(rebind_tr);
     } else if (IsPairTerm(ref)) {
       ref = (CELL) RepPair(ref);
-      if (IN_BETWEEN(LOCAL_TrailBase, ref, LOCAL_TrailTop)) {
+      if (IN_BETWEEN(REMOTE_TrailBase(worker_id), ref, REMOTE_TrailTop(worker_id))) {
 	/* avoid frozen segments */
         rebind_tr = (tr_fr_ptr) ref;
-	TABLING_ERROR_CHECKING(restore_variables, rebind_tr > (tr_fr_ptr) LOCAL_TrailTop);
+	TABLING_ERROR_CHECKING(restore_variables, rebind_tr > (tr_fr_ptr) REMOTE_TrailTop(worker_id));
 	TABLING_ERROR_CHECKING(restore_variables, rebind_tr < end_tr);
       }
 #ifdef MULTI_ASSIGNMENT_VARIABLES
@@ -1235,13 +1235,13 @@ static inline void __restore_bindings(tr_fr_ptr unbind_tr, tr_fr_ptr rebind_tr U
 #define expand_auxiliary_stack(s) __expand_auxiliary_stack((s) PASS_REGS)
 
 static inline CELL *__expand_auxiliary_stack(CELL *stack USES_REGS) {
-  char *old_top = (char *)LOCAL_TrailTop;
+  char *old_top = (char *)REMOTE_TrailTop(worker_id);
   INFORMATION_MESSAGE("Expanding trail in " UInt_FORMAT " bytes", K64);
   if (! Yap_growtrail(K64, TRUE)) {  /* TRUE means 'contiguous_only' */
     Yap_Error(RESOURCE_ERROR_TRAIL, TermNil, "stack full (STACK_CHECK_EXPAND)");
     return NULL;
   } else {
-    UInt diff = (char *)LOCAL_TrailTop - old_top;
+    UInt diff = (char *)REMOTE_TrailTop(worker_id) - old_top;
     CELL *new_stack = (CELL *)((char *)stack + diff);
     memmove((void *)new_stack, stack, old_top - (char *)stack);
     return new_stack;
@@ -1254,31 +1254,31 @@ static inline CELL *__expand_auxiliary_stack(CELL *stack USES_REGS) {
 static inline void __abolish_incomplete_subgoals(choiceptr prune_cp USES_REGS) {
 
 #ifdef YAPOR
-  if (EQUAL_OR_YOUNGER_CP(GetOrFr_node(LOCAL_top_susp_or_fr), prune_cp))
+  if (EQUAL_OR_YOUNGER_CP(GetOrFr_node(REMOTE_top_susp_or_fr(worker_id)), prune_cp))
     pruning_over_tabling_data_structures();
 #endif /* YAPOR */
 
-  if (EQUAL_OR_YOUNGER_CP(DepFr_cons_cp(LOCAL_top_dep_fr), prune_cp)) {
+  if (EQUAL_OR_YOUNGER_CP(DepFr_cons_cp(REMOTE_top_dep_fr(worker_id)), prune_cp)) {
 #ifdef YAPOR
     if (GLOBAL_parallel_mode == PARALLEL_MODE_RUNNING)
       pruning_over_tabling_data_structures();
 #endif /* YAPOR */
     do {
-      dep_fr_ptr dep_fr = LOCAL_top_dep_fr;
-      LOCAL_top_dep_fr = DepFr_next(dep_fr);
+      dep_fr_ptr dep_fr = REMOTE_top_dep_fr(worker_id);
+      REMOTE_top_dep_fr(worker_id) = DepFr_next(dep_fr);
       FREE_DEPENDENCY_FRAME(dep_fr);
-    } while (EQUAL_OR_YOUNGER_CP(DepFr_cons_cp(LOCAL_top_dep_fr), prune_cp));
+    } while (EQUAL_OR_YOUNGER_CP(DepFr_cons_cp(REMOTE_top_dep_fr(worker_id)), prune_cp));
     adjust_freeze_registers();
   }
 
-  while (LOCAL_top_sg_fr && EQUAL_OR_YOUNGER_CP(SgFr_gen_cp(LOCAL_top_sg_fr), prune_cp)) {
+  while (REMOTE_top_sg_fr(worker_id) && EQUAL_OR_YOUNGER_CP(SgFr_gen_cp(REMOTE_top_sg_fr(worker_id)), prune_cp)) {
     sg_fr_ptr sg_fr;
 #ifdef YAPOR
     if (GLOBAL_parallel_mode == PARALLEL_MODE_RUNNING)
       pruning_over_tabling_data_structures();
 #endif /* YAPOR */
-    sg_fr = LOCAL_top_sg_fr;
-    LOCAL_top_sg_fr = SgFr_next(sg_fr);
+    sg_fr = REMOTE_top_sg_fr(worker_id);
+    REMOTE_top_sg_fr(worker_id) = SgFr_next(sg_fr);
     LOCK_SG_FR(sg_fr);
     if (SgFr_first_answer(sg_fr) == NULL) {
       /* no answers --> ready */
@@ -1415,7 +1415,7 @@ static inline void __collect_suspension_frames(or_fr_ptr or_fr USES_REGS) {
 
   /* order collected suspension frames by depth */
   depth = OrFr_depth(or_fr);
-  susp_ptr = & LOCAL_top_susp_or_fr;
+  susp_ptr = & REMOTE_top_susp_or_fr(worker_id);
   while (OrFr_depth(*susp_ptr) > depth)
     susp_ptr = & OrFr_nearest_suspnode(*susp_ptr);
   OrFr_nearest_suspnode(or_fr) = *susp_ptr;

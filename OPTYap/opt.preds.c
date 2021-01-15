@@ -482,37 +482,37 @@ static Int p_tabling_mode(USES_REGS1) {
     Int value = IntOfTerm(tvalue);
     if (value == 1) { /* batched */
       SetMode_Batched(TabEnt_flags(tab_ent));
-      if (!IsMode_Local(LOCAL_TabMode)) {
+      if (!IsMode_Local(REMOTE_TabMode(worker_id))) {
         SetMode_Batched(TabEnt_mode(tab_ent));
         return (TRUE);
       }
     } else if (value == 2) { /* local */
       SetMode_Local(TabEnt_flags(tab_ent));
-      if (!IsMode_Batched(LOCAL_TabMode)) {
+      if (!IsMode_Batched(REMOTE_TabMode(worker_id))) {
         SetMode_Local(TabEnt_mode(tab_ent));
         return (TRUE);
       }
     } else if (value == 3) { /* exec_answers */
       SetMode_ExecAnswers(TabEnt_flags(tab_ent));
-      if (!IsMode_LoadAnswers(LOCAL_TabMode)) {
+      if (!IsMode_LoadAnswers(REMOTE_TabMode(worker_id))) {
         SetMode_ExecAnswers(TabEnt_mode(tab_ent));
         return (TRUE);
       }
     } else if (value == 4) { /* load_answers */
       SetMode_LoadAnswers(TabEnt_flags(tab_ent));
-      if (!IsMode_ExecAnswers(LOCAL_TabMode)) {
+      if (!IsMode_ExecAnswers(REMOTE_TabMode(worker_id))) {
         SetMode_LoadAnswers(TabEnt_mode(tab_ent));
         return (TRUE);
       }
     } else if (value == 5) { /* local_trie */
       SetMode_LocalTrie(TabEnt_flags(tab_ent));
-      if (!IsMode_GlobalTrie(LOCAL_TabMode)) {
+      if (!IsMode_GlobalTrie(REMOTE_TabMode(worker_id))) {
         SetMode_LocalTrie(TabEnt_mode(tab_ent));
         return (TRUE);
       }
     } else if (value == 6) { /* global_trie */
       SetMode_GlobalTrie(TabEnt_flags(tab_ent));
-      if (!IsMode_LocalTrie(LOCAL_TabMode)) {
+      if (!IsMode_LocalTrie(REMOTE_TabMode(worker_id))) {
         SetMode_GlobalTrie(TabEnt_mode(tab_ent));
         return (TRUE);
       }
@@ -819,17 +819,17 @@ static Int p_parallel_new_answer(USES_REGS1) {
 static Int p_parallel_get_answers(USES_REGS1) {
   Term t = TermNil;
 
-  if (OrFr_qg_solutions(LOCAL_top_or_fr)) {
+  if (OrFr_qg_solutions(REMOTE_top_or_fr(worker_id))) {
     qg_ans_fr_ptr aux_answer1, aux_answer2;
-    aux_answer1 = SolFr_first(OrFr_qg_solutions(LOCAL_top_or_fr));
+    aux_answer1 = SolFr_first(OrFr_qg_solutions(REMOTE_top_or_fr(worker_id)));
     while (aux_answer1) {
       t = MkPairTerm(AnsFr_answer(aux_answer1), t);
       aux_answer2 = aux_answer1;
       aux_answer1 = AnsFr_next(aux_answer1);
       FREE_QG_ANSWER_FRAME(aux_answer2);
     }
-    FREE_QG_SOLUTION_FRAME(OrFr_qg_solutions(LOCAL_top_or_fr));
-    OrFr_qg_solutions(LOCAL_top_or_fr) = NULL;
+    FREE_QG_SOLUTION_FRAME(OrFr_qg_solutions(REMOTE_top_or_fr(worker_id)));
+    OrFr_qg_solutions(REMOTE_top_or_fr(worker_id)) = NULL;
   }
   Yap_unify(ARG1, t);
   return (TRUE);

@@ -128,24 +128,24 @@ static yap_signals ProcessSIGINT(void) {
     return YAP_INT_SIGNAL;
   }
 #endif
-  LOCAL_PrologMode |= AsyncIntMode;
+  REMOTE_PrologMode(worker_id) |= AsyncIntMode;
   do {
     ch = Yap_GetCharForSIGINT();
   } while (!(out = InteractSIGINT(ch)));
-  LOCAL_PrologMode &= ~AsyncIntMode;
+  REMOTE_PrologMode(worker_id) &= ~AsyncIntMode;
   return (out);
 }
 
 inline static void do_signal(int wid, yap_signals sig USES_REGS) {
 #if THREADS
-  __sync_fetch_and_or(&REMOTE(wid)->Signals_, SIGNAL_TO_BIT(sig));
+  __sync_fetch_and_or(&REMOTE(wid)->Signals, SIGNAL_TO_BIT(sig));
   if (!REMOTE_InterruptsDisabled(wid)) {
     REMOTE_ThreadHandle(wid).current_yaam_regs->CreepFlag_ =
         Unsigned(REMOTE_ThreadHandle(wid).current_yaam_regs->LCL0_);
   }
 #else
-  LOCAL_Signals |= SIGNAL_TO_BIT(sig);
-  if (!LOCAL_InterruptsDisabled) {
+  REMOTE_Signals(worker_id) |= SIGNAL_TO_BIT(sig);
+  if (!REMOTE_InterruptsDisabled(worker_id)) {
     CreepFlag = Unsigned(LCL0);
   }
 #endif
@@ -158,9 +158,9 @@ inline static bool get_signal(yap_signals sig USES_REGS) {
   // first, clear the Creep Flag, now if someone sets it it is their problem
   CalculateStackGap(PASS_REGS1);
   // reset the flag
-  if ((old = __sync_fetch_and_and(&LOCAL_Signals, ~SIGNAL_TO_BIT(sig))) !=
+  if ((old = __sync_fetch_and_and(&REMOTE_Signals(worker_id), ~SIGNAL_TO_BIT(sig))) !=
       SIGNAL_TO_BIT(sig)) {
-    if (!LOCAL_InterruptsDisabled && LOCAL_Signals != 0) {
+    if (!REMOTE_InterruptsDisabled(worker_id) && REMOTE_Signals(worker_id) != 0) {
       CreepFlag = (CELL)LCL0;
     }
     if (!(old & SIGNAL_TO_BIT(sig))) {
@@ -174,9 +174,9 @@ inline static bool get_signal(yap_signals sig USES_REGS) {
   return TRUE;
 // should we set the flag?
 #else
-  if (LOCAL_Signals & SIGNAL_TO_BIT(sig)) {
-    LOCAL_Signals &= ~SIGNAL_TO_BIT(sig);
-    if (!LOCAL_InterruptsDisabled && LOCAL_Signals != 0) {
+  if (REMOTE_Signals(worker_id) & SIGNAL_TO_BIT(sig)) {
+    REMOTE_Signals(worker_id) &= ~SIGNAL_TO_BIT(sig);
+    if (!REMOTE_InterruptsDisabled(worker_id) && REMOTE_Signals(worker_id) != 0) {
       CreepFlag = (CELL)LCL0;
     } else {
       CalculateStackGap(PASS_REGS1);
@@ -189,13 +189,15 @@ inline static bool get_signal(yap_signals sig USES_REGS) {
 }
 
 bool Yap_DisableInterrupts(int wid) {
-  LOCAL_InterruptsDisabled = true;
+  CACHE_REGS
+  REMOTE_InterruptsDisabled(worker_id) = true;
   YAPEnterCriticalSection();
   return true;
 }
 
 bool Yap_EnableInterrupts(int wid) {
-  LOCAL_InterruptsDisabled = false;
+  CACHE_REGS
+  REMOTE_InterruptsDisabled(worker_id) = false;
   YAPLeaveCriticalSection();
   return true;
 }
@@ -210,7 +212,7 @@ bool Yap_HandleSIGINT(void) {
   do {
     if ((sig = ProcessSIGINT()) != YAP_NO_SIGNAL)
       do_signal(worker_id, sig PASS_REGS);
-    LOCAL_PrologMode &= ~InterruptMode;
+    REMOTE_PrologMode(worker_id) &= ~InterruptMode;
     return true;
   } while (get_signal(YAP_INT_SIGNAL PASS_REGS));
   return false;
@@ -220,8 +222,8 @@ static Int p_creep(USES_REGS1) {
   Atom at;
   PredEntry *pred;
 
-  if (LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP] == TermZip ||
-      LOCAL_debugger_state[DEBUG_DEBUG] == TermFalse)
+  if (REMOTE_debugger_state(worker_id)[DEBUG_CREEP_LEAP_OR_ZIP] == TermZip ||
+      REMOTE_debugger_state(worker_id)[DEBUG_DEBUG] == TermFalse)
     return true;
   at = AtomCreep;
   pred = RepPredProp(PredPropByFunc(Yap_MkFunctor(at, 1), 0));
@@ -233,8 +235,8 @@ static Int p_creep(USES_REGS1) {
 static Int p_creep_fail(USES_REGS1) {
   Atom at;
   PredEntry *pred;
-  if (LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP] == TermZip ||
-      LOCAL_debugger_state[DEBUG_DEBUG] == TermFalse)
+  if (REMOTE_debugger_state(worker_id)[DEBUG_CREEP_LEAP_OR_ZIP] == TermZip ||
+      REMOTE_debugger_state(worker_id)[DEBUG_DEBUG] == TermFalse)
     return true;
   at = AtomCreep;
   pred = RepPredProp(PredPropByFunc(Yap_MkFunctor(at, 1), 0));
@@ -244,7 +246,7 @@ static Int p_creep_fail(USES_REGS1) {
 }
 
 static Int stop_creeping(USES_REGS1) {
-  LOCAL_debugger_state[DEBUG_DEBUG] = TermFalse;
+  REMOTE_debugger_state(worker_id)[DEBUG_DEBUG] = TermFalse;
   if (get_signal(YAP_CREEP_SIGNAL PASS_REGS)) {
     return Yap_unify(ARG1, TermTrue);
   }
@@ -279,7 +281,7 @@ void Yap_external_signal(int wid, yap_signals sig) {
   REGSTORE *regcache = REMOTE_ThreadHandle(wid).current_yaam_regs;
 #endif
   do_signal(wid, sig PASS_REGS);
-  LOCAL_PrologMode &= ~InterruptMode;
+  REMOTE_PrologMode(worker_id) &= ~InterruptMode;
 }
 
 int Yap_get_signal__(yap_signals sig USES_REGS) {
@@ -288,11 +290,11 @@ int Yap_get_signal__(yap_signals sig USES_REGS) {
 
 // the caller holds the lock.
 int Yap_has_signals__(yap_signals sig1, yap_signals sig2 USES_REGS) {
-  return LOCAL_Signals & (SIGNAL_TO_BIT(sig1) | SIGNAL_TO_BIT(sig2));
+  return REMOTE_Signals(worker_id) & (SIGNAL_TO_BIT(sig1) | SIGNAL_TO_BIT(sig2));
 }
 
 int Yap_only_has_signals__(yap_signals sig1, yap_signals sig2 USES_REGS) {
-  uint64_t sigs = LOCAL_Signals;
+  uint64_t sigs = REMOTE_Signals(worker_id);
   return sigs & (SIGNAL_TO_BIT(sig1) | SIGNAL_TO_BIT(sig2)) &&
          !(sigs & ~(SIGNAL_TO_BIT(sig1) | SIGNAL_TO_BIT(sig2)));
 }
@@ -325,7 +327,7 @@ static Int first_signal(USES_REGS1) {
   yap_signals sig;
 
   while (TRUE) {
-    uint64_t mask = LOCAL_Signals;
+    uint64_t mask = REMOTE_Signals(worker_id);
     if (mask == 0)
       return FALSE;
 #if HAVE___BUILTIN_FFSLL
@@ -352,9 +354,9 @@ loop:
     return FALSE;
   case YAP_ABORT_SIGNAL:
     /* abort computation */
-    LOCAL_PrologMode &= ~AsyncIntMode;
-    if (LOCAL_PrologMode & (GCMode | ConsoleGetcMode | CritMode)) {
-      LOCAL_PrologMode |= AbortMode;
+    REMOTE_PrologMode(worker_id) &= ~AsyncIntMode;
+    if (REMOTE_PrologMode(worker_id) & (GCMode | ConsoleGetcMode | CritMode)) {
+      REMOTE_PrologMode(worker_id) |= AbortMode;
       return -1;
     } else {
       Yap_Error(ABORT_EVENT, TermNil, "abort from console");

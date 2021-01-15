@@ -175,7 +175,7 @@ static bool write_term(int output_stream, Term t, bool b, xarg *args USES_REGS) 
   if (args[WRITE_MAX_DEPTH].used) {
     depth = IntegerOfTerm(args[WRITE_MAX_DEPTH].tvalue);
   } else
-    depth = LOCAL_max_depth;
+    depth = REMOTE_max_depth(worker_id);
   Yap_plwrite(t, GLOBAL_Stream + output_stream, depth, flags, args);
   UNLOCK(GLOBAL_Stream[output_stream].streamlock);
   rc = true;
@@ -202,8 +202,8 @@ bool Yap_WriteTerm(int output_stream, Term t, Term opts USES_REGS) {
   xarg *args = Yap_ArgListToVector(opts, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, opts, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, opts, NULL);
     return false;
   }
   yhandle_t mySlots = Yap_StartSlots();
@@ -220,7 +220,7 @@ static Int write_term2(USES_REGS1) {
   /* '$write'(+Flags,?Term) */
   /* notice: we must have ASP well set when using portray, otherwise
      we cannot make recursive Prolog calls */
-  return Yap_WriteTerm(LOCAL_c_output_stream, ARG1, ARG2 PASS_REGS);
+  return Yap_WriteTerm(REMOTE_c_output_stream(worker_id), ARG1, ARG2 PASS_REGS);
 }
 
 static Int write_term3(USES_REGS1) {
@@ -245,8 +245,8 @@ static Int write2(USES_REGS1) {
   args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                              DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   mySlots = Yap_StartSlots();
@@ -264,14 +264,14 @@ static Int write1(USES_REGS1) {
 
   /* notice: we must have ASP well set when using portray, otherwise
      we cannot make recursive Prolog calls */
-  int output_stream = LOCAL_c_output_stream;
+  int output_stream = REMOTE_c_output_stream(worker_id);
   if (output_stream == -1)
     output_stream = 1;
   xarg *args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   yhandle_t mySlots = Yap_StartSlots();
@@ -290,14 +290,14 @@ static Int write_canonical1(USES_REGS1) {
 
   /* notice: we must have ASP well set when using portray, otherwise
      we cannot make recursive Prolog calls */
-  int output_stream = LOCAL_c_output_stream;
+  int output_stream = REMOTE_c_output_stream(worker_id);
   if (output_stream == -1)
     output_stream = 1;
   xarg *args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   yhandle_t mySlots = Yap_StartSlots();
@@ -325,8 +325,8 @@ static Int write_canonical(USES_REGS1) {
   xarg *args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   int output_stream = Yap_CheckTextStream(ARG1, Output_Stream_f, "write/2");
@@ -358,12 +358,12 @@ static Int writeq1(USES_REGS1) {
   xarg *args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   yhandle_t mySlots = Yap_StartSlots();
-  int output_stream = LOCAL_c_output_stream;
+  int output_stream = REMOTE_c_output_stream(worker_id);
   if (output_stream == -1) {
     free(args);
     output_stream = 1;
@@ -387,8 +387,8 @@ static Int writeq(USES_REGS1) {
   xarg *args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   int output_stream = Yap_CheckTextStream(ARG1, Output_Stream_f, "write/2");
@@ -416,12 +416,12 @@ static Int print1(USES_REGS1) {
   xarg *args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   yhandle_t mySlots = Yap_StartSlots();
-  int output_stream = LOCAL_c_output_stream;
+  int output_stream = REMOTE_c_output_stream(worker_id);
   if (output_stream == -1) {
     free(args);
     output_stream = 1;
@@ -446,8 +446,8 @@ static Int print(USES_REGS1) {
   xarg *args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   int output_stream = Yap_CheckTextStream(ARG1, Output_Stream_f, "write/2");
@@ -472,14 +472,14 @@ static Int writeln1(USES_REGS1) {
 
   /* notice: we must have ASP well set when using portray, otherwise
      we cannot make recursive Prolog calls */
-  int output_stream = LOCAL_c_output_stream;
+  int output_stream = REMOTE_c_output_stream(worker_id);
   if (output_stream == -1)
     output_stream = 1;
   xarg *args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   yhandle_t mySlots = Yap_StartSlots();
@@ -505,8 +505,8 @@ static Int writeln(USES_REGS1) {
   xarg *args = Yap_ArgListToVector(TermNil, write_defs, WRITE_END,
                                    DOMAIN_ERROR_WRITE_OPTION);
   if (args == NULL) {
-    if (LOCAL_Error_TYPE)
-      Yap_Error(LOCAL_Error_TYPE, TermNil, NULL);
+    if (REMOTE_ActiveError(worker_id)->errorNo)
+      Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, NULL);
     return false;
   }
   int output_stream = Yap_CheckTextStream(ARG1, Output_Stream_f, "writeln/2");
@@ -547,23 +547,23 @@ static Int p_write_depth(USES_REGS1) { /* write_depth(Old,New)          */
     return FALSE;
   }
   if (IsVarTerm(t1)) {
-    Term t = MkIntegerTerm(LOCAL_max_depth);
+    Term t = MkIntegerTerm(REMOTE_max_depth(worker_id));
     if (!Yap_unify_constant(t1, t))
       return FALSE;
   } else
-    LOCAL_max_depth = IntegerOfTerm(t1);
+    REMOTE_max_depth(worker_id) = IntegerOfTerm(t1);
   if (IsVarTerm(t2)) {
-    Term t = MkIntegerTerm(LOCAL_max_list);
+    Term t = MkIntegerTerm(REMOTE_max_list(worker_id));
     if (!Yap_unify_constant(t2, t))
       return FALSE;
   } else
-    LOCAL_max_list = IntegerOfTerm(t2);
+    REMOTE_max_list(worker_id) = IntegerOfTerm(t2);
   if (IsVarTerm(t3)) {
-    Term t = MkIntegerTerm(LOCAL_max_write_args);
+    Term t = MkIntegerTerm(REMOTE_max_write_args(worker_id));
     if (!Yap_unify_constant(t3, t))
       return FALSE;
   } else
-    LOCAL_max_write_args = IntegerOfTerm(t3);
+    REMOTE_max_write_args(worker_id) = IntegerOfTerm(t3);
   return TRUE;
 }
 
@@ -619,7 +619,7 @@ static Int term_to_atom(USES_REGS1) {
   if (IsVarTerm(t2)) {
     const char *s =
         Yap_TermToBuffer(Deref(ARG1), Quote_illegal_f | Handle_vars_f);
-    if (!s || !(at = Yap_UTF8ToAtom((const unsigned char *)s))) {
+    if (!s || !(at = Yap_UTF8ToAtom((const unsigned char *)s PASS_REGS))) {
       Yap_Error(RESOURCE_ERROR_HEAP, t2,
                 "Could not get memory from the operating system");
       return false;
@@ -640,7 +640,7 @@ static Int term_to_atom(USES_REGS1) {
 
 char *Yap_TermToBuffer(Term t, int flags) {
   CACHE_REGS
-  int sno = Yap_open_buf_write_stream(LOCAL_encoding, flags);
+  int sno = Yap_open_buf_write_stream(REMOTE_encoding(worker_id), flags);
 
   if (sno < 0)
     return NULL;
@@ -648,10 +648,10 @@ char *Yap_TermToBuffer(Term t, int flags) {
     return NULL;
   else
     t = Deref(t);
-  GLOBAL_Stream[sno].encoding = LOCAL_encoding;
+  GLOBAL_Stream[sno].encoding = REMOTE_encoding(worker_id);
   GLOBAL_Stream[sno].status |= CloseOnException_Stream_f;
   GLOBAL_Stream[sno].status &= ~FreeOnClose_Stream_f;
-  Yap_plwrite(t, GLOBAL_Stream + sno, LOCAL_max_depth, flags, NULL);
+  Yap_plwrite(t, GLOBAL_Stream + sno, REMOTE_max_depth(worker_id), flags, NULL);
   char *new = Yap_MemExportStreamPtr(sno);
   Yap_CloseStream(sno);
   return new;

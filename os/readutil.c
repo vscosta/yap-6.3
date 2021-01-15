@@ -50,7 +50,7 @@ static Int rl_to_codes(Term TEnd, int do_as_binary, int arity USES_REGS) {
     UNLOCK(GLOBAL_Stream[sno].streamlock);
     return Yap_unify_constant(ARG2, MkAtomTerm(AtomEof));
   }
-          buf = Malloc(4096);
+          buf = Malloc(4096 PASS_REGS);
   buf_sz = 4096;
   while (true) {
     if (do_as_binary && !binary_stream) {
@@ -157,7 +157,7 @@ static Int read_line_to_string(USES_REGS1) {
   }
   max_inp = (ASP - HR) / 2 - 1024;
   buf = (unsigned char *)TR;
-  buf_sz = (unsigned char *)LOCAL_TrailTop - buf;
+  buf_sz = (unsigned char *)REMOTE_TrailTop(worker_id) - buf;
  
     if (buf_sz > max_inp) {
       buf_sz = max_inp;

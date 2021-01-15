@@ -31,7 +31,8 @@ static char SccsId[] = "%W% %G%";
 #include "YapText.h"
 
  char *Yap_StrPrefix( const char *buf, size_t n) {
-    char *b = Malloc(n);
+    CACHE_REGS
+    char *b = Malloc(n PASS_REGS);
     strncpy(b, buf, n - 1);
     if (strlen(buf) > n - 1)
         b[15] = '\0';
@@ -136,7 +137,7 @@ bool Yap_set_stream_to_buf(StreamDesc *st, const char *buf,
   st->status = Input_Stream_f | Seekable_Stream_f | InMemory_Stream_f;
   st->vfs = NULL;
   st->buf.on = false;
-  st->encoding = LOCAL_encoding;
+  st->encoding = REMOTE_encoding(worker_id);
   Yap_DefaultStreamOps(st);
   st->linecount = 0;
   st->linepos = st->charcount = 0;
@@ -162,7 +163,7 @@ int Yap_open_buf_read_stream(const char *buf, size_t nchars,
   if (encp)
     encoding = *encp;
   else
-    encoding = LOCAL_encoding;
+    encoding = REMOTE_encoding(worker_id);
   // like any file stream.
   f = st->file = fmemopen((void *)buf, nchars, "r");
   st->vfs = NULL;
@@ -183,13 +184,13 @@ open_mem_read_stream(USES_REGS1) /* $open_mem_read_stream(+List,-Stream) */
 
   ti = Deref(ARG1);
   int l = push_text_stack();
-  buf = Yap_TextTermToText(ti);
+  buf = Yap_TextTermToText(ti PASS_REGS);
   if (!buf) {
     pop_text_stack(l);
     return false;
   }
   buf = pop_output_text_stack(l, buf);
-  sno = Yap_open_buf_read_stream(buf, strlen(buf) + 1, &LOCAL_encoding,
+  sno = Yap_open_buf_read_stream(buf, strlen(buf) + 1, &REMOTE_encoding(worker_id),
                                  MEM_BUF_MALLOC, Yap_LookupAtom(Yap_StrPrefix((char *)buf,16)), TermNone);
   t = Yap_MkStream(sno);
   return Yap_unify(ARG2, t);
@@ -198,7 +199,6 @@ open_mem_read_stream(USES_REGS1) /* $open_mem_read_stream(+List,-Stream) */
 // open a buffer for writing, currently just ignores buf and nchars.
 
 int Yap_open_buf_write_stream(encoding_t enc, memBufSource src) {
-  CACHE_REGS
   int sno;
   StreamDesc *st;
 
@@ -230,7 +230,7 @@ int Yap_open_buf_write_stream(encoding_t enc, memBufSource src) {
 int Yap_OpenBufWriteStream(USES_REGS1) {
 
   return Yap_open_buf_write_stream(
-      GLOBAL_Stream[LOCAL_c_output_stream].encoding, 0);
+      GLOBAL_Stream[REMOTE_c_output_stream(worker_id)].encoding, 0);
 }
 
 static Int
@@ -300,7 +300,7 @@ static Int peek_mem_write_stream(
       HR = HI;
       if (!Yap_gcl((ASP - HI) * sizeof(CELL), 3, ENV, Yap_gcP())) {
         UNLOCK(GLOBAL_Stream[sno].streamlock);
-        Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return (FALSE);
       }
       LOCK(GLOBAL_Stream[sno].streamlock);
@@ -337,7 +337,6 @@ bool Yap_CloseMemoryStream(int sno) {
 }
 
 void Yap_InitMems(void) {
-  CACHE_REGS
   Yap_InitCPred("open_mem_read_stream", 2, open_mem_read_stream, SyncPredFlag);
   Yap_InitCPred("open_mem_write_stream", 1, open_mem_write_stream,
                 SyncPredFlag);

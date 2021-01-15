@@ -127,10 +127,10 @@ void *Yap_LoadForeignFile(char *file, int flags) {
   if (out == NULL) {
     const char *m_os = dlerror();
     if (m_os) {
-      LOCAL_ErrorMessage = malloc(MAX_ERROR_MSG_SIZE);
-      strncpy(LOCAL_ErrorMessage, m_os, MAX_ERROR_MSG_SIZE - 1);
+      REMOTE_ActiveError(worker_id)->errorMsg = malloc(MAX_ERROR_MSG_SIZE);
+      strncpy(REMOTE_ActiveError(worker_id)->errorMsg, m_os, MAX_ERROR_MSG_SIZE - 1);
     } else {
-      LOCAL_ErrorMessage = "dlopen failed";
+      REMOTE_ActiveError(worker_id)->errorMsg = "dlopen failed";
     }
   }
   return out;
@@ -163,20 +163,20 @@ static Int LoadForeign(StringList
   ofiles, StringList libs, char *proc_name,
                        YapInitProc *init_proc) {
   CACHE_REGS
-  LOCAL_ErrorMessage = NULL;
+  REMOTE_ActiveError(worker_id)->errorMsg = NULL;
 
   while (libs) {
     const char *file = AtomName(libs->name);
 #ifdef __osf__
-    if ((libs->handle = dlopen(LOCAL_FileNameBuf, RTLD_LAZY)) == NULL)
+    if ((libs->handle = dlopen(REMOTE_FileNameBuf(worker_id), RTLD_LAZY)) == NULL)
 #else
     if ((libs->handle = dlopen(file, RTLD_LAZY | RTLD_GLOBAL)) ==
         NULL)
 #endif
     {
-      if (LOCAL_ErrorMessage == NULL) {
-        LOCAL_ErrorMessage = malloc(MAX_ERROR_MSG_SIZE);
-        strcpy(LOCAL_ErrorMessage, dlerror());
+      if (REMOTE_ActiveError(worker_id)->errorMsg == NULL) {
+        REMOTE_ActiveError(worker_id)->errorMsg = malloc(MAX_ERROR_MSG_SIZE);
+        strcpy(REMOTE_ActiveError(worker_id)->errorMsg, dlerror());
       }
     }
     libs = libs->next;
@@ -191,9 +191,9 @@ static Int LoadForeign(StringList
     if ((ofiles->handle = dlopen(file, RTLD_LAZY | RTLD_GLOBAL)) ==
         NULL)
     {
-      if (LOCAL_ErrorMessage == NULL) {
-        LOCAL_ErrorMessage = malloc(MAX_ERROR_MSG_SIZE);
-        fprintf(stderr, "dlopen of image %s failed: %s\n", LOCAL_FileNameBuf,
+      if (REMOTE_ActiveError(worker_id)->errorMsg == NULL) {
+        REMOTE_ActiveError(worker_id)->errorMsg = malloc(MAX_ERROR_MSG_SIZE);
+        fprintf(stderr, "dlopen of image %s failed: %s\n", REMOTE_FileNameBuf(worker_id),
                 dlerror());
       }
     }
@@ -203,10 +203,10 @@ static Int LoadForeign(StringList
     ofiles = ofiles->next;
   }
 
-  if (!*init_proc && LOCAL_ErrorMessage == NULL) {
+  if (!*init_proc && REMOTE_ActiveError(worker_id)->errorMsg == NULL) {
     char *buf = malloc(1058);
     snprintf(buf, 1058 - 1, "Could not locate routine %s in %s: %s\n",
-             proc_name, LOCAL_FileNameBuf, dlerror());
+             proc_name, REMOTE_FileNameBuf(worker_id), dlerror());
     return LOAD_FAILLED;
   }
 

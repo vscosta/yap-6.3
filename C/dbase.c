@@ -321,7 +321,7 @@ static DBProp find_int_key(Int);
 
 static UInt new_trail_size(void) {
   CACHE_REGS
-  UInt sz = (LOCAL_TrailTop - (ADDR)TR) / 2;
+  UInt sz = (REMOTE_TrailTop(worker_id) - (ADDR)TR) / 2;
   if (sz < K64)
     return K64;
   if (sz > M1)
@@ -331,10 +331,10 @@ static UInt new_trail_size(void) {
 
 static int recover_from_record_error(int nargs) {
   CACHE_REGS
-  switch (LOCAL_Error_TYPE) {
+  switch (REMOTE_ActiveError(worker_id)->errorNo) {
   case RESOURCE_ERROR_STACK:
-    if (!Yap_gcl(LOCAL_Error_Size, nargs, ENV, gc_P(P, CP))) {
-      Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+    if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, nargs, ENV, gc_P(P, CP))) {
+      Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return FALSE;
     }
     goto recover_record;
@@ -346,24 +346,24 @@ static int recover_from_record_error(int nargs) {
     }
     goto recover_record;
   case RESOURCE_ERROR_HEAP:
-    if (!Yap_growheap(FALSE, LOCAL_Error_Size, NULL)) {
-      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, LOCAL_ErrorMessage);
+    if (!Yap_growheap(FALSE, REMOTE_ActiveError(worker_id)->errorMsgLen, NULL)) {
+      Yap_Error(RESOURCE_ERROR_HEAP, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return FALSE;
     }
     goto recover_record;
   case RESOURCE_ERROR_AUXILIARY_STACK:
-    if (!Yap_ExpandPreAllocCodeSpace(LOCAL_Error_Size, NULL, TRUE)) {
-      Yap_Error(RESOURCE_ERROR_AUXILIARY_STACK, TermNil, LOCAL_ErrorMessage);
+    if (!Yap_ExpandPreAllocCodeSpace(REMOTE_ActiveError(worker_id)->errorMsgLen, NULL, TRUE)) {
+      Yap_Error(RESOURCE_ERROR_AUXILIARY_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
       return FALSE;
     }
     goto recover_record;
   default:
-    Yap_Error(LOCAL_Error_TYPE, TermNil, LOCAL_ErrorMessage);
+    Yap_Error(REMOTE_ActiveError(worker_id)->errorNo, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
     return FALSE;
   }
 recover_record:
-  LOCAL_Error_Size = 0;
-  LOCAL_Error_TYPE = YAP_NO_ERROR;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
+  REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
   return TRUE;
 }
 
@@ -1025,8 +1025,8 @@ loop:
   return CodeMax;
 
 error:
-  LOCAL_Error_TYPE = RESOURCE_ERROR_AUXILIARY_STACK;
-  LOCAL_Error_Size = 1024 + ((char *)AuxSp - (char *)CodeMaxBase);
+  REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_AUXILIARY_STACK;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 1024 + ((char *)AuxSp - (char *)CodeMaxBase);
   *vars_foundp = vars_found;
 #ifdef RATIONAL_TREES
   while (tovisit > tovisit_base) {
@@ -1044,7 +1044,7 @@ error:
   return NULL;
 
 error2:
-  LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;
+  REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;
   *vars_foundp = vars_found;
 #ifdef RATIONAL_TREES
   while (tovisit > tovisit_base) {
@@ -1062,7 +1062,7 @@ error2:
   return NULL;
 
 error_tr_overflow:
-  LOCAL_Error_TYPE = RESOURCE_ERROR_TRAIL;
+  REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_TRAIL;
   *vars_foundp = vars_found;
 #ifdef RATIONAL_TREES
   while (tovisit > tovisit_base) {
@@ -1125,8 +1125,8 @@ static void sf_include(SFKeep *sfp, struct db_globs *dbg) SFKeep *sfp;
       *StoPoint++ = tvalue;
       j += 2;
     } else {
-      LOCAL_Error_TYPE = TYPE_ERROR_DBTERM;
-      LOCAL_ErrorMessage = "wrong term in SF";
+      REMOTE_ActiveError(worker_id)->errorNo = TYPE_ERROR_DBTERM;
+      REMOTE_ActiveError(worker_id)->errorMsg = "wrong term in SF";
       return (NULL);
     }
   }
@@ -1244,9 +1244,9 @@ static DBRef check_if_nvars(DBRef p, unsigned int NOfCells, CELL *BTptr,
 
 static DBRef generate_dberror_msg(int errnumb, UInt sz, char *msg) {
   CACHE_REGS
-  LOCAL_Error_Size = sz;
-  LOCAL_Error_TYPE = errnumb;
-  LOCAL_ErrorMessage = msg;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = sz;
+  REMOTE_ActiveError(worker_id)->errorNo = errnumb;
+  REMOTE_ActiveError(worker_id)->errorMsg = msg;
   return NULL;
 }
 
@@ -1411,11 +1411,11 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
   DBRef *TmpRefBase;
   CELL *CodeAbs; /* how much code did we find	 */
   int vars_found = FALSE;
-  yap_error_number oerr = LOCAL_Error_TYPE;
+  yap_error_number oerr = REMOTE_ActiveError(worker_id)->errorNo;
 
  retry_record:
-  LOCAL_Error_TYPE = YAP_NO_ERROR;
-  TmpRefBase = (DBRef *)LOCAL_TrailTop;
+  REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+  TmpRefBase = (DBRef *)REMOTE_TrailTop(worker_id);
   if (p == NULL) {
     if (IsVarTerm(Tm)) {
 #ifdef COROUTINING
@@ -1423,7 +1423,7 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
 #endif
         DBRef out = (DBRef)CreateDBTermForVar(extra_size, dbg);
         *pstat = TRUE;
-        LOCAL_Error_TYPE = oerr;
+        REMOTE_ActiveError(worker_id)->errorNo = oerr;
         return out;
 #ifdef COROUTINING
       }
@@ -1431,7 +1431,7 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
     } else if (IsAtomOrIntTerm(Tm)) {
       DBRef out = (DBRef)CreateDBTermForAtom(Tm, extra_size, dbg);
       *pstat = FALSE;
-      LOCAL_Error_TYPE = oerr;
+      REMOTE_ActiveError(worker_id)->errorNo = oerr;
       return out;
     }
   } else {
@@ -1441,10 +1441,10 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
 #endif
             ) {
       *pstat = TRUE;
-      LOCAL_Error_TYPE = oerr;
+      REMOTE_ActiveError(worker_id)->errorNo = oerr;
       return CreateDBRefForVar(Tm, p, InFlag, dbg);
     } else if (IsAtomOrIntTerm(Tm)) {
-      LOCAL_Error_TYPE = oerr;
+      REMOTE_ActiveError(worker_id)->errorNo = oerr;
       return CreateDBRefForAtom(Tm, p, InFlag, dbg);
     }
   }
@@ -1469,18 +1469,18 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
       ppt0 = &(pp0->DBT);
     }
     if ((ADDR)ppt0 >= (ADDR)AuxSp - 1024) {
-      LOCAL_Error_Size = (UInt)(extra_size + sizeof(ppt0));
-      LOCAL_Error_TYPE = RESOURCE_ERROR_AUXILIARY_STACK;
+      REMOTE_ActiveError(worker_id)->errorMsgLen = (UInt)(extra_size + sizeof(ppt0));
+      REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_AUXILIARY_STACK;
       Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-      LOCAL_Error_TYPE = oerr;
+      REMOTE_ActiveError(worker_id)->errorNo = oerr;
       return NULL;
     }
     ntp0 = ppt0->Contents;
-    if ((ADDR)TR >= LOCAL_TrailTop - 1024) {
-      LOCAL_Error_Size = 0;
-      LOCAL_Error_TYPE = RESOURCE_ERROR_TRAIL;
+    if ((ADDR)TR >= REMOTE_TrailTop(worker_id) - 1024) {
+      REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
+      REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_TRAIL;
       Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-      LOCAL_Error_TYPE = oerr;
+      REMOTE_ActiveError(worker_id)->errorNo = oerr;
 
       return NULL;
     }
@@ -1493,7 +1493,7 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
                      &attachments, &vars_found, dbg);
       if (ntp == NULL) {
         Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-        LOCAL_Error_TYPE = oerr;
+        REMOTE_ActiveError(worker_id)->errorNo = oerr;
         return NULL;
       }
     } else
@@ -1508,7 +1508,7 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
                      &vars_found, dbg);
       if (ntp == NULL) {
         Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-        LOCAL_Error_TYPE = oerr;
+        REMOTE_ActiveError(worker_id)->errorNo = oerr;
         return NULL;
       }
     } else {
@@ -1528,9 +1528,9 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
 	    UInt sz = 1024+sizeof(CELL)*(3 + RepAppl(Tm)[1]);
 	    if (sz >
 		(char*)AuxSp-(char*)ppt0) {
-	      LOCAL_Error_Size = sz;
-	      if (!Yap_ExpandPreAllocCodeSpace(LOCAL_Error_Size, NULL, TRUE)) {
-		Yap_Error(RESOURCE_ERROR_AUXILIARY_STACK, TermNil, LOCAL_ErrorMessage);
+	      REMOTE_ActiveError(worker_id)->errorMsgLen = sz;
+	      if (!Yap_ExpandPreAllocCodeSpace(REMOTE_ActiveError(worker_id)->errorMsgLen, NULL, TRUE)) {
+		Yap_Error(RESOURCE_ERROR_AUXILIARY_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 		return NULL;
 	      }
 	      goto retry_record;
@@ -1547,9 +1547,9 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
 	    UInt sz = 1024+sizeof(CELL)*Yap_SizeOfBigInt(Tm);
 	    if (sz >
 		(char*)AuxSp-(char*)ppt0) {
-	      LOCAL_Error_Size = sizeof(CELL)*(3 + RepAppl(Tm)[1]);
-	      if (!Yap_ExpandPreAllocCodeSpace(LOCAL_Error_Size, NULL, TRUE)) {
-		Yap_Error(RESOURCE_ERROR_AUXILIARY_STACK, TermNil, LOCAL_ErrorMessage);
+	      REMOTE_ActiveError(worker_id)->errorMsgLen = sizeof(CELL)*(3 + RepAppl(Tm)[1]);
+	      if (!Yap_ExpandPreAllocCodeSpace(REMOTE_ActiveError(worker_id)->errorMsgLen, NULL, TRUE)) {
+		Yap_Error(RESOURCE_ERROR_AUXILIARY_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
 		return NULL;
 	      }
 	      goto retry_record;
@@ -1573,15 +1573,15 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
                        &vars_found, dbg);
         if (ntp == NULL) {
           Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-          LOCAL_Error_TYPE = oerr;
+          REMOTE_ActiveError(worker_id)->errorNo = oerr;
           return NULL;
         }
       }
     }
     CodeAbs = (CELL *)((CELL)ntp - (CELL)ntp0);
-    if (LOCAL_Error_TYPE) {
+    if (REMOTE_ActiveError(worker_id)->errorNo) {
       Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-      LOCAL_Error_TYPE = oerr;
+      REMOTE_ActiveError(worker_id)->errorNo = oerr;
       return NULL; /* Error Situation */
     }
     NOfCells = ntp - ntp0; /* End Of Code Info */
@@ -1597,16 +1597,16 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
       CodeAbs += (NOfLinks + (sizeof(CELL) / sizeof(BITS32) - 1)) /
                  (sizeof(CELL) / sizeof(BITS32));
       if ((CELL *)((char *)ntp0 + (CELL)CodeAbs) > AuxSp) {
-        LOCAL_Error_Size = (UInt)DBLength(CodeAbs);
-        LOCAL_Error_TYPE = RESOURCE_ERROR_AUXILIARY_STACK;
+        REMOTE_ActiveError(worker_id)->errorMsgLen = (UInt)DBLength(CodeAbs);
+        REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_AUXILIARY_STACK;
         Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-        LOCAL_Error_TYPE = oerr;
+        REMOTE_ActiveError(worker_id)->errorNo = oerr;
         return NULL;
       }
       if ((InFlag & MkIfNot) &&
           (dbg->found_one = check_if_wvars(p->First, NOfCells, ntp0))) {
         Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-        LOCAL_Error_TYPE = oerr;
+        REMOTE_ActiveError(worker_id)->errorNo = oerr;
         return dbg->found_one;
       }
     } else {
@@ -1614,17 +1614,17 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
       if ((InFlag & MkIfNot) &&
           (dbg->found_one = check_if_nvars(p->First, NOfCells, ntp0, dbg))) {
         Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-        LOCAL_Error_TYPE = oerr;
+        REMOTE_ActiveError(worker_id)->errorNo = oerr;
         return dbg->found_one;
       }
     }
     if (dbg->tofref != TmpRefBase) {
       CodeAbs += (TmpRefBase - dbg->tofref) + 1;
       if ((CELL *)((char *)ntp0 + (CELL)CodeAbs) > AuxSp) {
-        LOCAL_Error_Size = (UInt)DBLength(CodeAbs);
-        LOCAL_Error_TYPE = RESOURCE_ERROR_AUXILIARY_STACK;
+        REMOTE_ActiveError(worker_id)->errorMsgLen = (UInt)DBLength(CodeAbs);
+        REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_AUXILIARY_STACK;
         Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-        LOCAL_Error_TYPE = oerr;
+        REMOTE_ActiveError(worker_id)->errorNo = oerr;
         return NULL;
       }
       flag |= DBWithRefs;
@@ -1632,7 +1632,7 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
 #if SIZEOF_LINK_ENTRY == 2
     if (Unsigned(CodeAbs) >= 0x40000) {
       Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-      LOCAL_Error_TYPE = oerr;
+      REMOTE_ActiveError(worker_id)->errorNo = oerr;
       return generate_dberror_msg(SYSTEM_ERROR_INTERNAL, 0,
                                   "trying to store term larger than 256KB");
     }
@@ -1643,7 +1643,7 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
       ppt = (DBTerm *)(ptr + extra_size);
       if (ptr == NULL) {
         Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-        LOCAL_Error_TYPE = oerr;
+        REMOTE_ActiveError(worker_id)->errorNo = oerr;
         return generate_dberror_msg(RESOURCE_ERROR_HEAP, sz,
                                     "heap crashed against stacks");
       }
@@ -1655,7 +1655,7 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
       pp = AllocDBSpace(sz);
       if (pp == NULL) {
         Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-        LOCAL_Error_TYPE = oerr;
+        REMOTE_ActiveError(worker_id)->errorNo = oerr;
         return generate_dberror_msg(RESOURCE_ERROR_HEAP, sz,
                                     "heap crashed against stacks");
       }
@@ -1729,7 +1729,7 @@ static DBRef CreateDBStruct(Term Tm, DBProp p, int InFlag, int *pstat,
       ppt->DBRefs = NULL;
     }
     Yap_ReleasePreAllocCodeSpace((ADDR)pp0);
-    LOCAL_Error_TYPE = oerr;
+    REMOTE_ActiveError(worker_id)->errorNo = oerr;
     return pp;
   }
 }
@@ -1887,7 +1887,6 @@ static DBRef record_at(int Flag, DBRef r0, Term t_data, Term t_code USES_REGS) {
 }
 
 static LogUpdClause *new_lu_db_entry(Term t, PredEntry *pe) {
-  CACHE_REGS
   DBTerm *x;
   LogUpdClause *cl;
   yamop *ipc;
@@ -1947,9 +1946,9 @@ LogUpdClause *Yap_new_ludbe(Term t, PredEntry *pe, UInt nargs) {
   CACHE_REGS
   LogUpdClause *x;
 
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
   while ((x = new_lu_db_entry(t, pe)) == NULL) {
-    if (LOCAL_Error_TYPE == YAP_NO_ERROR) {
+    if (REMOTE_ActiveError(worker_id)->errorNo == YAP_NO_ERROR) {
       break;
     } else {
       XREGS[nargs + 1] = t;
@@ -2030,7 +2029,7 @@ static Int p_rcda(USES_REGS1) {
   if (!IsVarTerm(Deref(ARG3)))
     return (FALSE);
   pe = find_lu_entry(t1);
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 restart_record:
   if (pe) {
     LogUpdClause *cl;
@@ -2052,7 +2051,7 @@ restart_record:
   } else {
     TRef = MkDBRefTerm(record(MkFirst, t1, Deref(ARG2), Unsigned(0) PASS_REGS));
   }
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     if (recover_from_record_error(3)) {
       goto restart_record;
     } else {
@@ -2070,11 +2069,11 @@ static Int p_rcdap(USES_REGS1) {
 
   if (!IsVarTerm(Deref(ARG3)))
     return FALSE;
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 restart_record:
   TRef = MkDBRefTerm(record(MkFirst | MkCode, t1, t2, Unsigned(0) PASS_REGS));
 
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     if (recover_from_record_error(3)) {
       t1 = Deref(ARG1);
       t2 = Deref(ARG2);
@@ -2110,7 +2109,7 @@ static Int p_rcda_at(USES_REGS1) {
     Yap_Error(TYPE_ERROR_DBREF, t1, "recorda_at/3");
     return FALSE;
   }
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 restart_record:
   dbr = DBRefOfTerm(t1);
   if (dbr->Flags & ErasedMask) {
@@ -2123,7 +2122,7 @@ restart_record:
     TRef = MkDBRefTerm(
         record_at(MkFirst, DBRefOfTerm(t1), t2, Unsigned(0) PASS_REGS));
   }
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     if (recover_from_record_error(3)) {
       t1 = Deref(ARG1);
       t2 = Deref(ARG2);
@@ -2149,7 +2148,7 @@ static Int p_rcdz(USES_REGS1) {
   if (!IsVarTerm(Deref(ARG3)))
     return (FALSE);
   pe = find_lu_entry(t1);
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 restart_record:
   if (pe) {
     LogUpdClause *cl;
@@ -2171,7 +2170,7 @@ restart_record:
   } else {
     TRef = MkDBRefTerm(record(MkLast, t1, t2, Unsigned(0) PASS_REGS));
   }
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     if (recover_from_record_error(3)) {
       t1 = Deref(ARG1);
       t2 = Deref(ARG2);
@@ -2191,14 +2190,14 @@ Int Yap_Recordz(Atom at, Term t2) {
   PredEntry *pe;
 
   pe = find_lu_entry(MkAtomTerm(at));
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 restart_record:
   if (pe) {
     record_lu(pe, t2, MkLast);
   } else {
     record(MkLast, MkAtomTerm(at), t2, Unsigned(0) PASS_REGS);
   }
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     ARG1 = t2;
     if (recover_from_record_error(1)) {
       t2 = ARG1;
@@ -2216,10 +2215,10 @@ static Int p_rcdzp(USES_REGS1) {
 
   if (!IsVarTerm(Deref(ARG3)))
     return (FALSE);
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 restart_record:
   TRef = MkDBRefTerm(record(MkLast | MkCode, t1, t2, Unsigned(0) PASS_REGS));
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     if (recover_from_record_error(3)) {
       t1 = Deref(ARG1);
       t2 = Deref(ARG2);
@@ -2255,7 +2254,7 @@ static Int p_rcdz_at(USES_REGS1) {
     Yap_Error(TYPE_ERROR_DBREF, t1, "recordz_at/3");
     return FALSE;
   }
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 restart_record:
   dbr = DBRefOfTerm(t1);
   if (dbr->Flags & ErasedMask) {
@@ -2267,7 +2266,7 @@ restart_record:
   } else {
     TRef = MkDBRefTerm(record_at(MkLast, dbr, t2, Unsigned(0) PASS_REGS));
   }
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     if (recover_from_record_error(3)) {
       t1 = Deref(ARG1);
       t2 = Deref(ARG2);
@@ -2290,14 +2289,14 @@ static Int p_rcdstatp(USES_REGS1) {
   if (IsVarTerm(t3) || !IsIntTerm(t3))
     return (FALSE);
   mk_first = ((IntOfTerm(t3) % 4) == 2);
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 restart_record:
   if (mk_first)
     TRef =
         MkDBRefTerm(record(MkFirst | MkCode, t1, t2, MkIntTerm(0) PASS_REGS));
   else
     TRef = MkDBRefTerm(record(MkLast | MkCode, t1, t2, MkIntTerm(0) PASS_REGS));
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     if (recover_from_record_error(4)) {
       t1 = Deref(ARG1);
       t2 = Deref(ARG2);
@@ -2318,10 +2317,10 @@ static Int p_drcdap(USES_REGS1) {
     return (FALSE);
   if (IsVarTerm(t4) || !IsIntegerTerm(t4))
     return (FALSE);
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
 restart_record:
   TRef = MkDBRefTerm(record(MkFirst | MkCode | WithRef, t1, t2, t4 PASS_REGS));
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     if (recover_from_record_error(4)) {
       t1 = Deref(ARG1);
       t2 = Deref(ARG2);
@@ -2343,9 +2342,9 @@ static Int p_drcdzp(USES_REGS1) {
   if (IsVarTerm(t4) || !IsIntegerTerm(t4))
     return (FALSE);
 restart_record:
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
   TRef = MkDBRefTerm(record(MkLast | MkCode | WithRef, t1, t2, t4 PASS_REGS));
-  if (LOCAL_Error_TYPE != YAP_NO_ERROR) {
+  if (REMOTE_ActiveError(worker_id)->errorNo != YAP_NO_ERROR) {
     if (recover_from_record_error(4)) {
       t1 = Deref(ARG1);
       t2 = Deref(ARG2);
@@ -2554,15 +2553,15 @@ static Term GetDBTerm(const DBTerm *DBSP, int src USES_REGS) {
     pt = CellPtr(DBSP->Contents);
     CalculateStackGap(PASS_REGS1);
     if (HR + NOf > ASP - EventFlag / sizeof(CELL)) {
-      if (LOCAL_PrologMode & InErrorMode) {
-        LOCAL_PrologMode &= ~InErrorMode;
+      if (REMOTE_PrologMode(worker_id) & InErrorMode) {
+        REMOTE_PrologMode(worker_id) &= ~InErrorMode;
         if (HR + NOf > ASP)
           fprintf(stderr,
                   "\n\n [ FATAL ERROR: No Stack for Error Handling ]\n");
         Yap_exit(1);
       } else {
-        LOCAL_Error_TYPE = RESOURCE_ERROR_STACK;
-        LOCAL_Error_Size = NOf * sizeof(CELL);
+        REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_STACK;
+        REMOTE_ActiveError(worker_id)->errorMsgLen = NOf * sizeof(CELL);
         return (Term)0;
       }
     }
@@ -2579,8 +2578,8 @@ static Term GetDBTerm(const DBTerm *DBSP, int src USES_REGS) {
               DBSP->ag.attachments, (CELL)HOld - (CELL)(DBSP->Contents))
                                 PASS_REGS)) {
         HR = HOld;
-        LOCAL_Error_TYPE = RESOURCE_ERROR_ATTRIBUTED_VARIABLES;
-        LOCAL_Error_Size = 0;
+        REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_ATTRIBUTED_VARIABLES;
+        REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
         return (Term)0;
       }
     }
@@ -2636,8 +2635,8 @@ static int resize_int_keys(UInt new_size) {
   new = (Prop *)Yap_AllocCodeSpace(sizeof(Prop) * new_size);
   if (new == NULL) {
     YAPLeaveCriticalSection();
-    LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;
-    LOCAL_ErrorMessage = "could not allocate space";
+    REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_HEAP;
+    REMOTE_ActiveError(worker_id)->errorMsg = "could not allocate space";
     return FALSE;
   }
   Yap_LUClauseSpace += sizeof(Prop) * new_size;
@@ -2717,8 +2716,8 @@ static PredEntry *new_lu_int_key(Int key) {
     init_int_lu_keys();
     if (INT_LU_KEYS == NULL) {
       CACHE_REGS
-      LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;
-      LOCAL_ErrorMessage = "could not allocate space";
+      REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_HEAP;
+      REMOTE_ActiveError(worker_id)->errorMsg = "could not allocate space";
       return NULL;
     }
   }
@@ -2848,8 +2847,8 @@ static DBProp FetchIntDBPropFromKey(Int key, int flag, int new,
     init_int_keys();
     if (INT_KEYS == NULL) {
       CACHE_REGS
-      LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;
-      LOCAL_ErrorMessage = "could not allocate space";
+      REMOTE_ActiveError(worker_id)->errorNo = RESOURCE_ERROR_HEAP;
+      REMOTE_ActiveError(worker_id)->errorMsg = "could not allocate space";
       return NULL;
     }
   }
@@ -3084,21 +3083,21 @@ static Int i_recorded(DBProp AtProp, Term t3 USES_REGS) {
       /* make sure the garbage collector sees what we want it to see! */
       EXTRA_CBACK_ARG(3, 1) = (CELL)ref;
       /* oops, we are in trouble, not enough stack space */
-      if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+      if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         if (!Yap_growglobal(NULL)) {
           Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                    LOCAL_ErrorMessage);
+                    REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       } else {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
-        if (!Yap_gcl(LOCAL_Error_Size, 3, ENV, CP)) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 3, ENV, CP)) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
-      LOCAL_Error_Size = 0;
+      REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
       twork = Deref(ARG2);
       t3 = Deref(ARG3);
     }
@@ -3157,17 +3156,17 @@ static Int i_recorded(DBProp AtProp, Term t3 USES_REGS) {
         EXTRA_CBACK_ARG(3, 2) = MkIntegerTerm(((Int)mask));
         EXTRA_CBACK_ARG(3, 3) = MkIntegerTerm(((Int)key));
         /* oops, we are in trouble, not enough stack space */
-        if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
+        if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
           if (!Yap_growglobal(NULL)) {
             Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                      LOCAL_ErrorMessage);
+                      REMOTE_ActiveError(worker_id)->errorMsg);
             return FALSE;
           }
         } else {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
-          if (!Yap_gcl(LOCAL_Error_Size, 3, ENV, CP)) {
-            Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+          if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 3, ENV, CP)) {
+            Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
             return FALSE;
           }
         }
@@ -3249,21 +3248,21 @@ static Int c_recorded(int flags USES_REGS) {
       /* make sure the garbage collector sees what we want it to see! */
       EXTRA_CBACK_ARG(3, 1) = (CELL)ref;
       /* oops, we are in trouble, not enough stack space */
-      if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+      if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         if (!Yap_growglobal(NULL)) {
           Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                    LOCAL_ErrorMessage);
+                    REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       } else {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
-        if (!Yap_gcl(LOCAL_Error_Size, 3, ENV, CP)) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 3, ENV, CP)) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
-      LOCAL_Error_Size = 0;
+      REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
       PreviousHeap = HR;
     }
     Yap_unify(ARG2, TermDB);
@@ -3293,21 +3292,21 @@ static Int c_recorded(int flags USES_REGS) {
         /* make sure the garbage collector sees what we want it to see! */
         EXTRA_CBACK_ARG(3, 1) = (CELL)ref;
         /* oops, we are in trouble, not enough stack space */
-        if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
+        if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
           if (!Yap_growglobal(NULL)) {
             Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                      LOCAL_ErrorMessage);
+                      REMOTE_ActiveError(worker_id)->errorMsg);
             return FALSE;
           }
         } else {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
-          if (!Yap_gcl(LOCAL_Error_Size, 3, ENV, CP)) {
-            Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+          if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 3, ENV, CP)) {
+            Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
             return FALSE;
           }
         }
-        LOCAL_Error_Size = 0;
+        REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
         PreviousHeap = HR;
       }
       if (Yap_unify(ARG2, TermDB))
@@ -3428,17 +3427,17 @@ static Int p_recorded(USES_REGS1) {
       Term TermDB;
       while ((TermDB = GetDBTermFromDBEntry(ref PASS_REGS)) == (CELL)0) {
         /* oops, we are in trouble, not enough stack space */
-        if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
+        if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
           if (!Yap_growglobal(NULL)) {
             Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                      LOCAL_ErrorMessage);
+                      REMOTE_ActiveError(worker_id)->errorMsg);
             return FALSE;
           }
         } else {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
-          if (!Yap_gcl(LOCAL_Error_Size, 3, ENV, gc_P(P, CP))) {
-            Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+          if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 3, ENV, gc_P(P, CP))) {
+            Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
             return FALSE;
           }
         }
@@ -3561,17 +3560,17 @@ static Int p_first_instance(USES_REGS1) {
   UNLOCK(ref->lock);
   while ((TermDB = GetDBTermFromDBEntry(ref PASS_REGS)) == (CELL)0) {
     /* oops, we are in trouble, not enough stack space */
-    if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
+    if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
       if (!Yap_growglobal(NULL)) {
         Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                  LOCAL_ErrorMessage);
+                  REMOTE_ActiveError(worker_id)->errorMsg);
         return FALSE;
       }
     } else {
-      LOCAL_Error_TYPE = YAP_NO_ERROR;
-      if (!Yap_gcl(LOCAL_Error_Size, 3, ENV, gc_P(P, CP))) {
-        Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+      REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+      if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 3, ENV, gc_P(P, CP))) {
+        Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
         return FALSE;
       }
     }
@@ -4478,17 +4477,17 @@ static Int static_instance(StaticClause *cl, PredEntry *ap USES_REGS) {
 
     while ((TermDB = GetDBTerm(cl->usc.ClSource, TRUE PASS_REGS)) == 0L) {
       /* oops, we are in trouble, not enough stack space */
-      if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+      if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         if (!Yap_growglobal(NULL)) {
           Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                    LOCAL_ErrorMessage);
+                    REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       } else {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
-        if (!Yap_gcl(LOCAL_Error_Size, 2, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 2, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -4643,18 +4642,18 @@ static Int p_instance(USES_REGS1) {
 
       while ((TermDB = GetDBTerm(cl->lusl.ClSource, in_cl PASS_REGS)) == 0L) {
         /* oops, we are in trouble, not enough stack space */
-        if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
+        if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
           if (!Yap_growglobal(NULL)) {
             Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                      LOCAL_ErrorMessage);
+                      REMOTE_ActiveError(worker_id)->errorMsg);
             UNLOCK(ap->PELock);
             return FALSE;
           }
         } else {
-          LOCAL_Error_TYPE = YAP_NO_ERROR;
-          if (!Yap_gcl(LOCAL_Error_Size, 2, ENV, gc_P(P, CP))) {
-            Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+          REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+          if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 2, ENV, gc_P(P, CP))) {
+            Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
             UNLOCK(ap->PELock);
             return FALSE;
           }
@@ -4667,17 +4666,17 @@ static Int p_instance(USES_REGS1) {
     Term TermDB;
     while ((TermDB = GetDBTermFromDBEntry(dbr PASS_REGS)) == 0L) {
       /* oops, we are in trouble, not enough stack space */
-      if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+      if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         if (!Yap_growglobal(NULL)) {
           Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                    LOCAL_ErrorMessage);
+                    REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       } else {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
-        if (!Yap_gcl(LOCAL_Error_Size, 2, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 2, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return FALSE;
         }
       }
@@ -4701,17 +4700,17 @@ Term Yap_LUInstance(LogUpdClause *cl, UInt arity) {
     in_src = (opc != _copy_idb_term);
     while ((TermDB = GetDBTerm(cl->lusl.ClSource, in_src PASS_REGS)) == 0L) {
       /* oops, we are in trouble, not enough stack space */
-      if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+      if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         if (!Yap_growglobal(NULL)) {
           Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                    LOCAL_ErrorMessage);
+                    REMOTE_ActiveError(worker_id)->errorMsg);
           return 0L;
         }
       } else {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
-        if (!Yap_gcl(LOCAL_Error_Size, arity, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, arity, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return 0L;
         }
       }
@@ -4951,10 +4950,10 @@ static DBTerm *StoreTermInDB(Term t, int nargs USES_REGS) {
   int needs_vars;
   struct db_globs dbg;
 
-  LOCAL_Error_Size = 0;
+  REMOTE_ActiveError(worker_id)->errorMsgLen = 0;
   while ((x = (DBTerm *)CreateDBStruct(t, (DBProp)NULL, InQueue, &needs_vars, 0,
                                        &dbg)) == NULL) {
-    if (LOCAL_Error_TYPE == YAP_NO_ERROR) {
+    if (REMOTE_ActiveError(worker_id)->errorNo == YAP_NO_ERROR) {
       break;
     } else if (nargs == -1) {
       return NULL;
@@ -4976,7 +4975,6 @@ DBTerm *Yap_StoreTermInDB(Term t, int nargs) {
 }
 
 DBTerm *Yap_StoreTermInDBPlusExtraSpace(Term t, UInt extra_size, UInt *sz) {
-  CACHE_REGS
   int needs_vars;
   struct db_globs dbg;
   DBTerm *o;
@@ -5039,17 +5037,17 @@ bool Yap_dequeue_tqueue(db_queue *father_key, Term t, bool first,
     HR = oldH;
     HB = LCL0;
     while ((TDB = GetDBTerm(cur_instance->DBT, false PASS_REGS)) == 0L) {
-      if (LOCAL_Error_TYPE == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
+      if (REMOTE_ActiveError(worker_id)->errorNo == RESOURCE_ERROR_ATTRIBUTED_VARIABLES) {
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
         if (!Yap_growglobal(NULL)) {
           Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
-                    LOCAL_ErrorMessage);
+                    REMOTE_ActiveError(worker_id)->errorMsg);
           return false;
         }
       } else {
-        LOCAL_Error_TYPE = YAP_NO_ERROR;
-        if (!Yap_gcl(LOCAL_Error_Size, 2, ENV, gc_P(P, CP))) {
-          Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
+        REMOTE_ActiveError(worker_id)->errorNo = YAP_NO_ERROR;
+        if (!Yap_gcl(REMOTE_ActiveError(worker_id)->errorMsgLen, 2, ENV, gc_P(P, CP))) {
+          Yap_Error(RESOURCE_ERROR_STACK, TermNil, REMOTE_ActiveError(worker_id)->errorMsg);
           return false;
         }
       }

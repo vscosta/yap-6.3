@@ -158,7 +158,7 @@ static Int p_open_shared_object(USES_REGS1) {
     Yap_Error(EXISTENCE_ERROR_SOURCE_SINK, t,
               "open_shared_object_failed for %s"
               " with %s\n",
-              s, LOCAL_ErrorMessage);
+              s, REMOTE_ActiveError(worker_id)->errorMsg);
     return FALSE;
   } else {
     return Yap_unify(MkIntegerTerm((Int)handle), ARG3);
@@ -245,7 +245,7 @@ static Int p_open_shared_objects(USES_REGS1) {
 
 static Int check_embedded(USES_REGS1)
 {
-  const char *s = Yap_TextTermToText(Deref(ARG1));
+  const char *s = Yap_TextTermToText(Deref(ARG1) PASS_REGS);
   if (!s)
     return false;
 #if EMBEDDED_MYDDAS
