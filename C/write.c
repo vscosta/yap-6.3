@@ -723,6 +723,7 @@ static void write_var(CELL *t, int depth, struct write_globs *wglb) {
 
 static void write_list(Term t, int direction, int depth,
                        struct write_globs *wglb) {
+  CACHE_REGS
   Term ti;
 
   while (1) {

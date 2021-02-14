@@ -118,6 +118,7 @@ PyObject *PythonLookup(const char *s, PyObject *oo) {
 PyObject *
 
 find_obj(PyObject* ctx, PyObject *exp, term_t t, bool eval) {
+    CACHE_REGS
     YAP_Term hd, yt;
     py_Context = ctx;
 // Yap_DebugPlWriteln(yt);
@@ -803,6 +804,7 @@ static PyObject *bip_range(term_t t) {
 
 
 PyObject *compound_to_pytree(term_t t, PyObject *context, bool cvt) {
+  CACHE_REGS
   PyObject *o = py_Main;
   functor_t fun;
   atom_t name;
@@ -866,6 +868,7 @@ PyObject *compound_to_pytree(term_t t, PyObject *context, bool cvt) {
 }
 
 PyObject *compound_to_pyeval(term_t t, PyObject *context, bool cvt) {
+  CACHE_REGS
   PyObject *o = NULL;
   atom_t name;
 size_t arity;

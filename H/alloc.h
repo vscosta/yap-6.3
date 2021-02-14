@@ -197,8 +197,8 @@ extern void *Realloc(void *buf, size_t sz USES_REGS);
 extern void Free(void *buf USES_REGS);
 
 extern void *MallocAtLevel(size_t sz, int atL USES_REGS);
-#define BaseMalloc(sz) MallocAtLevel(sz, 1)
-extern const void *MallocExportAsRO(const void *blk);
+#define BaseMalloc(sz) MallocAtLevel(sz, 1 PASS_REGS)
+extern const void *MallocExportAsRO(const void *blk USES_REGS);
 
 
 #define MBYTE (1024 * 1024)

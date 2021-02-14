@@ -102,7 +102,7 @@ int Yap_copy_complex_term(register CELL *pt0, register CELL *pt0_end,
   int lvl = push_text_stack();
 
   struct cp_frame *tovisit0,
-    *tovisit = Malloc(1024*sizeof(struct cp_frame));
+    *tovisit = Malloc(1024*sizeof(struct cp_frame) PASS_REGS);
   struct cp_frame *tovisit_max;
 
   CELL *HB0 = HB;

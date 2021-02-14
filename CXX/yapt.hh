@@ -65,6 +65,7 @@ public:
   };
 
   void put(Term t0) {
+    CACHE_REGS
     Yap_PutInHandle(t, t0);
     // fprintf(stderr,"+%d,%lx,%p,%p",t,t0,HR,ASP); Yap_DebugPlWriteln(t0);
   };
@@ -132,8 +133,14 @@ public:
     return tf;
   };
 
-  inline void bind(Term b) { LOCAL_HandleBase[t] = b; }
-  inline void bind(YAPTerm *b) { LOCAL_HandleBase[t] = b->term(); }
+  inline void bind(Term b) {
+    CACHE_REGS
+    LOCAL_HandleBase[t] = b;
+  }
+  inline void bind(YAPTerm *b) {
+    CACHE_REGS
+    LOCAL_HandleBase[t] = b->term();
+  }
   /// from YAPTerm to Term (internal YAP representation)
   /// fetch a sub-term
   Term &operator[](arity_t n);
@@ -347,7 +354,7 @@ public:
 class X_API YAPIntegerTerm : public YAPNumberTerm {
 public:
   YAPIntegerTerm(intptr_t i);
-  intptr_t getInteger() { return IntegerOfTerm(gt()); };
+  intptr_t getInteger() { return IntegerOfTerm(gt()); }
 };
 
 /**
@@ -356,9 +363,12 @@ public:
 
 class X_API YAPFloatTerm : public YAPNumberTerm {
 public:
-  YAPFloatTerm(double dbl) { mk(MkFloatTerm(dbl)); };
+  YAPFloatTerm(double dbl) {
+    CACHE_REGS
+    mk(MkFloatTerm(dbl));
+  }
 
-  double getFl() { return FloatOfTerm(gt()); };
+  double getFl() { return FloatOfTerm(gt()); }
 };
 
 class X_API YAPListTerm : public YAPTerm {
@@ -473,7 +483,10 @@ class X_API YAPVarTerm : public YAPTerm {
 
 public:
   /// constructor
-  YAPVarTerm() { mk(MkVarTerm()); };
+  YAPVarTerm() {
+    CACHE_REGS
+    mk(MkVarTerm());
+  }
   /// get the internal representation
   CELL *getVar() { return VarOfTerm(gt()); }
   /// is the variable bound to another one

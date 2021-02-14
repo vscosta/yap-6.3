@@ -976,12 +976,12 @@ static void copy_back(ClauseDef *dest, CELL *pt, int max) {
 
 /* sort a group of clauses by using their tags */
 static void sort_group(GroupDef *grp, CELL *top, struct intermediates *cint) {
+  CACHE_REGS
   int max = (grp->LastClause - grp->FirstClause) + 1, i;
   CELL *pt, *base;
     int lvl = push_text_stack();
 #if USE_SYSTEM_MALLOC
-  if (!(base = Malloc(2 * max * sizeof(CELL)))) {
-    CACHE_REGS
+  if (!(base = Malloc(2 * max * sizeof(CELL) PASS_REGS))) {
     save_machine_regs();
     LOCAL_Error_Size = 2 * max * sizeof(CELL);
     siglongjmp(cint->CompilerBotch, 2);

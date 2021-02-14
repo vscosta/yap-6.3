@@ -217,7 +217,7 @@ static Int p_is(USES_REGS1) { /* X is Y	 */
   }
   do {
     go = false;
-    out = Yap_Eval(t PASS_REGS);
+    out = Yap_Eval(t);
     go = Yap_CheckArithError();
   } while (go);
   return Yap_unify_constant(ARG1, out);

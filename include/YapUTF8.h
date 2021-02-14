@@ -43,6 +43,7 @@ INLINE_ONLY utf8proc_ssize_t get_utf8(const utf8proc_uint8_t *ptr,
 INLINE_ONLY utf8proc_ssize_t get_utf8(const utf8proc_uint8_t *ptr,
                                                     size_t n,
                                                     utf8proc_int32_t *valp) {
+  CACHE_REGS
      utf8proc_ssize_t rc = utf8proc_iterate(ptr, n, valp);
   if (rc <= 0) {
       if (ptr[0] == 0xC0 && ptr[1] == 0x80) {
@@ -59,6 +60,7 @@ INLINE_ONLY utf8proc_ssize_t put_utf8(utf8proc_uint8_t *ptr,
 
 INLINE_ONLY utf8proc_ssize_t put_xutf8(utf8proc_uint8_t *ptr,
                                                     utf8proc_int32_t val) {
+    CACHE_REGS
     if (val == 0) {
         ptr[0] = 0xC0;
         ptr[1] = 0x80;
@@ -75,6 +77,7 @@ INLINE_ONLY utf8proc_ssize_t put_xutf8(utf8proc_uint8_t *ptr,
 
 INLINE_ONLY utf8proc_ssize_t put_utf8(utf8proc_uint8_t *ptr,
                                        utf8proc_int32_t val) {
+    CACHE_REGS
     utf8proc_ssize_t rc = utf8proc_encode_char(val, ptr);
     if (rc <= 0) {
 

@@ -118,6 +118,7 @@ X_API PyObject *string_to_python(const char *s, bool eval, PyObject *p0) {
 
 static bool entry_to_dictionary(PyObject *dict, Term targ,
                                bool eval, bool cvt) {
+  CACHE_REGS
   PyObject *lhs = NULL, *rhs;
   Term t1, t2;
   const char *s;
@@ -156,6 +157,7 @@ static bool entry_to_dictionary(PyObject *dict, Term targ,
  */
 PyObject *term_to_python(term_t t, bool eval, PyObject *o, bool cvt) {
   //
+  CACHE_REGS
   switch (PL_term_type(t)) {
   case PL_VARIABLE: {
     if (t == 0) {
@@ -452,6 +454,7 @@ PyObject *deref_term_to_python(term_t t) {
 }
 
   PyObject *yap_to_python(Term t, bool eval, PyObject *o, bool cvt) {
+    CACHE_REGS
     if (t == 0 || t == TermNone)
         return Py_None;
     //  fprintf(stderr,"RS %ld %s:%d\n", LOCAL_CurHandle, __FILE__, __LINE__);

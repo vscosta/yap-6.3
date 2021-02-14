@@ -138,7 +138,7 @@ static yap_signals ProcessSIGINT(void) {
 
 inline static void do_signal(int wid, yap_signals sig USES_REGS) {
 #if THREADS
-  __sync_fetch_and_or(&REMOTE(wid)->Signals_, SIGNAL_TO_BIT(sig));
+  __sync_fetch_and_or(&REMOTE(wid)->Signals, SIGNAL_TO_BIT(sig));
   if (!REMOTE_InterruptsDisabled(wid)) {
     REMOTE_ThreadHandle(wid).current_yaam_regs->CreepFlag_ =
         Unsigned(REMOTE_ThreadHandle(wid).current_yaam_regs->LCL0_);
@@ -189,12 +189,14 @@ inline static bool get_signal(yap_signals sig USES_REGS) {
 }
 
 bool Yap_DisableInterrupts(int wid) {
+  CACHE_REGS
   LOCAL_InterruptsDisabled = true;
   YAPEnterCriticalSection();
   return true;
 }
 
 bool Yap_EnableInterrupts(int wid) {
+  CACHE_REGS
   LOCAL_InterruptsDisabled = false;
   YAPLeaveCriticalSection();
   return true;

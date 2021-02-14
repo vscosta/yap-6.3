@@ -787,6 +787,7 @@ static_growheap(size_t esize, bool fix_code, struct intermediates *cip USES_REGS
 }
 
 static size_t expand_stacks( size_t *minimal_requestp, size_t request) {
+    CACHE_REGS
     if (request < YAP_ALLOC_SIZE)
         request = YAP_ALLOC_SIZE;
     request = AdjustPageSize(request);
@@ -812,6 +813,7 @@ static size_t expand_stacks( size_t *minimal_requestp, size_t request) {
 
 static void
 adjust_stack_ptrs(size_t request, size_t minimal_request, ADDR old_GlobalBase ) {
+    CACHE_REGS
 /* we got over a hole */
     if (minimal_request) {
 /* we require a realloc */
@@ -826,6 +828,7 @@ adjust_stack_ptrs(size_t request, size_t minimal_request, ADDR old_GlobalBase ) 
 }
 
 static void stack_msg_in(CELL *hsplit, size_t request) {
+    CACHE_REGS
     char *vb_msg2 = "";
     vb_msg2 = "NB variable overflow ";
 #if  defined(YAPOR_THREADS)

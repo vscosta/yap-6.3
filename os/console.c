@@ -43,6 +43,7 @@ static int ConsolePutc(int, int);
 
 
 bool Yap_DoPrompt(StreamDesc *s) {
+  CACHE_REGS
   if (s->status & Tty_Stream_f) {
     if (GLOBAL_Stream[LOCAL_c_input_stream].status & Tty_Stream_f &&
 	GLOBAL_Stream[LOCAL_c_error_stream].status & Tty_Stream_f) {
@@ -55,6 +56,7 @@ bool Yap_DoPrompt(StreamDesc *s) {
 
 /* check if we read a newline or an EOF */
 int console_post_process_read_char(int ch, StreamDesc *s) {
+  CACHE_REGS
   /* the character is also going to be output by the console handler */
   console_count_output_char(ch, GLOBAL_Stream + LOCAL_c_error_stream);
   if (ch == '\r') {
@@ -62,13 +64,11 @@ int console_post_process_read_char(int ch, StreamDesc *s) {
     LOCAL_newline = true;
 } else
  if (ch == '\n') {
-    CACHE_REGS
     ++s->linecount;
     ++s->charcount;
     s->linepos = 0;
     LOCAL_newline = true;
   } else {
-    CACHE_REGS
     ++s->charcount;
     ++s->linepos;
     LOCAL_newline = false;
@@ -77,6 +77,7 @@ int console_post_process_read_char(int ch, StreamDesc *s) {
 }
 
 bool is_same_tty(FILE *f1, FILE *f2) {
+  CACHE_REGS
 #if HAVE_TTYNAME
   return ttyname_r(fileno(f1), LOCAL_FileNameBuf, YAP_FILENAME_MAX - 1) ==
          ttyname_r(fileno(f2), LOCAL_FileNameBuf, YAP_FILENAME_MAX - 1);
@@ -87,7 +88,12 @@ bool is_same_tty(FILE *f1, FILE *f2) {
 
 static Int is_same_tty2(USES_REGS1) { /* 'prompt(Atom)                 */
   int sni = Yap_CheckStream(ARG1, Input_Stream_f, "put/2");
+  if (sni < 0) return false;
   int sno = Yap_CheckStream(ARG2, Output_Stream_f, "put/2");
+  if (sno < 0) {
+    UNLOCK(GLOBAL_Stream[sni].streamlock);
+    return false;
+  }
   bool out = (GLOBAL_Stream[sni].status & Tty_Stream_f) &&
              (GLOBAL_Stream[sno].status & Tty_Stream_f) &&
              is_same_tty(GLOBAL_Stream[sno].file, GLOBAL_Stream[sni].file);
@@ -111,6 +117,7 @@ void Yap_ConsoleOps(StreamDesc *s) {
 
 /* static */
 static int ConsolePutc(int sno, int ch) {
+  CACHE_REGS
   StreamDesc *s = &GLOBAL_Stream[sno];
   if (ch == 10) {
 #if MAC || _WIN32

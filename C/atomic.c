@@ -710,9 +710,9 @@ static Int number_chars(USES_REGS1) {
   if (IsNonVarTerm(t1)) {
     if (IsVarTerm(t2)) {
       pop_text_stack(l);
-      return Yap_unify(ARG2, Yap_NumberToListOfAtoms(t1));
+      return Yap_unify(ARG2, Yap_NumberToListOfAtoms(t1 PASS_REGS));
   } else {
-    Term t2 = Yap_ListToNumber( Deref(ARG2) );
+    Term t2 = Yap_ListToNumber( Deref(ARG2) PASS_REGS);
     pop_text_stack(l);
     if (t1&& t2) {
           return Yap_unify(t1, t2);
@@ -857,9 +857,9 @@ static Int number_codes(USES_REGS1) {
   if (IsNonVarTerm(t1)) {
     if (IsVarTerm(t2)) {
       pop_text_stack(l);
-      return Yap_unify(ARG2, Yap_NumberToListOfCodes(t1));
+      return Yap_unify(ARG2, Yap_NumberToListOfCodes(t1 PASS_REGS));
   } else {
-    Term t2 = Yap_ListToNumber( Deref(ARG2) );
+    Term t2 = Yap_ListToNumber( Deref(ARG2) PASS_REGS);
     pop_text_stack(l);
     if (t1&& t2) {
           return Yap_unify(t1, t2);
@@ -1326,7 +1326,7 @@ restart_aux:
   if (*tailp != TermNil) {
     LOCAL_Error_TYPE = TYPE_ERROR_LIST;
   } else {
-    seq_tv_t *inpv = (seq_tv_t *)Malloc(n * sizeof(seq_tv_t)), out;
+    seq_tv_t *inpv = (seq_tv_t *)Malloc(n * sizeof(seq_tv_t) PASS_REGS), out;
     int i = 0;
     Atom at;
 
@@ -1375,8 +1375,8 @@ restart_aux:
   if (*tailp != TermNil) {
     LOCAL_Error_TYPE = TYPE_ERROR_LIST;
   } else {
-    seq_tv_t *inpv = (seq_tv_t *)Malloc(n * sizeof(seq_tv_t));
-    seq_tv_t *out = (seq_tv_t *)Malloc(sizeof(seq_tv_t));
+    seq_tv_t *inpv = (seq_tv_t *)Malloc(n * sizeof(seq_tv_t) PASS_REGS);
+    seq_tv_t *out = (seq_tv_t *)Malloc(sizeof(seq_tv_t) PASS_REGS);
     int i = 0;
     if (!inpv) {
       LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;
@@ -1434,8 +1434,8 @@ restart_aux:
       pop_text_stack(l);
       return rc;
     }
-    seq_tv_t *inpv = (seq_tv_t *)Malloc(n * sizeof(seq_tv_t));
-    seq_tv_t *out = (seq_tv_t *)Malloc(sizeof(seq_tv_t));
+    seq_tv_t *inpv = (seq_tv_t *)Malloc(n * sizeof(seq_tv_t) PASS_REGS);
+    seq_tv_t *out = (seq_tv_t *)Malloc(sizeof(seq_tv_t) PASS_REGS);
     if (!inpv) {
       LOCAL_Error_TYPE = RESOURCE_ERROR_HEAP;
       goto error;
@@ -1481,7 +1481,7 @@ restart_aux:
   if (*tailp != TermNil) {
     LOCAL_Error_TYPE = TYPE_ERROR_LIST;
   } else {
-    seq_tv_t *inpv = (seq_tv_t *)Malloc(n * sizeof(seq_tv_t)), out;
+    seq_tv_t *inpv = (seq_tv_t *)Malloc(n * sizeof(seq_tv_t) PASS_REGS), out;
     int i = 0;
     Atom at;
 
@@ -1531,7 +1531,7 @@ restart_aux:
   if (*tailp != TermNil) {
     LOCAL_Error_TYPE = TYPE_ERROR_LIST;
   } else {
-    seq_tv_t *inpv = (seq_tv_t *)Malloc((n * 2 - 1) * sizeof(seq_tv_t)), out;
+    seq_tv_t *inpv = (seq_tv_t *)Malloc((n * 2 - 1) * sizeof(seq_tv_t) PASS_REGS), out;
     int i = 0;
     Atom at;
 
@@ -1761,7 +1761,7 @@ static Int downcase_text_to_atom(USES_REGS1) {
     }
   }
   while (true) {
-    Atom at = Yap_AtomicToLowAtom(t1);
+    Atom at = Yap_AtomicToLowAtom(t1 PASS_REGS);
     if (at == NULL) {
       if (LOCAL_Error_TYPE && Yap_HandleError("downcase_text_to_atom/2"))
         continue;
@@ -1807,7 +1807,7 @@ static Int upcase_text_to_atom(USES_REGS1) {
     }
   }
   while (true) {
-    Atom at = Yap_AtomicToUpAtom(t1);
+    Atom at = Yap_AtomicToUpAtom(t1 PASS_REGS);
     if (at == NULL) {
       if (LOCAL_Error_TYPE && Yap_HandleError("upcase_text_to_atom/2"))
         continue;
@@ -1847,7 +1847,7 @@ static Int downcase_text_to_string(USES_REGS1) {
       return (FALSE);
     }
     while (true) {
-      Term t = Yap_AtomicToLowString(t1);
+      Term t = Yap_AtomicToLowString(t1 PASS_REGS);
       if (t == TermZERO) {
         if (LOCAL_Error_TYPE && Yap_HandleError("downcase_text_to_string/2"))
           continue;
@@ -1884,7 +1884,7 @@ static Int upcase_text_to_string(USES_REGS1) {
   }
   int l = push_text_stack();
   while (true) {
-    Term t = Yap_AtomicToUpString(t1);
+    Term t = Yap_AtomicToUpString(t1 PASS_REGS);
 
     if (t == TermZERO) {
       if (LOCAL_Error_TYPE && Yap_HandleError("upcase_text_to_string/2"))
@@ -1925,7 +1925,7 @@ static Int downcase_text_to_codes(USES_REGS1) {
   }
   int l = push_text_stack();
   while (true) {
-    Term t = Yap_AtomicToLowListOfCodes(t1);
+    Term t = Yap_AtomicToLowListOfCodes(t1 PASS_REGS);
     if (t == TermZERO) {
       if (LOCAL_Error_TYPE && Yap_HandleError("downcase_text_to_codes/2"))
         continue;
@@ -1963,7 +1963,7 @@ static Int upcase_text_to_codes(USES_REGS1) {
   }
   int l = push_text_stack();
   while (true) {
-    Term t = Yap_AtomicToUpListOfCodes(t1);
+    Term t = Yap_AtomicToUpListOfCodes(t1 PASS_REGS);
     if (t == TermZERO) {
       if (LOCAL_Error_TYPE && Yap_HandleError("upcase_text_to_codes/2"))
         continue;
@@ -2001,7 +2001,7 @@ static Int downcase_text_to_chars(USES_REGS1) {
   }
   int l = push_text_stack();
   while (true) {
-    Term t = Yap_AtomicToLowListOfAtoms(t1);
+    Term t = Yap_AtomicToLowListOfAtoms(t1 PASS_REGS);
 
     if (t == TermZERO) {
       if (LOCAL_Error_TYPE && Yap_HandleError("downcase_text_to_to_chars/2"))
@@ -2040,7 +2040,7 @@ static Int upcase_text_to_chars(USES_REGS1) {
   }
   int l = push_text_stack();
   while (true) {
-    Term t = Yap_AtomicToUpListOfAtoms(t1);
+    Term t = Yap_AtomicToUpListOfAtoms(t1 PASS_REGS);
     if (t == TermZERO) {
       if (LOCAL_Error_TYPE && Yap_HandleError("upcase_text_to_chars/2"))
         continue;
@@ -2091,7 +2091,7 @@ static Int atom_split(USES_REGS1) {
     return false;
   }
   size_t b_mid = skip_utf8(s0, u_mid) - s0;
-  s1 = s10 = Malloc(b_mid + 1);
+  s1 = s10 = Malloc(b_mid + 1 PASS_REGS);
   memmove(s1, s, b_mid);
   s1[b_mid] = '\0';
   to1 = MkAtomTerm(Yap_ULookupAtom(s10));

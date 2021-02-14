@@ -225,7 +225,7 @@ int
 Yap_CheckIOStream(Term stream, char * error)
 {
   int sno = Yap_CheckStream(stream, Input_Stream_f|Output_Stream_f|Socket_Stream_f, error);
-  UNLOCK(GLOBAL_Stream[sno].streamlock);
+  if (sno >= 0) UNLOCK(GLOBAL_Stream[sno].streamlock);
   return(sno);
 }
 
@@ -270,7 +270,7 @@ int
 Yap_CheckSocketStream(Term stream, const char * error)
 {
   int sno = Yap_CheckStream(stream, Socket_Stream_f, error);
-  UNLOCK(GLOBAL_Stream[sno].streamlock);
+  if (sno >= 0) UNLOCK(GLOBAL_Stream[sno].streamlock);
   return sno;
 }
 

@@ -630,8 +630,10 @@ static Int c_sqlite3_row(USES_REGS1) {
 }
 
 static void Yap_InitMYDDAS_SQLITE3Preds(void) {
-   Term cm = CurrentModule;
-   CurrentModule = MkAtomTerm(Yap_LookupAtom("myddas_sqlite3"));
+  CACHE_REGS
+
+  Term cm = CurrentModule;
+  CurrentModule = MkAtomTerm(Yap_LookupAtom("myddas_sqlite3"));
   /* db_dbect: Host x User x Passwd x Database x dbection x ERROR_CODE */
   Yap_InitCPred("c_sqlite3_connect", 4, c_sqlite3_connect, 0);
 
@@ -665,9 +667,11 @@ static void Yap_InitMYDDAS_SQLITE3Preds(void) {
   Yap_InitCPred("c_sqlite3_change_database", 2, c_sqlite3_change_database, 0);
   CurrentModule = cm;
 }
+
 static void Yap_InitBackMYDDAS_SQLITE3Preds(void) {
-   Term cm = CurrentModule;
-   CurrentModule = MkAtomTerm(Yap_LookupAtom("myddas_sqlite3"));
+  CACHE_REGS
+  Term cm = CurrentModule;
+  CurrentModule = MkAtomTerm(Yap_LookupAtom("myddas_sqlite3"));
   /* db_row: ResultSet x Arity x ListOfArgs */
   // Yap_InitCPredBack("c_sqlite3_row", 3, 0, c_sqlite3_row_initialise,
   //                  c_sqlite3_row, c_sqlite3_row_terminate);

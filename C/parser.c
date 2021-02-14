@@ -162,7 +162,7 @@ VarEntry *Yap_LookupVar(const char *var) /* lookup variable in variables table
         p = p->VarRight;
       }
     }
-    p = Malloc(sizeof(VarEntry));
+    p = Malloc(sizeof(VarEntry) PASS_REGS);
     *op = p;
     p->VarLeft = p->VarRight = NULL;
     p->hv = hv;
@@ -170,7 +170,7 @@ VarEntry *Yap_LookupVar(const char *var) /* lookup variable in variables table
     p->VarRep = vat;
    } else {
     /* anon var */
-    p = Malloc(sizeof(VarEntry));
+    p = Malloc(sizeof(VarEntry) PASS_REGS);
     p->VarLeft = LOCAL_AnonVarTable;
     LOCAL_AnonVarTable = p;
     p->VarRight = NULL;
@@ -485,7 +485,7 @@ static Term ParseArgs(Atom a, Term close, JMPBUFF *FailBuff, Term arg1,
     if (LOCAL_ParserAuxSp + 1 >= LOCAL_ParserAuxMax) {
         size_t sz = LOCAL_ParserAuxMax-LOCAL_ParserAuxBase, off = LOCAL_ParserAuxSp-LOCAL_ParserAuxBase;
         sz += 4096;
-        if ((LOCAL_ParserAuxBase = Realloc(LOCAL_ParserAuxBase, sz) )== NULL) {
+        if ((LOCAL_ParserAuxBase = Realloc(LOCAL_ParserAuxBase, sz PASS_REGS) )== NULL) {
             syntax_msg("line %d: Parser Stack Overflow", LOCAL_tokptr->TokLine);
             FAIL;
         }
@@ -959,7 +959,7 @@ Term Yap_Parse(UInt prio, encoding_t enc, Term cmod) {
   if (!sigsetjmp(FailBuff.JmpBuff, 0)) {
     LOCAL_ActiveError->errorMsg=NULL;
     LOCAL_ActiveError->errorMsgLen=0;
-                                                  LOCAL_ParserAuxSp = LOCAL_ParserAuxBase = Malloc(4096*sizeof(CELL));
+                                                  LOCAL_ParserAuxSp = LOCAL_ParserAuxBase = Malloc(4096*sizeof(CELL) PASS_REGS);
                                                   LOCAL_ParserAuxMax =   LOCAL_ParserAuxBase+4096;
     t = ParseTerm(prio, &FailBuff, enc, cmod PASS_REGS);
 #if DEBUG

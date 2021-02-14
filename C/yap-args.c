@@ -217,7 +217,7 @@ static bool load_file(const char *b_file USES_REGS) {
 		FunctorOfTerm(t) == functor_command1)) {
       t = ArgOfTerm(1, t);
       if (IsApplTerm(t) && FunctorOfTerm(t) == functor_compile2) {
-	load_file(RepAtom(AtomOfTerm(ArgOfTerm(1, t)))->StrOfAE);
+	load_file(RepAtom(AtomOfTerm(ArgOfTerm(1, t)))->StrOfAE PASS_REGS);
 	Yap_ResetException(LOCAL_ActiveError);
 	continue;
       } else {
@@ -578,8 +578,6 @@ static int dump_runtime_variables(void) {
 X_API YAP_file_type_t Yap_InitDefaults(void *x, char *saved_state, int argc,
 				       char *argv[]) {
 
-  if (!LOCAL_TextBuffer)
-    LOCAL_TextBuffer = Yap_InitTextAllocator();
   YAP_init_args *iap = x;
   memset(iap, 0, sizeof(YAP_init_args));
   iap->Argc = argc;
@@ -1108,6 +1106,7 @@ static void init_hw(YAP_init_args *yap_init, struct ssz_t *spt) {
 }
 
 static void end_init(YAP_init_args *iap) {
+  CACHE_REGS
   YAP_initialized = true;
   if (iap->HaltAfterBoot)
     Yap_exit(0);
@@ -1117,6 +1116,7 @@ static void end_init(YAP_init_args *iap) {
 }
 
 static void start_modules(void) {
+  CACHE_REGS
   Term cm = CurrentModule;
   size_t i;
   for (i = 0; i < n_mdelays; i++) {
@@ -1139,8 +1139,6 @@ X_API void YAP_Init(YAP_init_args *yap_init) {
   if (YAP_initialized)
     /* ignore repeated calls to YAP_Init */
     return;
-  if (!LOCAL_TextBuffer)
-    LOCAL_TextBuffer = Yap_InitTextAllocator();
 
   Yap_Embedded = yap_init->Embedded;
 
@@ -1152,7 +1150,7 @@ X_API void YAP_Init(YAP_init_args *yap_init) {
   //
 
   CACHE_REGS
-    CurrentModule = PROLOG_MODULE;
+  CurrentModule = PROLOG_MODULE;
 
   if (yap_init->QuietMode) {
     setVerbosity(TermSilent);

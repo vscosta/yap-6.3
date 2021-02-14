@@ -48,6 +48,7 @@ class X_API YAPQuery : public YAPPredicate {
   YAPError *e;
 
   inline void setNext() { // oq = LOCAL_execution;
+    CACHE_REGS
     //  LOCAL_execution = this;
     q_open = true;
     q_state = 0;
@@ -86,6 +87,14 @@ public:
   /// often, this is more efficient
   ///
   YAPQuery(YAPFunctor f, YAPTerm mod, Term t[]);
+
+ private:
+  static CELL *getAddressOfARG1() {
+    CACHE_REGS
+    return &ARG1;
+  }
+
+ public:
   /// functor/term constructor,
   ///
   /// It is given a functor, and an array of terms that must have at least
@@ -96,7 +105,7 @@ public:
   /// It is given a string, calls the parser and obtains a Prolog term that
   /// should be a callable
   /// goal.
-  inline YAPQuery(const char *s) : YAPPredicate(s, goal, names, (nts = &ARG1)) {
+  inline YAPQuery(const char *s) : YAPPredicate(s, goal, names, (nts = getAddressOfARG1())) {
     __android_log_print(ANDROID_LOG_INFO, "YAPDroid", "got game %ld",
                         LOCAL_CurSlot);
 
@@ -117,7 +126,7 @@ public:
   /// It i;
   ///};
   /// build a query from a term
-  YAPQuery(YAPTerm t) : YAPPredicate((goal = t.term()), (nts = &ARG1)) {
+  YAPQuery(YAPTerm t) : YAPPredicate((goal = t.term()), (nts = getAddressOfARG1())) {
     BACKUP_MACHINE_REGS();
     openQuery();
     names = new YAPPairTerm(TermNil);
@@ -360,15 +369,16 @@ public:
   void close() { Yap_exit(0); }
 
   /// execute the callback with a text argument.
-  bool hasError() { return LOCAL_Error_TYPE != YAP_NO_ERROR; }
+  bool hasError() {
+    CACHE_REGS
+    return LOCAL_Error_TYPE != YAP_NO_ERROR;
+  }
   /// build a query on the engine
-  YAPQuery *query(const char *s) { return new YAPQuery(s); };
+  YAPQuery *query(const char *s) { return new YAPQuery(s); }
   /// build a query from a term
-  YAPQuery *query(YAPTerm t) { return new YAPQuery(t); };
+  YAPQuery *query(YAPTerm t) { return new YAPQuery(t); }
   /// build a query from a Prolog term (internal)
-  YAPQuery *qt(Term t) { return new YAPQuery(YAPTerm(t)); };
-  /// current module for the engine
-  Term Yap_CurrentModule() { return CurrentModule; }
+  YAPQuery *qt(Term t) { return new YAPQuery(YAPTerm(t)); }
   /// given a handle, fetch a term from the engine
   inline YAPTerm getTerm(yhandle_t h) { return YAPTerm(h); }
   /// current directory for the engine
@@ -383,6 +393,7 @@ public:
   /// recovered on backtracking. The release option ensures
   /// backtracking is called at the very end.
   bool mgoal(Term t, Term tmod, bool release = false);
+  CACHE_REGS
   /// current directory for the engine
 
     bool goal(YAPTerm t, bool release = false) { return goal(t.term(), release); }

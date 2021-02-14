@@ -38,12 +38,12 @@
 
 /* Are we compiling with support for threads? */
 #ifndef THREADS
-#cmakedefine THREADS  "$YAP_THREADS"
+#cmakedefine THREADS  ${YAP_THREADS}
 #endif
 
 /* Are we compiling with support for clause just-in-time compilationT? */
 #ifndef YAP_JIT
-#cmakedefine YAP_JIT  "$YAP_JIT"
+#cmakedefine YAP_JIT  "${YAP_JIT}"
 #endif
 
 /* longs should be in addresses that are multiple of four. */

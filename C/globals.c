@@ -189,6 +189,7 @@ static Term CreateNewArena(CELL *ptr, UInt size) {
 }
 
 static inline void enter_cell_space(cell_space_t *cs, Term *arenap) {
+  CACHE_REGS
   cs->oH = HR;
   cs->oHB = HB;
   cs->oASP = ASP;
@@ -202,6 +203,7 @@ static inline void enter_cell_space(cell_space_t *cs, Term *arenap) {
 }
 
 static inline void exit_cell_space(cell_space_t *cs) {
+  CACHE_REGS
   if (cs->arenaL) {
     HR = cs->oH;
   }
@@ -771,7 +773,7 @@ overflow:
     to_visit--;
      VUNMARK(to_visit->oldp, to_visit->oldv);
   }
-  clean_tr(TR0);
+  clean_tr(TR0 PASS_REGS);
   HB = HB0;
     if (&LOCAL_GlobalArena == arenap)
       LOCAL_GlobalArenaOverflows++;
@@ -789,7 +791,7 @@ overflow:
 	return 0L;
       }
     } else {
-      if (!Yap_expand(0)) {
+      if (!Yap_expand(0 PASS_REGS)) {
   close_stack(&stt);
 
 	Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
@@ -810,7 +812,7 @@ overflow:
      VUNMARK(to_visit->oldp, to_visit->oldv);
   }
 #endif
-  clean_tr(TR0);
+  clean_tr(TR0 PASS_REGS);
     HR = HB;
     if (arenap) {
      *arenap = CloseArena(cspace   PASS_REGS);
@@ -929,6 +931,7 @@ p_rational_tree_to_forest(USES_REGS1) /* copy term t to a new instance  */
 Term
 Yap_TermAsForest(Term t1, Term *list) /* copy term t to a new instance  */
 {
+  CACHE_REGS
   *list = TermNil;
   Term t = CopyTermToArena(t1, false, false, 2, NULL, list, 0 PASS_REGS);
   if (t == 0L)
@@ -957,7 +960,7 @@ static Term CreateTermInArena(Atom Na, UInt Nar, UInt arity, Term *newarena,
   UInt i;
 
  restart:
-  enter_cell_space(&cells, newarena PASS_REGS);
+  enter_cell_space(&cells, newarena);
   tf = AbsAppl(HR);
   HR[0] = (CELL) f;
   HR += 1 + ArityOfFunctor(f);
@@ -968,7 +971,7 @@ static Term CreateTermInArena(Atom Na, UInt Nar, UInt arity, Term *newarena,
       //      CELL *old_top = ArenaLimit(*nsizeof(CELL)ewarena);
       if (*newarena == LOCAL_GlobalArena)
 	LOCAL_GlobalArenaOverflows++;
-      *newarena = CloseArena(&cells);
+      *newarena = CloseArena(&cells PASS_REGS);
 
       if ((*newarena = GrowArena(*newarena, Nar * sizeof(CELL), arity + 1,
 				 &cells PASS_REGS)) == 0) {
@@ -2028,6 +2031,7 @@ static void DelHeapRoot(CELL *pt, UInt sz) {
 }
 
 static CELL *new_heap_entry(CELL *qd) {
+  CACHE_REGS
   size_t hsize, hmsize;
   if (!qd)
     return FALSE;
@@ -2389,6 +2393,7 @@ static Term DelBeamMin(CELL *pt, CELL *pt2, UInt sz) {
 }
 
 static size_t new_beam_entry(CELL *qd) {
+  CACHE_REGS
   size_t hsize, hmsize;
   hsize = IntegerOfTerm(qd[HEAP_SIZE]);
   hmsize = IntegerOfTerm(qd[HEAP_MAX]);

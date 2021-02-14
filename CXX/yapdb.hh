@@ -66,13 +66,16 @@ class X_API YAPModuleProp : public YAPProp {
   friend class YAPPredicate;
   ModEntry *m;
 
-  YAPModuleProp(ModEntry *mod) { m = mod; };
-  YAPModuleProp(Term tmod) { m = Yap_GetModuleEntry(tmod); };
+  YAPModuleProp(ModEntry *mod) { m = mod; }
+  YAPModuleProp(Term tmod) { m = Yap_GetModuleEntry(tmod); }
 
 public:
-  YAPModuleProp(YAPModule tmod) { m = Yap_GetModuleEntry(tmod.gt()); };
-  YAPModuleProp() { m = Yap_GetModuleEntry(Yap_CurrentModule()); };
-  virtual YAPModule module() { return YAPModule(m->AtomOfME); };
+  YAPModuleProp(YAPModule tmod) { m = Yap_GetModuleEntry(tmod.gt()); }
+  YAPModuleProp() { 
+    CACHE_REGS
+    m = Yap_GetModuleEntry(Yap_CurrentModule());
+  }
+  virtual YAPModule module() { return YAPModule(m->AtomOfME); }
 };
 
 /**
@@ -104,6 +107,7 @@ protected:
   ///
   /// It is just a call to getPred
   inline YAPPredicate(Term t, CELL *&v) {
+    CACHE_REGS
     if (t) {
       Term tm = Yap_CurrentModule();
       ap = getPred(t, tm, v);
@@ -111,6 +115,7 @@ protected:
   }
 
   inline YAPPredicate(Term t) {
+    CACHE_REGS
     if (t) {
       CELL *v = nullptr;
       Term tm = Yap_CurrentModule();
@@ -122,10 +127,12 @@ protected:
   ///
   /// It is just a call to getPred
   inline YAPPredicate(YAPTerm t, CELL *&v) {
+    CACHE_REGS
     Term tp = t.term(), tm = Yap_CurrentModule();
     ap = getPred(tp, tm, v);
   }
   inline YAPPredicate(YAPTerm t) {
+    CACHE_REGS
     CELL *v = nullptr;
     Term tp = t.term();
     Term tm = Yap_CurrentModule();
@@ -211,6 +218,7 @@ public:
   /// char */module constructor for predicates.
   ///
   inline YAPPredicate(const char *at, uintptr_t arity) {
+    CACHE_REGS
     ap = RepPredProp(PredPropByFunc(Yap_MkFunctor(Yap_LookupAtom(at), arity),
                                     Yap_CurrentModule()));
   };

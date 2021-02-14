@@ -165,6 +165,7 @@ static Term AttVarToTerm(CELL *orig) {
 
 static attvar_record *AttsFromTerm(Term inp)
 {
+  CACHE_REGS
   if (IsVarTerm(inp)) {
     if (IsAttachedTerm(inp)) {
       attvar_record *attv;

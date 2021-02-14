@@ -650,6 +650,7 @@ p_power(Term t1, Term t2 USES_REGS)
 static inline Int
 ipow(Int x, Int p)
 {
+  CACHE_REGS
   Int r;
 
   if (p == 0) return ((CELL)1);
@@ -657,7 +658,7 @@ ipow(Int x, Int p)
   if(p < 0)
     return (-p % 2) ? x : ((CELL)1);
   Int px =  x<0 ?-x : x;
-  Int nbits = Yap_msb(px) * p;
+  Int nbits = Yap_msb(px PASS_REGS) * p;
   if (nbits > sizeof(CELL)*8-3)
     return 0;
   r = ((CELL)1);
@@ -1290,6 +1291,7 @@ Yap_NameOfBinaryOp(int i)
 void
 Yap_InitBinaryExps(void)
 {
+  CACHE_REGS
   unsigned int    i;
   ExpEntry       *p;
 

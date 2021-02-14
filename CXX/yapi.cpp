@@ -38,6 +38,7 @@ X_API bool do_init_python(void);
 }
 
 static void YAPCatchError() {
+  CACHE_REGS
   if (LOCAL_CommittedError != nullptr &&
        LOCAL_CommittedError->errorNo != YAP_NO_ERROR) {
     // Yap_PopTermFromDB(info->errorTerm);
@@ -503,9 +504,10 @@ Term YAPListTerm::dup() {
 }
 
 intptr_t YAPTerm::numberVars(intptr_t i0, bool skip_singletons) {
+  CACHE_REGS
   BACKUP_MACHINE_REGS();
 
-  intptr_t i = Yap_NumberVars(gt(), i0, skip_singletons, nullptr);
+  intptr_t i = Yap_NumberVars(gt(), i0, skip_singletons, nullptr PASS_REGS);
 
   RECOVER_MACHINE_REGS();
   return i;
@@ -563,7 +565,10 @@ YAPListTerm::YAPListTerm(YAPTerm ts[], arity_t n) {
   }
 }
 
-const char *YAPAtom::getName(void) { return Yap_AtomToUTF8Text(a); }
+const char *YAPAtom::getName(void) {
+  CACHE_REGS
+  return Yap_AtomToUTF8Text(a PASS_REGS);
+}
 
 void YAPQuery::openQuery() {
   CACHE_REGS
@@ -743,6 +748,7 @@ Term YAPEngine::fun(Term t) {
 
 YAPQuery::YAPQuery(YAPFunctor f, YAPTerm mod, YAPTerm ts[])
     : YAPPredicate(f, mod) {
+  CACHE_REGS
 
   /* ignore flags  for now */
   BACKUP_MACHINE_REGS();
@@ -765,6 +771,7 @@ YAPQuery::YAPQuery(YAPFunctor f, YAPTerm mod, YAPTerm ts[])
 
 YAPQuery::YAPQuery(YAPFunctor f, YAPTerm mod, Term ts[])
     : YAPPredicate(f, mod) {
+  CACHE_REGS
 
   /* ignore flags  for now */
   BACKUP_MACHINE_REGS();
@@ -801,6 +808,7 @@ goal =  YAPApplTerm(f, nts);
 #endif
 
 YAPQuery::YAPQuery(YAPPredicate p, YAPTerm ts[]) : YAPPredicate(p.ap) {
+  CACHE_REGS
   BACKUP_MACHINE_REGS();
   try {
     arity_t arity = p.ap->ArityOfPE;
@@ -857,12 +865,14 @@ bool YAPQuery::next() {
 }
 
 PredEntry *YAPQuery::rewriteUndefQuery() {
+  CACHE_REGS
   ARG1 = goal = Yap_SaveTerm(Yap_MkApplTerm(FunctorCall, 1, &goal));
   return ap = PredCall;
 }
 
 PredEntry *YAPEngine::rewriteUndefEngineQuery(PredEntry *a, Term &tgoal,
                                               Term mod) {
+  CACHE_REGS
   tgoal = Yap_MkApplTerm(FunctorCall, 1, &tgoal);
   LOCAL_ActiveError->errorNo = YAP_NO_ERROR;
   return PredCall;
@@ -899,7 +909,7 @@ void YAPQuery::close() {
   CACHE_REGS
 
   RECOVER_MACHINE_REGS();
-  Yap_ResetException(worker_id);
+  Yap_ResetException(LOCAL_ActiveError);
   /* need to implement backtracking here */
   if (q_open != true || q_state == 0) {
     RECOVER_MACHINE_REGS();

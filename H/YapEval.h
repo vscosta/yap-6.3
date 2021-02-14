@@ -436,6 +436,7 @@ extern Term Yap_InnerEval__(Term USES_REGS);
 
 static inline bool Yap_CheckArithError(void)
 {
+  CACHE_REGS
   bool on = false;
   yap_error_number err;
   if (LOCAL_Error_TYPE== RESOURCE_ERROR_STACK) {    

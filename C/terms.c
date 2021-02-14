@@ -135,7 +135,7 @@ bool Yap_IsCyclicTerm(Term t USES_REGS) {
 */
 static Int cyclic_term(USES_REGS1) /* cyclic_term(+T)		 */
 {
-  return Yap_IsCyclicTerm(Deref(ARG1));
+  return Yap_IsCyclicTerm(Deref(ARG1) PASS_REGS);
 }
 
 /**
@@ -675,7 +675,7 @@ static Int free_variables_in_term(USES_REGS1) {
     out = TermNil;
   else {
     out = new_vars_in_complex_term(&(t)-1, &(t),
-                                   Yap_TermVariables(bounds, 3) PASS_REGS);
+                                   Yap_TermVariables(bounds, 3 PASS_REGS) PASS_REGS);
   }
 
   if (found_module && t != t0) {
@@ -818,7 +818,7 @@ static Term numbervars_in_complex_term(CELL *pt0_, CELL *pt0_end_, Int vno,
 }
 
 Int Yap_NumberVars(Term t, Int numbv, bool handle_singles,
-                   Int *tr_entries) /*
+                   Int *tr_entries USES_REGS) /*
                                      * numbervariables in term t         */
 {
     if ( handle_singles ) return t;
@@ -845,7 +845,7 @@ static Int p_numbervars(USES_REGS1) {
         Yap_Error(TYPE_ERROR_INTEGER, t2, "numbervars/3");
         return (false);
     }
-    out = Yap_NumberVars(Deref(ARG1), IntegerOfTerm(t2), false, NULL);
+    out = Yap_NumberVars(Deref(ARG1), IntegerOfTerm(t2), false, NULL PASS_REGS);
     return Yap_unify(ARG3, MkIntegerTerm(out));
 }
 
@@ -887,7 +887,7 @@ static int max_numbered_var(CELL *pt0_, CELL *pt0_end_, Int *maxp USES_REGS) {
   return 0;
 }
 
-static Int MaxNumberedVar(Term inp, arity_t arity PASS_REGS) {
+static Int MaxNumberedVar(Term inp, arity_t arity USES_REGS) {
   Term t = Deref(inp);
 
   if (IsPrimitiveTerm(t)) {
@@ -919,6 +919,7 @@ static Int largest_numbervar(USES_REGS1) {
 
 
 void Yap_InitTermCPreds(void) {
+  CACHE_REGS
   Yap_InitCPred("term_variables", 2, term_variables, 0);
   Yap_InitCPred("term_variables", 3, term_variables3, 0);
   Yap_InitCPred("$variables_in_term", 3, variables_in_term, 0);

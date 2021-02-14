@@ -37,7 +37,7 @@
 #endif
 
 //#include "Atoms.h"
-//#include "Yap.h"
+#include "Yap.h"
 #include <stdlib.h>
 
 /*

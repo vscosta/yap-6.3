@@ -106,6 +106,7 @@ static Int set_prolog_flag(USES_REGS1);
 #include "YapLFlagInfo.h"
 
 static Term indexer(Term inp) {
+  CACHE_REGS
   if (IsStringTerm(inp)) {
     inp = MkStringTerm(RepAtom(AtomOfTerm(inp))->StrOfAE);
   }
@@ -270,6 +271,7 @@ static bool dollar_to_lc(Term inp) {
   }
 
 static Term isaccess(Term inp) {
+  CACHE_REGS
   if (inp == TermReadWrite || inp == TermReadOnly)
     return inp;
 
@@ -298,18 +300,21 @@ static Term stream(Term inp) {
 }
 
 static bool set_error_stream(Term inp) {
+  CACHE_REGS
   if (IsVarTerm(inp))
     return Yap_unify(inp, Yap_StreamUserName(LOCAL_c_error_stream));
   return Yap_SetErrorStream(inp);
 }
 
 static bool set_input_stream(Term inp) {
+  CACHE_REGS
   if (IsVarTerm(inp))
     return Yap_unify(inp, Yap_StreamUserName(LOCAL_c_input_stream));
   return Yap_SetInputStream(inp);
 }
 
 static bool set_output_stream(Term inp) {
+  CACHE_REGS
   if (IsVarTerm(inp))
     return Yap_unify(inp, Yap_StreamUserName(LOCAL_c_output_stream));
   return Yap_SetOutputStream(inp);
@@ -320,6 +325,7 @@ static Term isground(Term inp) {
 }
 
 static Term flagscope(Term inp) {
+  CACHE_REGS
   if (inp == TermGlobal || inp == TermThread || inp == TermModule)
     return inp;
 
@@ -562,6 +568,7 @@ x                    static bool list_atom( Term inp ) {
 #endif
 
 static Term list_option(Term inp) {
+  CACHE_REGS
   if (IsVarTerm(inp)) {
     Yap_ThrowError(INSTANTIATION_ERROR, inp, "set_prolog_flag in \"...\"");
     return inp;
@@ -1151,14 +1158,16 @@ static Int current_prolog_flag2(USES_REGS1) {
               if (!Yap_growglobal(NULL)) {
                   Yap_Error(RESOURCE_ERROR_ATTRIBUTED_VARIABLES, TermNil,
                             LOCAL_ErrorMessage);
-                  UNLOCK(ap->PELock);
+                  // TODO(sray256): which lock should be unlocked?
+                  // UNLOCK(ap->PELock);
                   return false;
               }
           } else {
               LOCAL_Error_TYPE = YAP_NO_ERROR;
               if (!Yap_gcl(LOCAL_Error_Size, 2, ENV, gc_P(P, CP))) {
                   Yap_Error(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
-                  UNLOCK(ap->PELock);
+                  // TODO(sray256): which lock should be unlocked?
+                  // UNLOCK(ap->PELock);
                   return false;
               }
           }
@@ -1187,6 +1196,7 @@ void Yap_setModuleFlags(ModEntry *new, ModEntry *cme) {
 }
 
 bool Yap_set_flag(Term tflag, Term t2) {
+  CACHE_REGS
   FlagEntry *fv;
   flag_term *tarr;
   if (IsVarTerm(tflag)) {
@@ -1272,6 +1282,7 @@ Term Yap_UnknownFlag(Term mod) {
 }
 
 Term getYapFlag(Term tflag) {
+  CACHE_REGS
   FlagEntry *fv;
    flag_term *tarr;
    tflag = Deref(tflag);
@@ -1393,6 +1404,7 @@ static Int source_mode(USES_REGS1) {
 
 static bool setInitialValue(bool bootstrap, flag_func f, const char *s,
                             flag_term *tarr) {
+  CACHE_REGS
   errno = 0;
   const char *ss = (const char *)s;
 
@@ -1431,7 +1443,6 @@ static bool setInitialValue(bool bootstrap, flag_func f, const char *s,
                 "~s should be a positive integer)", s);
       return false;
     }
-    CACHE_REGS
     t = MkIntegerTerm(r);
     if (IsIntTerm(t))
       tarr->at = t;
@@ -1526,7 +1537,6 @@ static bool setInitialValue(bool bootstrap, flag_func f, const char *s,
     if (bootstrap) {
       return false;
     }
-    CACHE_REGS
     const char *us = (const char *)s;
     t0 = Yap_BufferToTermWithPrioBindings(us, TermNil, 0L, strlen(s) + 1,
                                           GLOBAL_MaxPriority);
@@ -1855,7 +1865,7 @@ void Yap_InitFlags(bool bootstrap) {
   tr_fr_ptr tr0 = TR;
   flag_info *f = global_flags_setup;
   int lvl = push_text_stack();
-  char *buf = Malloc(4098);
+  char *buf = Malloc(4098 PASS_REGS);
   GLOBAL_flagCount = 0;
   if (bootstrap) {
     GLOBAL_Flags = (union flagTerm *)Yap_AllocCodeSpace(
@@ -1884,7 +1894,7 @@ void Yap_InitFlags(bool bootstrap) {
       s = buf;
       strcpy(buf, f->init);
     } else {
-      s = Malloc(strlen(f->init)+1);
+      s = Malloc(strlen(f->init)+1 PASS_REGS);
       strcpy(s, f->init);
     }
     bool itf = setInitialValue(bootstrap, f->def, s,

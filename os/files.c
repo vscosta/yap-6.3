@@ -376,9 +376,10 @@ static Int exists_directory(USES_REGS1) {
     VFS_t *vfs;
     if (!s) return false;
     if ((vfs = vfs_owner(s))) {
-bool rc = true;
-      return vfs->isdir(vfs, s);
-
+      Int sno = Yap_CheckStream(ARG1, (Input_Stream_f | Output_Stream_f | Socket_Stream_f), 
+                                "exists_directory/1");
+      if (sno < 0) return false;
+      bool rc = vfs->isdir(vfs, s);
       UNLOCK(GLOBAL_Stream[sno].streamlock);
       return rc;
     }
@@ -516,7 +517,7 @@ Create a directory  _Yap_Dir_. If the parent directory does not exist, silently 
 static Int make_directory(USES_REGS1) {
   int lvl = push_text_stack();
   const char *fd0 = Yap_AbsoluteFile(Yap_TextTermToText(Deref(ARG1) PASS_REGS),true);
-  char *fd = Malloc(strlen(fd0)+1);
+  char *fd = Malloc(strlen(fd0)+1 PASS_REGS);
   strcpy( fd, fd0);
   char *s = (char *)skip_root(fd), *ns;
   int ch;
@@ -648,6 +649,9 @@ static Int access_path(USES_REGS1) {
         if (!s) return false;
         if ((vfs = vfs_owner(s))) {
             vfs_stat st;
+            Int sno = Yap_CheckStream(ARG1, (Input_Stream_f | Output_Stream_f | Socket_Stream_f), 
+                                      "access");
+            if (sno < 0) return false;
             bool rc = vfs->stat(vfs, s, &st);
             UNLOCK(GLOBAL_Stream[sno].streamlock);
             return rc;
@@ -751,6 +755,9 @@ static Int exists_file(USES_REGS1) {
         char *s =  RepAtom(AtomOfTerm(tname))->StrOfAE;
         if (!s) return false;
         if ((vfs = vfs_owner(s))) {
+            Int sno = Yap_CheckStream(ARG1, (Input_Stream_f | Output_Stream_f | Socket_Stream_f), 
+                                      "exists_file/1");
+            if (sno < 0) return false;
             vfs_stat st;
             bool rc = vfs->stat(vfs, s, &st);
             UNLOCK(GLOBAL_Stream[sno].streamlock);

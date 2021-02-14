@@ -159,7 +159,7 @@ extern REGSTORE *Yap_regp;
 
 #ifdef PUSH_X
 
-#define XREGS  (Yapregp->XTERMS)
+#define XREGS  (Yap_regp->XTERMS)
 
 #else
 
@@ -570,8 +570,8 @@ INLINE_ONLY void restore_B(void) {
 #define PP	         (Yap_REGS.PP_)
 #if defined(YAPOR) || defined(THREADS)
 #define worker_id     (Yap_REGS.worker_id_)
-#define LOCAL	      (Yap_REGS.worker_local_)
-#define PREG_ADDR     (Yap_REGS.PREG_ADDR_)
+#define LOCAL	      Yap_REGS.worker_local_
+#define PREG_ADDR     Yap_REGS.PREG_ADDR_
 #ifdef YAPOR_SBA
 #define BSEG	      Yap_REGS.BSEG_
 #define binding_array Yap_REGS.binding_array_

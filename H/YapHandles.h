@@ -24,7 +24,7 @@
 #define LOCAL_NHandles LOCAL_NSlots
 #define REMOTE_NHandles REMOTE_NSlots
 #define LOCAL_HandleBase LOCAL_SlotBase
-#define REMOTE_HanvdleBase SlotBase
+#define REMOTE_HandleBase REMOTE_SlotBase
 
 /**
 @groupdef  term_t_slots 

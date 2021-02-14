@@ -1576,6 +1576,7 @@ static inline void output_env_entry(CELL *gc_ENV, yamop *e_CP, UInt size) {
 static void
 mark_env_cells(CELL *gc_ENV, UInt size, CELL *pvbmap)
 {
+  CACHE_REGS
   CELL_PTR saved_var;
   UInt bmap, bit = 1;
   if (size <= EnvSizeInCells || pvbmap == NULL) {
@@ -2870,6 +2871,7 @@ static void sweep_trail(choiceptr gc_B, tr_fr_ptr old_TR USES_REGS) {
 static void
 sweep_env_cells(CELL *gc_ENV, UInt size, CELL *pvbmap)
 {
+  CACHE_REGS
   CELL_PTR saved_var;
   UInt bmap, bit = 1;
   if (size <= EnvSizeInCells || pvbmap == NULL) {

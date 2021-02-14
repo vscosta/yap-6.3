@@ -108,6 +108,7 @@ static void CloseStream(int sno);
 
 FILE *Yap_GetInputStream(Term t, const char *msg) {
   int sno = Yap_CheckStream(t, Input_Stream_f, msg);
+  if (sno < 0) return NULL;
   FILE *rc;
 
   if (!(GLOBAL_Stream[sno].status &
@@ -121,6 +122,7 @@ FILE *Yap_GetInputStream(Term t, const char *msg) {
 
 FILE *Yap_GetOutputStream(Term t, const char *msg) {
   int sno = Yap_CheckStream(t, Output_Stream_f, msg);
+  if (sno < 0) return NULL;
   FILE *rc;
 
   if (!(GLOBAL_Stream[sno].status & (Tty_Stream_f | Socket_Stream_f)))
@@ -336,6 +338,7 @@ bool Yap_SetCurInpPos(
 }
 
 Atom Yap_guessFileName(FILE *file, int sno, size_t max) {
+  CACHE_REGS
   if (!file) {
     Atom at = Yap_LookupAtom("mem");
     return at;
@@ -349,7 +352,7 @@ Atom Yap_guessFileName(FILE *file, int sno, size_t max) {
   int i = push_text_stack();
 #if __linux__
   size_t maxs = Yap_Max(1023, max - 1);
-  char *path = Malloc(1024), *nameb = Malloc(maxs + 1);
+  char *path = Malloc(1024 PASS_REGS), *nameb = Malloc(maxs + 1 PASS_REGS);
   size_t len;
   if ((len = snprintf(path, 1023, "/proc/self/fd/%d", f)) >= 0 &&
       (len = readlink(path, nameb, maxs)) > 0) {
@@ -803,7 +806,6 @@ static Int stream_property(USES_REGS1) { /* Init current_stream */
     i = Yap_CheckStream(t1, Input_Stream_f | Output_Stream_f | Append_Stream_f,
                         "current_stream/3");
     if (i < 0) {
-      UNLOCK(GLOBAL_Stream[i].streamlock);
       Yap_ThrowError(LOCAL_Error_TYPE, t1, "bad stream descriptor");
       return false; // error...
     }
@@ -1124,6 +1126,7 @@ static Int current_input(USES_REGS1) { /* current_input(?Stream) */
 }
 
 bool Yap_SetInputStream(Term sd) {
+  CACHE_REGS
   int sno = Yap_CheckStream(sd, Input_Stream_f, "set_input/1");
   if (sno < 0)
     return false;
@@ -1202,6 +1205,7 @@ bool Yap_SetOutputStream(Term sd) {
 }
 
 bool Yap_SetErrorStream(Term sd) {
+  CACHE_REGS
   int sno =
       Yap_CheckStream(sd, Output_Stream_f | Append_Stream_f, "set_error/2");
   if (sno < 0)
@@ -1574,6 +1578,10 @@ static Int p_stream_select(USES_REGS1) {
 
     Head = HeadOfTerm(t1);
     sno = Yap_CheckStream(Head, Input_Stream_f, "stream_select/3");
+    if (sno < 0) {
+      Yap_Error(SYSTEM_ERROR_INTERNAL, TermNil, "stream_select/3");
+       return (FALSE);
+    }
     fd = GetStreamFd(sno);
     if (FD_ISSET(fd, &readfds))
       tout = MkPairTerm(Head, tout);
@@ -1590,6 +1598,7 @@ static Int p_stream_select(USES_REGS1) {
 Int Yap_StreamToFileNo(Term t) {
   int sno =
       Yap_CheckStream(t, (Input_Stream_f | Output_Stream_f), "StreamToFileNo");
+  if (sno < 0) return -1;
   if (GLOBAL_Stream[sno].status & Pipe_Stream_f) {
     UNLOCK(GLOBAL_Stream[sno].streamlock);
     return (GLOBAL_Stream[sno].u.pipe.fd);

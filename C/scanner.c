@@ -450,7 +450,7 @@ static int num_send_error_message(char s[]) {
   {                                                                            \
     imgsz = Yap_Min(imgsz * 2, imgsz);                              \
     char *nbuf;                                                                \
-      nbuf = Realloc(buf, imgsz);                                                left = imgsz - max_size;                                                   \
+      nbuf = Realloc(buf, imgsz PASS_REGS);                                                left = imgsz - max_size;                                                   \
       max_size = imgsz;                                                          \
       buf = nbuf;                                                              \
   }
@@ -459,6 +459,7 @@ static int num_send_error_message(char s[]) {
 
 static Term get_num(int *chp, int *chbuffp, StreamDesc *st, int sign, char **bufp, size_t *szp)
 {
+  CACHE_REGS
     int ch = *chp;
   Int val = 0L, base = ch - '0';
   int might_be_float = TRUE, has_overflow = FALSE;
@@ -529,8 +530,8 @@ static Term get_num(int *chp, int *chbuffp, StreamDesc *st, int sign, char **buf
     *sp++ = ch;
     ch = getchr(st);
     if (!my_isxdigit(ch, 'F', 'f'))  {
-        Term t = ( Yap_local.ActiveError->errorRawTerm ?  Yap_local.ActiveError->errorRawTerm : MkIntegerTerm(ch) );
-        Yap_local.ActiveError->errorRawTerm = 0;
+        Term t = ( LOCAL_ActiveError->errorRawTerm ?  LOCAL_ActiveError->errorRawTerm : MkIntegerTerm(ch) );
+        LOCAL_ActiveError->errorRawTerm = 0;
       Yap_ThrowError(SYNTAX_ERROR, t, "invalid hexadecimal digit 0x%C",ch)   ;
       return 0;
     }
@@ -554,8 +555,8 @@ static Term get_num(int *chp, int *chbuffp, StreamDesc *st, int sign, char **buf
     base = 8;
     ch = getchr(st);
       if (ch < '0' || ch > '7') {
-          Term t = ( Yap_local.ActiveError->errorRawTerm ?  Yap_local.ActiveError->errorRawTerm : MkIntegerTerm(ch) );
-          Yap_local.ActiveError->errorRawTerm = 0;
+          Term t = ( LOCAL_ActiveError->errorRawTerm ?  LOCAL_ActiveError->errorRawTerm : MkIntegerTerm(ch) );
+          LOCAL_ActiveError->errorRawTerm = 0;
           Yap_ThrowError(SYNTAX_ERROR, t, "invalid octal digit 0x%C",ch)   ;
         return 0;
       }
@@ -564,8 +565,8 @@ static Term get_num(int *chp, int *chbuffp, StreamDesc *st, int sign, char **buf
     base = 2;
     ch = getchr(st);
     if (ch < '0' || ch > '1') {
-        Term t = ( Yap_local.ActiveError->errorRawTerm ?  Yap_local.ActiveError->errorRawTerm : MkIntegerTerm(ch) );
-        Yap_local.ActiveError->errorRawTerm = 0;
+        Term t = ( LOCAL_ActiveError->errorRawTerm ?  LOCAL_ActiveError->errorRawTerm : MkIntegerTerm(ch) );
+        LOCAL_ActiveError->errorRawTerm = 0;
         Yap_ThrowError(SYNTAX_ERROR, t, "invalid binary digit 0x%C",ch)   ;
       return 0;
     }
@@ -699,7 +700,7 @@ Term Yap_scan_num(StreamDesc *inp, bool error_on) {
 
     LOCAL_VarTable = LOCAL_AnonVarTable = NULL;
     LOCAL_VarList = LOCAL_VarTail = NULL;
-  if (!(ptr = Malloc(4096))) {
+  if (!(ptr = Malloc(4096 PASS_REGS))) {
     LOCAL_ErrorMessage = "Trail Overflow";
     LOCAL_Error_TYPE = RESOURCE_ERROR_TRAIL;
     return 0;
@@ -711,7 +712,7 @@ Term Yap_scan_num(StreamDesc *inp, bool error_on) {
   while (isspace(ch = getchr(inp)))
     ;
 #endif
-  TokEntry *tokptr = Malloc(sizeof(TokEntry));
+  TokEntry *tokptr = Malloc(sizeof(TokEntry) PASS_REGS);
   tokptr->TokLine = GetCurInpLine(inp);
   tokptr->TokPos = GetCurInpPos(inp);
   if (ch == '-') {
@@ -730,7 +731,7 @@ Term Yap_scan_num(StreamDesc *inp, bool error_on) {
       return 0;
     }
     size_t sz = 1024;
-    char *buf = Malloc(sz);
+    char *buf = Malloc(sz PASS_REGS);
     out = get_num(&ch, &cherr, inp, sign, &buf, &sz); /*  */
   } else {
     out = 0;
@@ -826,16 +827,16 @@ const char *Yap_tokText(void *tokptre) {
     return "<QQ>";
   case Number_tok:
     if (IsIntegerTerm(info)) {
-      char *s = Malloc(36);
+      char *s = Malloc(36 PASS_REGS);
       snprintf(s, 35, Int_FORMAT, IntegerOfTerm(info));
       return s;
     } else if (IsFloatTerm(info)) {
-      char *s = Malloc(64);
+      char *s = Malloc(64 PASS_REGS);
       snprintf(s, 63, "%6g", FloatOfTerm(info));
       return s;
     } else {
       size_t len = Yap_gmp_to_size(info, 10);
-      char *s = Malloc(len + 2);
+      char *s = Malloc(len + 2 PASS_REGS);
       return Yap_gmp_to_string(info, s, len + 1, 10);
     }
     break;
@@ -865,7 +866,7 @@ static void open_comment(int ch, StreamDesc *st USES_REGS) {
   h0[1] = Yap_StreamPosition(st - GLOBAL_Stream);
   h0[2] = TermNil;
   LOCAL_CommentsNextChar = h0 + 2;
-  LOCAL_CommentsBuff = (wchar_t *)Malloc(1024 * sizeof(wchar_t));
+  LOCAL_CommentsBuff = (wchar_t *)Malloc(1024 * sizeof(wchar_t) PASS_REGS);
   LOCAL_CommentsBuffLim = 1024;
   LOCAL_CommentsBuff[0] = ch;
   LOCAL_CommentsBuffPos = 1;
@@ -884,7 +885,7 @@ static void extend_comment(int ch USES_REGS) {
 static void close_comment(USES_REGS1) {
   LOCAL_CommentsBuff[LOCAL_CommentsBuffPos] = '\0';
   *LOCAL_CommentsNextChar = Yap_WCharsToString(LOCAL_CommentsBuff PASS_REGS);
-  Free(LOCAL_CommentsBuff);
+  Free(LOCAL_CommentsBuff PASS_REGS);
   LOCAL_CommentsBuff = NULL;
   LOCAL_CommentsBuffLim = 0;
 }
@@ -930,7 +931,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
     unsigned char *charp, *mp;
     size_t len;
 
-    t = Malloc(sizeof(TokEntry));
+    t = Malloc(sizeof(TokEntry) PASS_REGS);
     t->TokNext = NULL;
     if (t == NULL) {
       return CodeSpaceError(t, p, l);
@@ -1001,7 +1002,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
         if (charp == (unsigned char *)TokImage + (imgsz - 1)) {
           unsigned char *p0 = (unsigned char *)TokImage;
           imgsz = Yap_Min(imgsz * 2, imgsz + MBYTE);
-          TokImage = Realloc(p0, imgsz);
+          TokImage = Realloc(p0, imgsz PASS_REGS);
           if (TokImage == NULL) {
               return CodeSpaceError(t, p, l);
           }
@@ -1064,7 +1065,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
         t->Tok = Number_tok;
         t->TokPos = GetCurInpPos(st);
         t->TokLine = GetCurInpLine(st);
-        e = Malloc(sizeof(TokEntry));
+        e = Malloc(sizeof(TokEntry) PASS_REGS);
         if (e == NULL) {
             return TrailSpaceError(p, l);
 
@@ -1090,7 +1091,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
             t->TokInfo = (Term)Yap_LookupVar("E");
             t->TokPos = GetCurInpPos(st);
             t->TokLine = GetCurInpLine(st);
-            e2 = Malloc(sizeof(TokEntry));
+            e2 = Malloc(sizeof(TokEntry) PASS_REGS);
             if (e2 == NULL) {
                 return TrailSpaceError(p, l);
             } else {
@@ -1124,7 +1125,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
             t->TokInfo = MkAtomTerm(AtomE);
             t->TokLine = GetCurInpLine(st);
             t->TokPos = GetCurInpPos(st);
-            e2 = Malloc(sizeof(TokEntry));
+            e2 = Malloc(sizeof(TokEntry) PASS_REGS);
             if (e2 == NULL) {
                 return TrailSpaceError(p, l);
             } else {
@@ -1154,7 +1155,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
       while (TRUE) {
         if (charp > (unsigned char *)TokImage + (imgsz - 1)) {
 	  size_t sz = charp-(unsigned char *)TokImage;
-          TokImage = Realloc(TokImage, (imgsz = Yap_Min(imgsz * 2, imgsz + MBYTE)));
+          TokImage = Realloc(TokImage, (imgsz = Yap_Min(imgsz * 2, imgsz + MBYTE)) PASS_REGS);
           if (TokImage == NULL) {
               return CodeSpaceError(t, p, l);
           }
@@ -1335,7 +1336,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
           if (charp >= (unsigned char *)TokImage + (imgsz - 10)) {
 	    size_t sz = charp - (unsigned char *)TokImage;
             imgsz = Yap_Min(imgsz * 2, imgsz + MBYTE);
-            TokImage = Realloc(TokImage, imgsz);
+            TokImage = Realloc(TokImage, imgsz PASS_REGS);
             if (!TokImage) {
 	      return CodeSpaceError(t, p, l);
             }
@@ -1540,7 +1541,7 @@ TokEntry *Yap_tokenizer(struct stream_desc *st,
     }
     if (LOCAL_ErrorMessage) {
       /* insert an error token to inform the system of what happened */
-      TokEntry *e = Malloc(sizeof(TokEntry));
+      TokEntry *e = Malloc(sizeof(TokEntry) PASS_REGS);
       if (e == NULL) {
           return TrailSpaceError(p, l);
       }

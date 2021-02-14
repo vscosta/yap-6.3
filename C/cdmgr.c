@@ -935,6 +935,7 @@ static void add_first_static(PredEntry *p, yamop *cp, int spy_flag) {
 
 /* p is already locked */
 static void add_first_dynamic(PredEntry *p, yamop *cp, int spy_flag) {
+  CACHE_REGS
   yamop *ncp = ((DynamicClause *)NULL)->ClCode;
   DynamicClause *cl;
 
@@ -2878,6 +2879,7 @@ static Int p_clean_up_dead_clauses(USES_REGS1) {
 }
 
 void Yap_HidePred(PredEntry *pe) {
+  CACHE_REGS
 
   if (pe->PredFlags & HiddenPredFlag)
     return;
@@ -3641,7 +3643,7 @@ static Int fetch_next_static_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr,
           }
         } else {
           LOCAL_Error_TYPE = YAP_NO_ERROR;
-          if (!Yap_dogc(0, NULL)) {
+          if (!Yap_dogc(0, NULL PASS_REGS)) {
             UNLOCKPE(45, pe);
             Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
             return false;
@@ -3649,7 +3651,7 @@ static Int fetch_next_static_clause(PredEntry *pe, yamop *i_code, yamop *cp_ptr,
         }
       } else {
         LOCAL_Error_TYPE = YAP_NO_ERROR;
-        if (!Yap_dogc(0, NULL)) {
+        if (!Yap_dogc(0, NULL PASS_REGS)) {
           UNLOCKPE(45, pe);
           Yap_ThrowError(RESOURCE_ERROR_STACK, TermNil, LOCAL_ErrorMessage);
           return FALSE;

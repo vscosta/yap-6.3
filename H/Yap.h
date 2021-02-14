@@ -131,7 +131,9 @@ typedef YAP_handle_t yhandle_t;
 #endif /* TABLING || YAPOR_SBA */
 
 #if defined(THREADS) || defined(SUPPORT_CONDOR)
+#ifndef USE_SYSTEM_MALLOC
 #define USE_SYSTEM_MALLOC 1
+#endif /* USE_SYSTEM_MALLOC */
 #endif /* THREADS ||  SUPPORT_CONDOR */
 
 #if defined(ANALYST) && defined(USE_THREADED_CODE)

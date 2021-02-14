@@ -139,6 +139,7 @@ the implementation section.
 	      /// top-level or other outer quqqery.
 X_API void YAP_StartSlots(void)
 {
+  CACHE_REGS
   Yap_RebootHandles(worker_id);
 }
 
@@ -146,6 +147,7 @@ X_API void YAP_StartSlots(void)
 /// StartSlots, but should be called when we're done.
 X_API void YAP_EndSlots(void)
 {
+  CACHE_REGS
   Yap_RebootHandles(worker_id);
 }
 
@@ -483,10 +485,11 @@ X_API const char *YAP_AtomName(YAP_Atom a) {
 }
 
 X_API const wchar_t *YAP_WideAtomName(YAP_Atom a) {
+  CACHE_REGS
   int32_t v;
   const unsigned char *s = RepAtom(a)->UStrOfAE;
   size_t n = strlen_utf8(s);
-  wchar_t *dest = Malloc((n + 1) * sizeof(wchar_t)), *o = dest;
+  wchar_t *dest = Malloc((n + 1) * sizeof(wchar_t) PASS_REGS), *o = dest;
   while (*s) {
     size_t n = get_utf8(s, 1, &v);
     if (n == 0)
@@ -520,7 +523,7 @@ X_API YAP_Atom YAP_LookupWideAtom(const wchar_t *c) {
   Atom a;
 
   while (TRUE) {
-    a = Yap_NWCharsToAtom(c, -1 USES_REGS);
+    a = Yap_NWCharsToAtom(c, -1 PASS_REGS);
     if (a == NIL || Yap_get_signal(YAP_CDOVF_SIGNAL)) {
       if (!Yap_locked_growheap(FALSE, 0, NULL)) {
         Yap_Error(RESOURCE_ERROR_HEAP, TermNil, "YAP failed to grow heap: %s",
@@ -1933,6 +1936,7 @@ X_API YAP_opaque_tag_t YAP_NewOpaqueType(struct YAP_opaque_handler_struct *f) {
 }
 
 X_API Term YAP_NewOpaqueObject(YAP_opaque_tag_t blob_tag, size_t bytes) {
+  CACHE_REGS
   CELL *pt;
   Term t = Yap_AllocExternalDataInStack((CELL)blob_tag, bytes, &pt);
   if (t == TermNil)
@@ -2131,7 +2135,7 @@ X_API bool YAP_GoalHasException(Term *t) {
 X_API void YAP_ClearExceptions(void) {
   CACHE_REGS
 
-  Yap_ResetException(worker_id);
+  Yap_ResetException(LOCAL_ActiveError);
 }
 
 X_API int YAP_InitConsult(int mode, const char *fname, char **full,
@@ -2156,7 +2160,7 @@ int   lvl = push_text_stack();
   }
     __android_log_print(
             ANDROID_LOG_INFO, "YAPDroid", "done init_ consult %s ",fl);
-  char *d = Malloc(strlen(fl) + 1);
+  char *d = Malloc(strlen(fl) + 1 PASS_REGS);
   strcpy(d, fl);
   bool consulted = (mode == YAP_CONSULT_MODE);
   Term tat = MkAtomTerm(Yap_LookupAtom(d));
@@ -2170,7 +2174,7 @@ int   lvl = push_text_stack();
     return -1;
   }
   LOCAL_PrologMode = UserMode;
-*full = pop_output_text_stack__(lvl, fl);
+*full = pop_output_text_stack__(lvl, fl PASS_REGS);
   Yap_init_consult(consulted,*full);
   RECOVER_MACHINE_REGS();
   UNLOCK(GLOBAL_Stream[sno].streamlock);
@@ -2196,10 +2200,11 @@ X_API FILE *YAP_TermToStream(Term t) {
 }
 
 X_API void YAP_EndConsult(int sno, int *osnop, const char *full) {
+  CACHE_REGS
   BACKUP_MACHINE_REGS();
   Yap_CloseStream(sno);
   int lvl = push_text_stack();
-  char *d = Malloc(strlen(full) + 1);
+  char *d = Malloc(strlen(full) + 1 PASS_REGS);
   strcpy(d, full);
   Yap_ChDir(dirname(d));
   if (osnop >= 0)
@@ -2227,6 +2232,7 @@ X_API Term YAP_Read(FILE *f) {
 }
 
 X_API Term YAP_ReadFromStream(int sno) {
+  CACHE_REGS
   Term o;
 
   BACKUP_MACHINE_REGS();
@@ -2245,6 +2251,7 @@ X_API Term YAP_ReadFromStream(int sno) {
 
 X_API Term YAP_ReadClauseFromStream(int sno, Term vs, Term pos) {
 
+  CACHE_REGS
   BACKUP_MACHINE_REGS();
   Term t = Yap_read_term(
       sno,
@@ -2417,6 +2424,7 @@ X_API void YAP_FlushAllStreams(void) {
 }
 
 X_API void YAP_Throw(Term t) {
+  CACHE_REGS
   BACKUP_MACHINE_REGS();
   LOCAL_ActiveError->errorNo = THROW_EVENT;
   LOCAL_ActiveError->errorGoal = Yap_TermToBuffer(t, 0);
@@ -3091,7 +3099,8 @@ X_API Int YAP_ListLength(Term t) {
 }
 
 X_API Int YAP_NumberVars(Term t, Int nbv) {
-  return Yap_NumberVars(t, nbv, FALSE, NULL);
+  CACHE_REGS
+  return Yap_NumberVars(t, nbv, FALSE, NULL PASS_REGS);
 }
 
 X_API Term YAP_UnNumberVars(Term t) {

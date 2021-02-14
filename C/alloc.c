@@ -78,6 +78,7 @@ static char SccsId[] = "%W% %G%";
 int write_malloc = 0;
 
 void *my_malloc(size_t sz) {
+  CACHE_REGS
   void *p;
 
   p = malloc(sz);
@@ -106,6 +107,7 @@ void *my_realloc(void *ptr, size_t sz) {
 }
 
 void my_free(void *p) {
+  CACHE_REGS
   // printf("f %p\n",p);
   if (Yap_do_low_level_trace)
     fprintf(stderr, "- %p\n @%p %ld\n", p, TR, (long int)(LCL0 - (CELL *)B) );
@@ -1658,9 +1660,13 @@ typedef struct TextBuffer_manager {
   int lvl;
 } text_buffer_t;
 
-int AllocLevel(void) { return LOCAL_TextBuffer->lvl; }
+int AllocLevel(void) {
+  CACHE_REGS
+  return LOCAL_TextBuffer->lvl;
+}
 //	void pop_text_stack(int i) { LOCAL_TextBuffer->lvl = i; }
 void insert_block(struct mblock *o) {
+  CACHE_REGS
   int lvl = o->lvl;
   o->prev = LOCAL_TextBuffer->last[lvl];
   if (o->prev) {
@@ -1675,6 +1681,7 @@ void insert_block(struct mblock *o) {
 }
 
  void release_block(struct mblock *o) {
+  CACHE_REGS
   int lvl = o->lvl;
   if (LOCAL_TextBuffer->first[lvl] == o) {
     if (LOCAL_TextBuffer->last[lvl] == o) {
@@ -1698,7 +1705,7 @@ int push_text_stack__(USES_REGS1) {
   return i;
 }
 
-int pop_text_stack__(int i) {
+int pop_text_stack__(int i USES_REGS) {
   int lvl = LOCAL_TextBuffer->lvl;
   while (lvl >= i) {
     struct mblock *p = LOCAL_TextBuffer->first[lvl];
@@ -1715,7 +1722,7 @@ int pop_text_stack__(int i) {
   return lvl;
 }
 
-void *pop_output_text_stack__(int i, const void *export) {
+void *pop_output_text_stack__(int i, const void *export USES_REGS) {
   int lvl = LOCAL_TextBuffer->lvl;
   bool found = false;
   while (lvl >= i) {
@@ -1841,6 +1848,7 @@ void *Yap_InitTextAllocator(void) {
 
 
  bool Yap_get_scratch_buf(scratch_struct_t *handle, size_t nof, size_t each) {
+   CACHE_REGS
    handle->n_of = nof;
    handle->size_of = each;
    if (!handle->data) {
@@ -1868,6 +1876,7 @@ bool Yap_realloc_scratch_buf(scratch_struct_t *handle, size_t nof) {
  }
 
    bool Yap_release_scratch_buf(scratch_struct_t *handle) {
+     CACHE_REGS
      if (handle->is_thread_scratch_buf &&
 	 handle->data == LOCAL_WorkerBuffer.data) {
        LOCAL_WorkerBuffer.in_use= false;

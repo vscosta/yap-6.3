@@ -194,6 +194,7 @@ static char *unix2win(const char *source, char *target, int max) {
 extern char *virtual_cwd;
 
 bool Yap_ChDir(const char *path) {
+  CACHE_REGS
   bool rc = false;
   int lvl = push_text_stack();
 
@@ -788,7 +789,7 @@ void Yap_InitSysbits(int wid) {
   Yap_InitWTime();
   Yap_InitRandom();
   /* let the caller control signals as it sees fit */
-  Yap_InitOSSignals(worker_id);
+  Yap_InitOSSignals(wid);
 }
 
 static Int p_unix(USES_REGS1) {
@@ -1074,6 +1075,7 @@ static Int
   p_mtrace()
   {
 #ifdef HAVE_MTRACE
+    CACHE_REGS
     Term t = Deref(ARG1);
     if (t == TermTrue) mtrace();
     else if (t == TermFalse)  muntrace();

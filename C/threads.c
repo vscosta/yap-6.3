@@ -384,7 +384,7 @@ setup_engine(int myworker_id, int init_thread)
   // create a mbox
   mboxCreate( MkIntTerm(myworker_id), &REMOTE_ThreadHandle(myworker_id).mbox_handle PASS_REGS );
   Yap_InitTime( myworker_id );
-  Yap_InitYaamRegs( myworker_id, true] );
+  Yap_InitYaamRegs( myworker_id, true );
   REFRESH_CACHE_REGS
     Yap_ReleasePreAllocCodeSpace(Yap_PreAllocCodeSpace());
   /* I exist */
@@ -404,7 +404,11 @@ start_thread(int myworker_id)
     pthread_setspecific(Yap_yaamregs_key, (void *)REMOTE_ThreadHandle(myworker_id).default_yaam_regs);
   REFRESH_CACHE_REGS;
   worker_id = myworker_id;
-  LOCAL = REMOTE(myworker_id);
+  /* for some reason the macro LOCAL is not expanding properly here, so writing
+     LOCAL = REMOTE(myworker_id) does not work */
+#ifdef THREADS
+  Yap_REGS.worker_local_ = REMOTE(myworker_id);
+#endif
 }
 
 static void *
@@ -448,7 +452,7 @@ thread_run(void *widp)
   REMOTE_ThreadHandle(myworker_id).tgoal = NULL;
   tgs[1] = LOCAL_ThreadHandle.tdetach;
   tgoal = Yap_MkApplTerm(FunctorThreadRun, 2, tgs);
-  Yap_RunTopGoal(tgoal);
+  Yap_RunTopGoal(tgoal, true);
 #ifdef TABLING
   {
     tab_ent_ptr tab_ent;
@@ -1174,14 +1178,14 @@ p_with_mutex( USES_REGS1 )
     rc = TRUE;
   }
  end:
-  excep = Yap_GetException(LOCAL_ComiittedError);
+  excep = Yap_GetException(LOCAL_CommittedError);
   if ( !UnLockMutex(mut PASS_REGS) ) {
-    return FALSE;c
+    return FALSE;
   }
   if (creeping) {
     Yap_signal( YAP_CREEP_SIGNAL );
   } else if ( excep != 0) {
-    return Yap_JumpToEnv(excep);
+    return Yap_JumpToEnv();
   }
   return rc;
 }

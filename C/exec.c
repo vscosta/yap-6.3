@@ -38,8 +38,8 @@ static char SccsId[] = "@(#)cdmgr.c	1.1 05/02/98";
 #include "heapgc.h"
 
 static bool CallPredicate(PredEntry *, choiceptr, yamop *CACHE_TYPE);
-static Int execute_nonstop(PASS_REGS1);
-static Int creep_clause(PASS_REGS1);
+static Int execute_nonstop(USES_REGS1);
+static Int creep_clause(USES_REGS1);
 
 // must hold thread worker comm lock at call.
 static bool EnterCreepMode(Term, Term CACHE_TYPE);
@@ -51,6 +51,7 @@ static Int execute(USES_REGS1);
 static Int execute0(USES_REGS1);
 
 static bool should_creep() {
+    CACHE_REGS
     return
     !(LOCAL_PrologMode & (AbortMode | InterruptMode | SystemMode|BootMode))
     &&
@@ -299,7 +300,7 @@ static Int parent_choice_point(USES_REGS1) {
     if (!IsVarTerm(t)) {
         Yap_ThrowError(INSTANTIATION_ERROR, t, "child choicr-point missing");
     }
-    choiceptr cp = cp_from_integer(t);
+    choiceptr cp = cp_from_integer(t PASS_REGS);
     if (cp == NULL || cp->cp_b == NULL)
         return false;
     td = cp_as_integer(cp->cp_b PASS_REGS);
@@ -382,6 +383,7 @@ static PredEntry *new_pred(Term t, Term tmod, char *pname) {
 }
 
 static bool CommaCall(Term t, Term mod) {
+    CACHE_REGS
     PredEntry *pen;
     arity_t i;
     if (IsVarTerm(t) || (pen = new_pred(t, mod, "_,_")))
@@ -432,7 +434,7 @@ inline static bool do_execute(Term t, Term mod USES_REGS) {
             t = t1;
             pen = new_pred(t, mod, "_,_");
             if (pen == NULL || (arity = pen->ArityOfPE) == 0) {
-                return do_execute(t, mod);
+                return do_execute(t, mod PASS_REGS);
             }
         } else if (IsExtensionFunctor(f)) {
             return CallError(TYPE_ERROR_CALLABLE, t0, mod0 PASS_REGS);
@@ -855,6 +857,7 @@ static Int execute_in_mod(USES_REGS1) { /* '$execute'(Goal)	 */
  * @method prune_inner_computation
  */
 static void prune_inner_computation(choiceptr parent) {
+    CACHE_REGS
     /* code */
     choiceptr cut_pt;
 
@@ -877,6 +880,7 @@ static void prune_inner_computation(choiceptr parent) {
  * @method complete_inner_computation
  */
 static void complete_inner_computation(choiceptr old_B) {
+    CACHE_REGS
     choiceptr myB = B;
     if (myB == NULL) {
         return;
@@ -907,7 +911,7 @@ static Int Yap_ignore(Term t, bool fail USES_REGS) {
     bool newxp = Yap_pushErrorContext(true, ctx);
     ARG1 = t;
     PredEntry *pe = Yap_get_pred(Yap_MkApplTerm(FunctorCall,1,&t),TermProlog,"ïgnore");
-    bool rc = Yap_execute_pred(pe, NULL, false);
+    bool rc = Yap_execute_pred(pe, NULL, false PASS_REGS);
     if (!rc) {
         complete_inner_computation((choiceptr) (LCL0 - oB));
         // We'll pass it through
@@ -927,6 +931,7 @@ static Int Yap_ignore(Term t, bool fail USES_REGS) {
 extern void *Yap_blob_info(Term t);
 
 static bool set_watch(Int Bv, Term task) {
+    CACHE_REGS
     CELL *pt;
     Term t = Yap_AllocExternalDataInStack((CELL) setup_call_catcher_cleanup_tag,
                                           sizeof(Int), &pt);
@@ -974,7 +979,7 @@ static bool watch_cut(Term ext USES_REGS) {
     } else {
         completion_pt[0] = port_pt[0] = TermCut;
     }
-    Yap_ignore(cleanup, false);
+    Yap_ignore(cleanup, false PASS_REGS);
     CELL *complete_pt = deref_ptr(RepAppl(task) + 4);
     complete_pt[0] = TermTrue;
     if (ex_mode) {
@@ -1047,7 +1052,7 @@ static bool watch_retry(Term d0 USES_REGS) {
         return true;
     }
     port_pt[0] = t;
-    Yap_ignore(cleanup, true);
+    Yap_ignore(cleanup, true PASS_REGS);
     if (ex_mode) {
         // Yap_PutException(e);
         return true;
@@ -1139,7 +1144,7 @@ static Int cleanup_on_exit(USES_REGS1) {
         catcher_pt[0] = TermExit;
         complete_pt[0] = TermExit;
     }
-    Yap_ignore(cleanup, false);
+    Yap_ignore(cleanup, false PASS_REGS);
     Yap_CloseSlots(sl);
     if (Yap_RaiseException()) {
         return false;
@@ -1322,7 +1327,7 @@ static Int execute0(USES_REGS1) { /* '$execute0'(Goal,Mod)	 */
     } else {
         //Yap_ThrowError(TYPE_ERROR_CALLABLE, t, "call/1");
         //return false;
-        return CallMetaCall(t, mod);
+        return CallMetaCall(t, mod PASS_REGS);
     }
     /*	N = arity; */
     /* call may not define new system predicates!! */
@@ -1381,7 +1386,7 @@ static Int creep_step(USES_REGS1) { /* '$execute_nonstop'(Goal,Mod)
 #endif
         }
     } else {
-        return CallMetaCall(t, mod);
+        return CallMetaCall(t, mod PASS_REGS);
     }
     /*	N = arity; */
     /* call may not define new system predicates!! */
@@ -1718,7 +1723,7 @@ static bool exec_absmi(bool top, yap_reset_t reset_mode USES_REGS) {
        collection is going up in the environment chain it doesn't get
        confused */
 void Yap_PrepGoal(arity_t arity, CELL *pt, choiceptr saved_b USES_REGS) {
-  Yap_ResetException(worker_id);
+  Yap_ResetException(LOCAL_ActiveError);
     //  sl = Yap_InitSlot(t);
     // recover CP when doing gc.
     YENV = ASP;
@@ -2206,7 +2211,7 @@ bool Yap_Reset(yap_reset_t mode, bool hard) {
     CACHE_REGS
     int res = TRUE;
 
-    Yap_ResetException(worker_id);
+    Yap_ResetException(LOCAL_ActiveError);
     /* first, backtrack to the root */
     while (B) {
         P = FAILCODE;
@@ -2382,7 +2387,7 @@ void Yap_InitYaamRegs(int myworker_id, bool full_reset) {
     /* the first real choice-point will also have AP=FAIL */
     /* always have an empty slots for people to use */
 #if defined(YAPOR) || defined(THREADS)
-    LOCAL = REMOTE(myworker_id);
+    Yap_REGS.worker_local_ = REMOTE(myworker_id);
     worker_id = myworker_id;
 #endif /* THREADS */
     Yap_RebootSlots(myworker_id);
@@ -2410,6 +2415,7 @@ void Yap_InitYaamRegs(int myworker_id, bool full_reset) {
 
 void Yap_track_cpred(void *v)
 {
+  CACHE_REGS
   gc_entry_info_t*i = v;
 
   if (!P) {
@@ -2505,6 +2511,7 @@ static Int set_debugger_state(USES_REGS1) {
 static void init_debugger_state(void)
     {
 
+        CACHE_REGS
         LOCAL_debugger_state[DEBUG_CREEP_LEAP_OR_ZIP] = TermCreep;
         LOCAL_debugger_state[DEBUG_GOAL_NUMBER] = MkIntTerm(0);
         LOCAL_debugger_state[DEBUG_SPY] = TermOff;

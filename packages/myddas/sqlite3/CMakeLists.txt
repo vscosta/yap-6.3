@@ -35,7 +35,7 @@ set_property(DIRECTORY
   add_definitions(-DSQLITE_ENABLE_RTREE=1 )
   add_definitions(-DSQLITE_ENABLE_FTS5=1 )
 
-  SET_PROPERTY(DIRECTORY PROPERTY COMPILE_DEFINITIONS YAP_KERNEL=1 )
+  SET_PROPERTY(DIRECTORY APPEND PROPERTY COMPILE_DEFINITIONS YAP_KERNEL=1 )
 
 message("ql ${EMBEDDED_SQLITE3}")
   message( "   * Sqlite3 Data-Base (http://www.sqlite3.org), distributed with MYDDAS" )

@@ -364,7 +364,7 @@ static int interrupt_wake_up(Term cut_t, yamop *p USES_REGS) {
   if (p) {
     Term ts[2];
     ts[0] = tg;
-    Term regs = save_xregs(p PASS_REGS);
+    Term regs = save_xregs(p);
     ts[1] = Yap_MkApplTerm(FunctorRestoreRegs1, 1, &regs);
     if (tg == TermTrue) {
 	tg =ts[1];
@@ -392,7 +392,7 @@ static int interrupt_wake_up(Term cut_t, yamop *p USES_REGS) {
   ARG1 = t1;
   ARG2 = t2;
   CACHE_A1();
-  return Yap_execute_pred(pe, NULL, true) ?
+  return Yap_execute_pred(pe, NULL, true PASS_REGS) ?
 	  INT_HANDLER_RET_JMP :
 	  INT_HANDLER_FAIL;
 

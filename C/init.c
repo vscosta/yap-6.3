@@ -999,11 +999,12 @@ void Yap_InitCPredBack_(const char *Name, arity_t Arity, arity_t Extra,
 
 static void InitStdPreds(struct yap_boot_params *yapi)
 {
+  CACHE_REGS
   CurrentModule = PROLOG_MODULE;
   Yap_InitCPreds();
   Yap_InitBackCPreds();
   BACKUP_MACHINE_REGS();
-  Yap_InitFlags(false);
+  Yap_InitFlags(yapi->boot_file_type == YAP_PL || yapi->boot_file_type == YAP_SOURCE_PL);
   Yap_InitPlIO(yapi);
 #if HAVE_MPE
   Yap_InitMPE();
@@ -1289,22 +1290,20 @@ struct worker_local Yap_local;
 
 static void InitCodes(struct yap_boot_params *yapi)
 {
-  CACHE_REGS
 #if THREADS
   int wid;
   for (wid = 1; wid < MAX_THREADS; wid++) {
     Yap_local[wid] = NULL;
   }
+  Yap_InitThread(0);
 #endif
 #include "ihstruct.h"
-#if THREADS
-  Yap_InitThread(0);
-#endif /* THREADS */
   InitGlobal();
 #if !THREADS
   InitWorker(0);
 #endif /* THREADS */
   Yap_InitFirstWorkerThreadHandle();
+  CACHE_REGS
   /* make sure no one else can use these two atoms */
   LOCAL_SourceModule = CurrentModule = 0;
   Yap_ReleaseAtom(AtomOfTerm(TermRefoundVar));
@@ -1361,7 +1360,9 @@ void Yap_InitWorkspace(struct yap_boot_params *yapi,
 
 #ifdef THREADS
   Yap_regp = ((REGSTORE *)pthread_getspecific(Yap_yaamregs_key));
-  LOCAL = REMOTE(0);
+  /* for some reason the macro LOCAL is not being expanded properly here, so
+     writing LOCAL = REMOTE(0); does not work */
+  Yap_REGS.worker_local_ = REMOTE(0);
 #endif /* THREADS */
 #if defined(YAPOR_COPY) || defined(YAPOR_COW) || defined(YAPOR_SBA)
   LOCAL = REMOTE(0);
@@ -1447,6 +1448,10 @@ void Yap_InitWorkspace(struct yap_boot_params *yapi,
   GLOBAL_AllowTrailExpansion = true;
   Yap_InitExStacks(0, Trail, Stack);
     Yap_InitYaamRegs(0, true);
+
+  if (!LOCAL_TextBuffer)
+    LOCAL_TextBuffer = Yap_InitTextAllocator();
+
   InitStdPreds(yapi);
   /* make sure tmp area is available */
   { Yap_ReleasePreAllocCodeSpace(Yap_PreAllocCodeSpace()); }

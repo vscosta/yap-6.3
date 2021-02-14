@@ -1032,6 +1032,7 @@ static Int p_unary_op_as_integer(USES_REGS1) { /* X is Y	 */
 }
 
 void Yap_InitUnaryExps(void) {
+  CACHE_REGS
   unsigned int i;
   ExpEntry *p;
 

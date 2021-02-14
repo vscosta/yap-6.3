@@ -50,7 +50,7 @@ static Int rl_to_codes(Term TEnd, int do_as_binary, int arity USES_REGS) {
     UNLOCK(GLOBAL_Stream[sno].streamlock);
     return Yap_unify_constant(ARG2, MkAtomTerm(AtomEof));
   }
-          buf = Malloc(4096);
+          buf = Malloc(4096 PASS_REGS);
   buf_sz = 4096;
   while (true) {
     if (do_as_binary && !binary_stream) {

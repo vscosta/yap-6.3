@@ -31,6 +31,7 @@
 static char *send_tracer_message(char *start, char *name, arity_t arity,
                                  char *mname, CELL *args, char **s0, char *s,
                                  char **top) {
+  CACHE_REGS
   bool expand = false;
   size_t max = *top - (s + 1);
   int d, min = 1024;
@@ -40,7 +41,7 @@ static char *send_tracer_message(char *start, char *name, arity_t arity,
       Int cbeg = s1 - *s0;
       max = *top - *s0;
       max += min;
-      *s0 = Realloc(*s0, max);
+      *s0 = Realloc(*s0, max PASS_REGS);
 
       *top = *s0 + max;
       max--;
@@ -94,7 +95,7 @@ static char *send_tracer_message(char *start, char *name, arity_t arity,
 //	LOCAL_max_depth=md, LOCAL_max_list=ml, LOCAL_max_write_args = ma;
         size_t sz;
         if (sn == NULL) {
-	  sn = Malloc(strlen("<* error *>")+1);
+	  sn = Malloc(strlen("<* error *>")+1 PASS_REGS);
 	  strcpy((char*)sn, "<* error *>");
         }
         sz = strlen(sn);
@@ -213,7 +214,7 @@ bool low_level_trace__(yap_low_level_port port, PredEntry *pred, CELL *args) {
       jmp_deb(1);
   // if (HR < ASP ) return;
   // fif (vsc_count == 12534) jmp_deb( 2 );
-  char *buf = Malloc(512), *top = buf + 511, *b = buf;
+  char *buf = Malloc(512 PASS_REGS), *top = buf + 511, *b = buf;
       // if (!worker_id) return;
   LOCK(Yap_low_level_trace_lock);
   sc = Yap_heap_regs;

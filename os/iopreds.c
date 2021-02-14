@@ -184,6 +184,7 @@ static int EOFGetc(int sno) {
 }
 
 static void unix_upd_stream_info(StreamDesc *s) {
+  CACHE_REGS
   if (s->status & InMemory_Stream_f) {
     s->status |= Seekable_Stream_f;
     return;
@@ -413,6 +414,7 @@ void Yap_InitStdStreams(void) { InitStdStreams(); }
 
 Int PlIOError__(const char *file, const char *function, int lineno,
                 yap_error_number type, Term culprit, ...) {
+  CACHE_REGS
   if (trueLocalPrologFlag(FILEERRORS_FLAG) ||
       type == RESOURCE_ERROR_MAX_STREAMS /* do not catch resource errors */) {
     va_list args;
@@ -440,10 +442,11 @@ Int PlIOError__(const char *file, const char *function, int lineno,
 bool
  UnixIOError__(const char *file, const char *function, int lineno,
                 int error, io_kind_t io_type, Term culprit, ...) {
+  CACHE_REGS
   if (trueLocalPrologFlag(FILEERRORS_FLAG) ) {
     va_list args;
     const char *format;
-    char *who = Malloc(1024);
+    char *who = Malloc(1024 PASS_REGS);
     yap_error_number e_type;
 
     va_start(args, culprit);
@@ -1127,6 +1130,7 @@ static int check_bom(int sno, StreamDesc *st) {
 bool Yap_initStream(int sno, FILE *fd, Atom name, const char *io_mode,
                     Term file_name, encoding_t encoding, stream_flags_t flags,
                     void *vfs) {
+  CACHE_REGS
   // fprintf(stderr,"+ %s --> %d\n", name, sno);
   StreamDesc *st = &GLOBAL_Stream[sno];
   __android_log_print(
@@ -1321,6 +1325,7 @@ static const param_t open_defs[] = {OPEN_DEFS()};
 
 static bool fill_stream(int sno, StreamDesc *st, Term tin, const char *io_mode,
                         Term user_name, encoding_t enc) {
+  CACHE_REGS
   struct vfs *vfsp = NULL;
   const char *fname;
 
@@ -1799,6 +1804,9 @@ int Yap_FileStream(FILE *fd, Atom name, Term file_name, int flags,
 #define CheckStream(arg, kind, msg)                                            \
   CheckStream__(__FILE__, __FUNCTION__, __LINE__, arg, kind, msg)
 
+/* If there is no error, the stream lock has been acquired and must be released
+   by the caller.
+*/
 static int CheckStream__(const char *file, const char *f, int line, Term arg,
                          int kind, const char *msg) {
   int sno = -1;
@@ -1822,11 +1830,8 @@ static int CheckStream__(const char *file, const char *f, int line, Term arg,
       }
     }
     if ((sno = Yap_CheckAlias(sname)) < 0) {
-      UNLOCK(GLOBAL_Stream[sno].streamlock);
       PlIOError__(file, f, line, EXISTENCE_ERROR_STREAM, arg, msg);
       return -1;
-    } else {
-      LOCK(GLOBAL_Stream[sno].streamlock);
     }
   } else if (IsApplTerm(arg) && FunctorOfTerm(arg) == FunctorStream) {
     arg = ArgOfTerm(1, arg);
@@ -1838,21 +1843,22 @@ static int CheckStream__(const char *file, const char *f, int line, Term arg,
     Yap_Error(DOMAIN_ERROR_STREAM_OR_ALIAS, arg, msg);
     return -1;
   }
+  LOCK(GLOBAL_Stream[sno].streamlock);
   if (GLOBAL_Stream[sno].status & Free_Stream_f) {
     PlIOError__(file, f, line, EXISTENCE_ERROR_STREAM, arg, msg);
+    UNLOCK(GLOBAL_Stream[sno].streamlock);
     return -1;
   }
-  LOCK(GLOBAL_Stream[sno].streamlock);
   if ((GLOBAL_Stream[sno].status & Input_Stream_f) &&
       !(kind & Input_Stream_f)) {
-    UNLOCK(GLOBAL_Stream[sno].streamlock);
     PlIOError__(file, f, line, PERMISSION_ERROR_OUTPUT_STREAM, arg, msg);
+    UNLOCK(GLOBAL_Stream[sno].streamlock);
     return -1;
   }
   if ((GLOBAL_Stream[sno].status & (Append_Stream_f | Output_Stream_f)) &&
       !(kind & Output_Stream_f)) {
-    UNLOCK(GLOBAL_Stream[sno].streamlock);
     PlIOError__(file, f, line, PERMISSION_ERROR_INPUT_STREAM, arg, msg);
+    UNLOCK(GLOBAL_Stream[sno].streamlock);
     return -1;
   }
   return sno;

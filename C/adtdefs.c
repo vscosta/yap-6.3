@@ -758,7 +758,8 @@ Atom Yap_LookupAtomWithLength(const char *atom,
       return NIL;
     }
     INIT_LOCK(p->PELock);
-    p->StatisticsForPred = NULL : p->KindOfPE = PEProp;
+    p->StatisticsForPred = NULL;
+    p->KindOfPE = PEProp;
     p->ArityOfPE = ap->ArityOfPE;
     p->FirstClause = p->LastClause = NULL;
     p->NOfClauses = 0;
@@ -1267,6 +1268,7 @@ Atom Yap_LookupAtomWithLength(const char *atom,
   }
 
   const char *IndicatorOfPred(PredEntry *pe) {
+    CACHE_REGS
     const char *mods;
     Atom at;
     arity_t arity;

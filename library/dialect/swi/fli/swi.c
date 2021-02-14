@@ -972,10 +972,11 @@ X_API atom_t PL_new_atom_wchars(size_t len, const wchar_t *c) {
 }
 
 X_API wchar_t *PL_atom_wchars(atom_t name, size_t *sp) {
+  CACHE_REGS
   Atom at = SWIAtomToAtom(name);
   const unsigned char *s = at->UStrOfAE;
   size_t sz = *sp = strlen_utf8(s);
-  wchar_t *out = Malloc((sz + 1) * sizeof(wchar_t));
+  wchar_t *out = Malloc((sz + 1) * sizeof(wchar_t) PASS_REGS);
   size_t i = 0;
   for (; i < sz; i++) {
     int32_t v;
@@ -2209,7 +2210,7 @@ X_API term_t PL_exception(qid_t q) {
 
 X_API void PL_clear_exception(void) {
   CACHE_REGS
-  Yap_ResetException(worker_id);
+  Yap_ResetException(LOCAL_ActiveError);
 }
 
 X_API int PL_initialise(int myargc, char **myargv) {
@@ -2525,7 +2526,7 @@ X_API void PL_close_query(qid_t q) {
 
     struct open_query_struct *qi = (struct open_query_struct *)q;
   if (Yap_HasException() && !(qi->q_flags & (PL_Q_CATCH_EXCEPTION))) {
-    Yap_ResetException(worker_id);
+    Yap_ResetException(LOCAL_ActiveError);
   }
   /* need to implement backtracking here */
   if (qi->q_open != 1 || qi->q_state == 0) {
@@ -2800,7 +2801,7 @@ X_API PL_engine_t PL_create_engine(const PL_thread_attr_t *attr) {
 X_API int PL_destroy_engine(PL_engine_t e) {
 #if THREADS
   return YAP_ThreadDestroyEngine(
-      ((struct worker_local *)e)->ThreadHandle_.current_yaam_regs->worker_id_);
+      ((struct worker_local *)e)->ThreadHandle.current_yaam_regs->worker_id_);
 #else
   return FALSE;
 #endif
@@ -2832,7 +2833,7 @@ X_API int PL_set_engine(PL_engine_t engine, PL_engine_t *old) {
     }
     return PL_ENGINE_SET;
   } else {
-    nwid = ((struct worker_local *)engine)->ThreadHandle_.id;
+    nwid = ((struct worker_local *)engine)->ThreadHandle.id;
   }
 
   MUTEX_LOCK(&(REMOTE_ThreadHandle(nwid).tlock));

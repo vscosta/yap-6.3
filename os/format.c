@@ -361,6 +361,7 @@ static Int format_copy_args(Term args, Term *targs, Int tsz) {
 static void
 
 format_clean_up(int sno, int sno0, format_info *finfo) {
+  CACHE_REGS
   if (sno >= 0 && sno != sno0) {
     sno = format_synch(sno, sno0, finfo);
     Yap_CloseStream(sno);
@@ -412,8 +413,8 @@ static Int doformat(volatile Term otail, volatile Term oargs,
   bool alloc_fstr = false;
   LOCAL_Error_TYPE = YAP_NO_ERROR;
   int l = push_text_stack();
-  tmp1 = Malloc(TMP_STRING_SIZE+1);
-  format_info *finfo = Malloc(sizeof(format_info));
+  tmp1 = Malloc(TMP_STRING_SIZE+1 PASS_REGS);
+  format_info *finfo = Malloc(sizeof(format_info) PASS_REGS);
   // it starts here
   finfo->gapi = 0;
   finfo->phys_start = 0;
@@ -449,7 +450,7 @@ static Int doformat(volatile Term otail, volatile Term oargs,
     format_clean_up(sno0, sno, finfo );
     Yap_ThrowError(INSTANTIATION_ERROR, tail, "format/2");
     return (FALSE);
-  } else if ((fstr = Yap_TextToUTF8Buffer(tail))) {
+  } else if ((fstr = Yap_TextToUTF8Buffer(tail PASS_REGS))) {
     fptr = fstr;
     alloc_fstr = true;
   } else {
@@ -488,7 +489,7 @@ static Int doformat(volatile Term otail, volatile Term oargs,
   if (IsPairTerm(args)) {
     Int tsz = 16;
 
-    targs = Malloc(32*sizeof(Term));
+    targs = Malloc(32*sizeof(Term) PASS_REGS);
     do {
       tnum = format_copy_args(args, targs, tsz);
       if (tnum == FORMAT_COPY_ARGS_ERROR ||
@@ -499,13 +500,13 @@ static Int doformat(volatile Term otail, volatile Term oargs,
       }
       else if (tnum == tsz ) {
 	tnum += 32;
-	targs = Realloc(targs, tnum*sizeof(Term));
+	targs = Realloc(targs, tnum*sizeof(Term) PASS_REGS);
       }
       break;
     } while (true);      
   } else if (args != TermNil) {
     tnum = 1;
-     targs = Malloc(sizeof(Term));
+     targs = Malloc(sizeof(Term) PASS_REGS);
      targs[0] = args;
   } else {
     tnum = 0;
@@ -1041,6 +1042,7 @@ static Int doformat(volatile Term otail, volatile Term oargs,
 }
 
 static Term memStreamToTerm(int output_stream, Functor f, Term inp) {
+  CACHE_REGS
   const char *s = Yap_MemExportStreamPtr(output_stream);
 
   encoding_t enc = GLOBAL_Stream[output_stream].encoding;
@@ -1170,8 +1172,7 @@ static Int format(Term tf, Term tas, Term tout USES_REGS) {
   } else {
       output_stream = Yap_CheckStream(tout, Output_Stream_f, "format/3");
   }
-  if (output_stream == -1) {
-    UNLOCK(GLOBAL_Stream[output_stream].streamlock);
+  if (output_stream < 0) {
     return false;
   } else {
     out = doformat(tf, tas, output_stream PASS_REGS);

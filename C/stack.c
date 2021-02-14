@@ -1160,7 +1160,8 @@ static Term error_culprit(bool internal USES_REGS) {
 }
 
 yap_error_descriptor_t *
-Yap_prolog_add_culprit(yap_error_descriptor_t *t PASS_REGS) {
+Yap_prolog_add_culprit(yap_error_descriptor_t *t) {
+    CACHE_REGS
     PredEntry *pe;
     void *startp, *endp;
     // case number 1: Yap_Error called from built-in.
@@ -1486,6 +1487,7 @@ static Int p_cpc_info(USES_REGS1) {
 }
 
 static PredEntry *choicepoint_owner(choiceptr cptr, Term *tp, yamop **nclp) {
+    CACHE_REGS
     PredEntry *pe =
             NULL;
     int go_on = TRUE;
@@ -1782,7 +1784,7 @@ typedef struct buf_struct_t {
     lbufsz -= sz;                    \
     break;                        \
       }                            \
-      char *nbuf = Realloc(buf, bufsize += 1024);    \
+      char *nbuf = Realloc(buf, bufsize += 1024 PASS_REGS);    \
       lbuf = nbuf + (lbuf-buf);                \
       buf  = nbuf;                    \
       lbufsz += 1024;                    \
@@ -1791,6 +1793,7 @@ typedef struct buf_struct_t {
 
 
 static char *ADDSTR(const char *STR, struct buf_struct_t *bufp) {
+    CACHE_REGS  \
     \
     while (true) {
         \
@@ -1804,7 +1807,7 @@ static char *ADDSTR(const char *STR, struct buf_struct_t *bufp) {
 
         } \
 
-        char *nbuf = Realloc(buf, bufsize += 1024);    \
+        char *nbuf = Realloc(buf, bufsize += 1024 PASS_REGS);    \
       lbuf = nbuf + (lbuf - buf);                \
       buf = nbuf;                    \
       lbufsz += 1024;                    \
@@ -1860,7 +1863,7 @@ const char *Yap_dump_stack(void) {
     CACHE_REGS
     int lvl = push_text_stack();
     struct buf_struct_t b, *bufp = &b;
-    buf = Malloc(4096);
+    buf = Malloc(4096 PASS_REGS);
     lbuf = buf;
     bufsize = 4096;
     lbufsz = bufsize - 256;
@@ -1993,6 +1996,7 @@ const char *Yap_dump_stack(void) {
 
 
 static bool outputep(CELL *ep, struct buf_struct_t *bufp) {
+    CACHE_REGS
     PredEntry *pe = EnvPreg((yamop *) ep);
     if (!ONLOCAL(ep) || (Unsigned(ep) & (sizeof(CELL) - 1)))
         return false;
@@ -2023,6 +2027,7 @@ static bool outputep(CELL *ep, struct buf_struct_t *bufp) {
 }
 
 static bool outputcp(choiceptr cp, struct buf_struct_t *bufp) {
+    CACHE_REGS
     choiceptr b_ptr = cp;
     PredEntry *pe = Yap_PredForChoicePt(b_ptr, NULL);
     ADDBUF(snprintf(lbuf, lbufsz, "%% %p ", cp));
@@ -2113,7 +2118,7 @@ char *DumpActiveGoals(USES_REGS1) {
     int lvl = push_text_stack();
     struct buf_struct_t buf0, *bufp = &buf0;
 
-    buf = Malloc(4096);
+    buf = Malloc(4096 PASS_REGS);
     lbuf = buf;
     bufsize = 4096;
     lbufsz = bufsize - 256;
@@ -2158,12 +2163,13 @@ char *DumpActiveGoals(USES_REGS1) {
  *
  */
 char *Yap_output_bug_location(yamop *yap_pc, int where_from, int psize) {
+    CACHE_REGS
     Atom pred_name;
     UInt pred_arity;
     Term pred_module;
     Int cl;
 
-    char *o = Malloc(256);
+    char *o = Malloc(256 PASS_REGS);
     if ((cl = Yap_PredForCode(yap_pc, where_from, &pred_name, &pred_arity,
                               &pred_module)) == 0) {
         /* system predicate */
@@ -2336,6 +2342,7 @@ static Int ancestor_location(USES_REGS1) {
 static int Yap_DebugDepthMax = 4;
 
 void ShowTerm(Term *tp, int depth) {
+    CACHE_REGS
     if (depth == Yap_DebugDepthMax) return;
     Term t = *tp;
     if (IsVarTerm(t)) {
@@ -2377,6 +2384,7 @@ void ShowTerm(Term *tp, int depth) {
 
 
 void Yap_ShowTerm(Term t) {
+    CACHE_REGS
     *HR++ = t;
     ShowTerm(HR - 1, 0);
 }
@@ -2385,6 +2393,7 @@ void Yap_ShowTerm(Term t) {
  extern void pp(Term, int);
 
 void pp(Term t, int lvl) {
+  CACHE_REGS
   int i;
   if (lvl>6)
     return;

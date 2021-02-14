@@ -619,7 +619,7 @@ static Int term_to_atom(USES_REGS1) {
   if (IsVarTerm(t2)) {
     const char *s =
         Yap_TermToBuffer(Deref(ARG1), Quote_illegal_f | Handle_vars_f);
-    if (!s || !(at = Yap_UTF8ToAtom((const unsigned char *)s))) {
+    if (!s || !(at = Yap_UTF8ToAtom((const unsigned char *)s PASS_REGS))) {
       Yap_Error(RESOURCE_ERROR_HEAP, t2,
                 "Could not get memory from the operating system");
       return false;

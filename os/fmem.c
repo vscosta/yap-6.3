@@ -31,7 +31,8 @@ static char SccsId[] = "%W% %G%";
 #include "YapText.h"
 
  char *Yap_StrPrefix( const char *buf, size_t n) {
-    char *b = Malloc(n);
+    CACHE_REGS
+    char *b = Malloc(n PASS_REGS);
     strncpy(b, buf, n - 1);
     if (strlen(buf) > n - 1)
         b[15] = '\0';
@@ -183,7 +184,7 @@ open_mem_read_stream(USES_REGS1) /* $open_mem_read_stream(+List,-Stream) */
 
   ti = Deref(ARG1);
   int l = push_text_stack();
-  buf = Yap_TextTermToText(ti);
+  buf = Yap_TextTermToText(ti PASS_REGS);
   if (!buf) {
     pop_text_stack(l);
     return false;
